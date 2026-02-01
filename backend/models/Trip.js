@@ -1,0 +1,29 @@
+const mongoose = require('mongoose');
+
+const TripSchema = new mongoose.Schema({
+  driver: { type: mongoose.Schema.Types.ObjectId, ref: 'Driver' },
+  pickupLocation: {
+    address: String,
+    lat: Number,
+    lng: Number
+  },
+  dropoffLocation: {
+    address: String,
+    lat: Number,
+    lng: Number
+  },
+  status: { 
+    type: String, 
+    enum: ['pending', 'accepted', 'in_progress', 'completed', 'cancelled'], 
+    default: 'pending' 
+  },
+  price: { type: Number, required: true },
+  serviceType: { type: String, enum: ['Ride', 'Cargo', 'Tow'], required: true },
+  vehicleModel: String,
+  hasDamage: { type: Boolean, default: false },
+  startTime: Date,
+  endTime: Date,
+  createdAt: { type: Date, default: Date.now }
+});
+
+module.exports = mongoose.model('Trip', TripSchema);
