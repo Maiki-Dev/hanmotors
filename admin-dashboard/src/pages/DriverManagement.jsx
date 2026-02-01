@@ -2,9 +2,10 @@ import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from "../components/ui/card";
 import { Button } from "../components/ui/button";
 import { Input } from "../components/ui/input";
+import { Label } from "../components/ui/label";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "../components/ui/table";
 import { Badge } from "../components/ui/badge";
-import { Plus, Search, Pencil, Trash2, MoreHorizontal, Eye, CheckCircle } from 'lucide-react';
+import { Plus, Search, Pencil, Trash2, MoreHorizontal, Eye, CheckCircle, User, Phone, Mail, Lock, Car } from 'lucide-react';
 import { driverService } from '../services/driverService';
 import { socket } from '../services/api';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "../components/ui/dialog";
@@ -230,7 +231,7 @@ const DriverManagement = () => {
 
       {/* Add Dialog */}
       <Dialog open={isAddOpen} onOpenChange={setIsAddOpen}>
-        <DialogContent>
+        <DialogContent className="sm:max-w-[500px]">
           <DialogHeader>
             <DialogTitle>Шинэ жолооч нэмэх</DialogTitle>
           </DialogHeader>
@@ -239,60 +240,89 @@ const DriverManagement = () => {
               {error}
             </div>
           )}
-          <div className="space-y-4 py-4">
+          <div className="grid gap-4 py-4">
             <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <label>Овог</label>
+              <div className="grid gap-2">
+                <Label htmlFor="lastName">Овог</Label>
+                <div className="relative">
+                  <User className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+                  <Input 
+                    id="lastName"
+                    value={addFormData.lastName} 
+                    onChange={(e) => setAddFormData({...addFormData, lastName: e.target.value})} 
+                    placeholder="Овог"
+                    className="pl-9"
+                  />
+                </div>
+              </div>
+              <div className="grid gap-2">
+                <Label htmlFor="firstName">Нэр</Label>
+                <div className="relative">
+                  <User className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+                  <Input 
+                    id="firstName"
+                    value={addFormData.firstName} 
+                    onChange={(e) => setAddFormData({...addFormData, firstName: e.target.value})} 
+                    placeholder="Нэр"
+                    className="pl-9"
+                  />
+                </div>
+              </div>
+            </div>
+            <div className="grid gap-2">
+              <Label htmlFor="phone">Утас</Label>
+              <div className="relative">
+                <Phone className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
                 <Input 
-                  value={addFormData.lastName} 
-                  onChange={(e) => setAddFormData({...addFormData, lastName: e.target.value})} 
-                  placeholder="Овог"
+                  id="phone"
+                  value={addFormData.phone} 
+                  onChange={(e) => setAddFormData({...addFormData, phone: e.target.value})} 
+                  placeholder="Утасны дугаар"
+                  className="pl-9"
                 />
               </div>
-              <div className="space-y-2">
-                <label>Нэр</label>
+            </div>
+            <div className="grid gap-2">
+              <Label htmlFor="email">Имэйл</Label>
+              <div className="relative">
+                <Mail className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
                 <Input 
-                  value={addFormData.firstName} 
-                  onChange={(e) => setAddFormData({...addFormData, firstName: e.target.value})} 
-                  placeholder="Нэр"
+                  id="email"
+                  value={addFormData.email} 
+                  onChange={(e) => setAddFormData({...addFormData, email: e.target.value})} 
+                  placeholder="driver@example.com"
+                  className="pl-9"
                 />
               </div>
             </div>
-            <div className="space-y-2">
-              <label>Утас</label>
-              <Input 
-                value={addFormData.phone} 
-                onChange={(e) => setAddFormData({...addFormData, phone: e.target.value})} 
-                placeholder="Утасны дугаар"
-              />
+            <div className="grid gap-2">
+              <Label htmlFor="password">Нууц үг (Анхдагч)</Label>
+              <div className="relative">
+                <Lock className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+                <Input 
+                  id="password"
+                  value={addFormData.password} 
+                  onChange={(e) => setAddFormData({...addFormData, password: e.target.value})} 
+                  type="password"
+                  className="pl-9"
+                />
+              </div>
             </div>
-            <div className="space-y-2">
-              <label>Имэйл</label>
-              <Input 
-                value={addFormData.email} 
-                onChange={(e) => setAddFormData({...addFormData, email: e.target.value})} 
-                placeholder="driver@example.com"
-              />
-            </div>
-            <div className="space-y-2">
-              <label>Нууц үг (Анхдагч)</label>
-              <Input 
-                value={addFormData.password} 
-                onChange={(e) => setAddFormData({...addFormData, password: e.target.value})} 
-                type="password"
-              />
-            </div>
-            <div className="space-y-2">
-              <label>Тээврийн хэрэгслийн төрөл</label>
-              <select 
-                className="flex h-10 w-full items-center justify-between rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
-                value={addFormData.vehicleType} 
-                onChange={(e) => setAddFormData({...addFormData, vehicleType: e.target.value})}
-              >
-                <option value="Ride">Ride</option>
-                <option value="Cargo">Cargo</option>
-                <option value="Tow">Tow (Ачигч)</option>
-              </select>
+            <div className="grid gap-2">
+              <Label htmlFor="vehicleType">Тээврийн хэрэгслийн төрөл</Label>
+              <div className="relative">
+                 <Car className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+                 <select 
+                    id="vehicleType"
+                    className="flex h-10 w-full items-center justify-between rounded-md border border-input bg-background px-3 py-2 pl-9 text-sm ring-offset-background placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+                    value={addFormData.vehicleType} 
+                    onChange={(e) => setAddFormData({...addFormData, vehicleType: e.target.value})}
+                  >
+                    <option value="Ride">Ride</option>
+                    <option value="Cargo">Cargo</option>
+                    <option value="Tow">Tow (Ачигч)</option>
+                  </select>
+              </div>
             </div>
           </div>
           <DialogFooter>
@@ -304,7 +334,7 @@ const DriverManagement = () => {
 
       {/* Edit Dialog */}
       <Dialog open={isEditOpen} onOpenChange={setIsEditOpen}>
-        <DialogContent>
+        <DialogContent className="sm:max-w-[500px]">
           <DialogHeader>
             <DialogTitle>Жолоочийн мэдээлэл засах</DialogTitle>
           </DialogHeader>
@@ -313,37 +343,73 @@ const DriverManagement = () => {
               {error}
             </div>
           )}
-          <div className="space-y-4 py-4">
+          <div className="grid gap-4 py-4">
             <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <label>Овог</label>
-                <Input value={formData.lastName} onChange={(e) => setFormData({...formData, lastName: e.target.value})} />
+              <div className="grid gap-2">
+                <Label htmlFor="edit-lastName">Овог</Label>
+                <div className="relative">
+                  <User className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+                  <Input 
+                    id="edit-lastName"
+                    value={formData.lastName} 
+                    onChange={(e) => setFormData({...formData, lastName: e.target.value})} 
+                    className="pl-9"
+                  />
+                </div>
               </div>
-              <div className="space-y-2">
-                <label>Нэр</label>
-                <Input value={formData.firstName} onChange={(e) => setFormData({...formData, firstName: e.target.value})} />
+              <div className="grid gap-2">
+                <Label htmlFor="edit-firstName">Нэр</Label>
+                <div className="relative">
+                  <User className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+                  <Input 
+                    id="edit-firstName"
+                    value={formData.firstName} 
+                    onChange={(e) => setFormData({...formData, firstName: e.target.value})} 
+                    className="pl-9"
+                  />
+                </div>
               </div>
             </div>
-            <div className="space-y-2">
-              <label>Утас</label>
-              <Input value={formData.phone} onChange={(e) => setFormData({...formData, phone: e.target.value})} />
+            <div className="grid gap-2">
+              <Label htmlFor="edit-phone">Утас</Label>
+              <div className="relative">
+                <Phone className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+                <Input 
+                  id="edit-phone"
+                  value={formData.phone} 
+                  onChange={(e) => setFormData({...formData, phone: e.target.value})} 
+                  className="pl-9"
+                />
+              </div>
             </div>
-            <div className="space-y-2">
-              <label>Имэйл</label>
-              <Input value={formData.email} onChange={(e) => setFormData({...formData, email: e.target.value})} />
+            <div className="grid gap-2">
+              <Label htmlFor="edit-email">Имэйл</Label>
+              <div className="relative">
+                <Mail className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+                <Input 
+                  id="edit-email"
+                  value={formData.email} 
+                  onChange={(e) => setFormData({...formData, email: e.target.value})} 
+                  className="pl-9"
+                />
+              </div>
             </div>
-            <div className="space-y-2">
-              <label>Төлөв</label>
-              <select 
-                className="flex h-10 w-full items-center justify-between rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
-                value={formData.status} 
-                onChange={(e) => setFormData({...formData, status: e.target.value})}
-              >
-                <option value="active">Active</option>
-                <option value="inactive">Inactive</option>
-                <option value="blocked">Blocked</option>
-                <option value="pending">Pending</option>
-              </select>
+            <div className="grid gap-2">
+              <Label htmlFor="edit-status">Төлөв</Label>
+              <div className="relative">
+                 <CheckCircle className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+                 <select 
+                    id="edit-status"
+                    className="flex h-10 w-full items-center justify-between rounded-md border border-input bg-background px-3 py-2 pl-9 text-sm ring-offset-background placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+                    value={formData.status} 
+                    onChange={(e) => setFormData({...formData, status: e.target.value})}
+                  >
+                    <option value="active">Active</option>
+                    <option value="inactive">Inactive</option>
+                    <option value="blocked">Blocked</option>
+                    <option value="pending">Pending</option>
+                  </select>
+              </div>
             </div>
           </div>
           <DialogFooter>
@@ -355,7 +421,7 @@ const DriverManagement = () => {
 
       {/* Delete Confirmation Dialog */}
       <Dialog open={isDeleteOpen} onOpenChange={setIsDeleteOpen}>
-        <DialogContent>
+        <DialogContent className="sm:max-w-[425px]">
           <DialogHeader>
             <DialogTitle>Жолоочийг устгах уу?</DialogTitle>
             <DialogDescription>

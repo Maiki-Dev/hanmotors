@@ -49,11 +49,7 @@ export default function EarningsScreen({ route, navigation }) {
            }));
            setHistory(formattedHistory);
         } else {
-           // Keep mock data if no history
-           setHistory([
-             { id: '1', date: 'Today, 2:30 PM', price: 15000, from: 'Sukhbaatar Sq', to: 'Zaisan', type: 'Ride' },
-             { id: '2', date: 'Today, 1:15 PM', price: 8000, from: 'Shangri-La', to: 'Airport', type: 'Ride' },
-           ]);
+           setHistory([]);
         }
       }
     } catch (error) {
@@ -95,7 +91,7 @@ export default function EarningsScreen({ route, navigation }) {
           <>
             <View style={styles.summaryContainer}>
               <View style={styles.totalBalanceCard}>
-                <Text style={styles.balanceLabel}>Нийт үлдэгдэл</Text>
+                <Text style={styles.balanceLabel}>Нийт орлого</Text>
                 <Text style={styles.balanceAmount}>₮{earnings.total?.toLocaleString() || '0'}</Text>
                 <View style={styles.balanceTrend}>
                    <TrendingUp size={16} color={theme.colors.success} />
@@ -130,6 +126,7 @@ const styles = StyleSheet.create({
   },
   content: {
     padding: theme.spacing.m,
+    paddingBottom: 100,
   },
   summaryContainer: {
     marginBottom: theme.spacing.xl,

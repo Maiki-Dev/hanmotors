@@ -6,7 +6,8 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from "../components/ui/tabs"
 import { Button } from "../components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "../components/ui/dialog";
 import { Input } from "../components/ui/input";
-import { Eye, MapPin, Plus, Car, Pencil, Trash2, MoreHorizontal } from 'lucide-react';
+import { Label } from "../components/ui/label";
+import { Eye, MapPin, Plus, Car, Pencil, Trash2, MoreHorizontal, Type, Map as MapIcon } from 'lucide-react';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -18,7 +19,8 @@ import {
   DropdownMenuSubTrigger,
   DropdownMenuSubContent,
 } from "../components/ui/dropdown-menu";
-import api from '../services/api';
+import api, { socket } from '../services/api';
+import { cn } from "../lib/utils";
 
 const TripManagement = () => {
   const [activeTab, setActiveTab] = useState("pending");
@@ -26,6 +28,38 @@ const TripManagement = () => {
   const [drivers, setDrivers] = useState([]);
   const [loading, setLoading] = useState(true);
   
+  // Socket Listeners
+  useEffect(() => {
+    socket.on('newJobRequest', (newTrip) => {
+      setTrips(prev => {
+        if (prev.find(t => t._id === newTrip._id)) return prev;
+        return [newTrip, ...prev];
+      });
+    });
+
+    socket.on('tripUpdated', (updatedTrip) => {
+      setTrips(prev => prev.map(t => t._id === updatedTrip._id ? updatedTrip : t));
+    });
+
+    socket.on('tripDeleted', ({ tripId }) => {
+      setTrips(prev => prev.filter(t => t._id !== tripId));
+    });
+    
+    // Additional listener for status updates that might come as different events
+    socket.on('driverAccepted', ({ tripId, driverId }) => {
+       // Ideally we should fetch or update local state if we don't get the full trip object
+       // But we added tripUpdated emission in backend, so this might be redundant but safe
+       fetchData();
+    });
+
+    return () => {
+      socket.off('newJobRequest');
+      socket.off('tripUpdated');
+      socket.off('tripDeleted');
+      socket.off('driverAccepted');
+    };
+  }, []);
+
   // Create Trip State
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [newTrip, setNewTrip] = useState({
@@ -49,6 +83,22 @@ const TripManagement = () => {
   const [isAssignOpen, setIsAssignOpen] = useState(false);
   const [selectedTrip, setSelectedTrip] = useState(null);
   const [selectedDriverId, setSelectedDriverId] = useState('');
+
+  // Auto-calculate price for Tow
+  useEffect(() => {
+    if (newTrip.serviceType === 'Tow' && newTrip.distance) {
+      const dist = Number(newTrip.distance);
+      let calculatedPrice = 80000;
+      
+      if (dist > 4 && dist <= 20) {
+        calculatedPrice += (dist - 4) * 10000;
+      } else if (dist > 20) {
+        calculatedPrice += (16 * 10000) + (dist - 20) * 5000;
+      }
+      
+      setNewTrip(prev => ({ ...prev, price: calculatedPrice.toString() }));
+    }
+  }, [newTrip.distance, newTrip.serviceType]);
 
   useEffect(() => {
     fetchData();
@@ -76,6 +126,7 @@ const TripManagement = () => {
         pickupLocation: newTrip.pickupLocation,
         dropoffLocation: newTrip.dropoffLocation,
         price: Number(newTrip.price),
+        distance: Number(newTrip.distance),
         serviceType: newTrip.serviceType,
         vehicleModel: newTrip.vehicleModel,
         hasDamage: newTrip.hasDamage === 'true' || newTrip.hasDamage === true,
@@ -91,7 +142,12 @@ const TripManagement = () => {
         pickupLocation: { address: '', lat: 47.9188, lng: 106.9176 },
         dropoffLocation: { address: '', lat: 47.90, lng: 106.90 },
         price: '',
+        distance: '',
         serviceType: 'Tow',
+        vehicleModel: '',
+        hasDamage: false,
+        pickupMode: 'text',
+        dropoffMode: 'text',
         customerName: '',
         customerPhone: ''
       });
@@ -243,6 +299,7 @@ const TripManagement = () => {
                         </div>
                       </TableCell>
                       <TableCell>{trip.serviceType}</TableCell>
+                      <TableCell>{(trip.price || 0).toLocaleString()}₮</TableCell>
                       <TableCell>{trip.driver ? (trip.driver.name || trip.driver.phone || 'Unknown') : '-'}</TableCell>
                       <TableCell>{new Date(trip.createdAt).toLocaleString()}</TableCell>
                       <TableCell>{getStatusBadge(trip.status)}</TableCell>
@@ -305,99 +362,139 @@ const TripManagement = () => {
 
       {/* Create Trip Dialog */}
       <Dialog open={isCreateOpen} onOpenChange={setIsCreateOpen}>
-        <DialogContent>
+        <DialogContent className="sm:max-w-[500px]">
           <DialogHeader>
             <DialogTitle>Шинэ дуудлага бүртгэх</DialogTitle>
           </DialogHeader>
-          <div className="space-y-4 py-4 max-h-[60vh] overflow-y-auto">
-            <div className="space-y-2">
-              <div className="flex justify-between items-center">
-                <label className="text-sm font-medium">Авах хаяг</label>
-                <div className="flex space-x-2 text-xs bg-muted p-1 rounded-md">
+          <div className="grid gap-4 py-4">
+            <div className="grid gap-2">
+              <div className="flex items-center justify-between">
+                <Label htmlFor="pickup">Авах хаяг</Label>
+                <div className="flex items-center rounded-lg border bg-muted p-1 h-8">
                   <button 
-                    className={`px-2 py-0.5 rounded ${newTrip.pickupMode === 'text' ? 'bg-background shadow-sm text-foreground' : 'text-muted-foreground'}`}
+                    className={cn(
+                      "flex items-center gap-2 rounded-md px-2 py-1 text-xs font-medium ring-offset-background transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
+                      newTrip.pickupMode === 'text' ? "bg-background text-foreground shadow-sm" : "text-muted-foreground hover:bg-background/50 hover:text-foreground"
+                    )}
                     onClick={() => setNewTrip({...newTrip, pickupMode: 'text'})}
                   >
-                    Бичих
+                    <Type className="h-3 w-3" /> Бичих
                   </button>
                   <button 
-                    className={`px-2 py-0.5 rounded ${newTrip.pickupMode === 'map' ? 'bg-background shadow-sm text-foreground' : 'text-muted-foreground'}`}
+                    className={cn(
+                      "flex items-center gap-2 rounded-md px-2 py-1 text-xs font-medium ring-offset-background transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
+                      newTrip.pickupMode === 'map' ? "bg-background text-foreground shadow-sm" : "text-muted-foreground hover:bg-background/50 hover:text-foreground"
+                    )}
                     onClick={() => setNewTrip({...newTrip, pickupMode: 'map'})}
                   >
-                    Газрын зураг
+                    <MapIcon className="h-3 w-3" /> Газрын зураг
                   </button>
                 </div>
               </div>
               {newTrip.pickupMode === 'text' ? (
-                <Input 
-                  value={newTrip.pickupLocation.address}
-                  onChange={(e) => setNewTrip({...newTrip, pickupLocation: {...newTrip.pickupLocation, address: e.target.value}})}
-                  placeholder="Сүхбаатар талбай"
-                />
+                <div className="relative">
+                  <MapPin className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+                  <Input 
+                    id="pickup"
+                    value={newTrip.pickupLocation.address}
+                    onChange={(e) => setNewTrip({...newTrip, pickupLocation: {...newTrip.pickupLocation, address: e.target.value}})}
+                    placeholder="Сүхбаатар талбай"
+                    className="pl-9"
+                  />
+                </div>
               ) : (
-                <div className="h-20 w-full rounded-md border border-dashed border-input bg-muted/50 flex flex-col items-center justify-center text-sm text-muted-foreground gap-1">
-                  <MapPin className="h-4 w-4" />
-                  <span>Газрын зураг сонгох хэсэг</span>
+                <div className="h-24 w-full rounded-md border border-dashed border-input bg-muted/50 flex flex-col items-center justify-center text-sm text-muted-foreground gap-2 hover:bg-muted/80 transition-colors cursor-pointer">
+                  <MapPin className="h-6 w-6 opacity-50" />
+                  <span>Газрын зураг дээр сонгох</span>
                 </div>
               )}
             </div>
 
-            <div className="space-y-2">
-              <div className="flex justify-between items-center">
-                <label className="text-sm font-medium">Хүргэх хаяг</label>
-                <div className="flex space-x-2 text-xs bg-muted p-1 rounded-md">
+            <div className="grid gap-2">
+              <div className="flex items-center justify-between">
+                <Label htmlFor="dropoff">Хүргэх хаяг</Label>
+                <div className="flex items-center rounded-lg border bg-muted p-1 h-8">
                   <button 
-                    className={`px-2 py-0.5 rounded ${newTrip.dropoffMode === 'text' ? 'bg-background shadow-sm text-foreground' : 'text-muted-foreground'}`}
+                    className={cn(
+                      "flex items-center gap-2 rounded-md px-2 py-1 text-xs font-medium ring-offset-background transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
+                      newTrip.dropoffMode === 'text' ? "bg-background text-foreground shadow-sm" : "text-muted-foreground hover:bg-background/50 hover:text-foreground"
+                    )}
                     onClick={() => setNewTrip({...newTrip, dropoffMode: 'text'})}
                   >
-                    Бичих
+                    <Type className="h-3 w-3" /> Бичих
                   </button>
                   <button 
-                    className={`px-2 py-0.5 rounded ${newTrip.dropoffMode === 'map' ? 'bg-background shadow-sm text-foreground' : 'text-muted-foreground'}`}
+                    className={cn(
+                      "flex items-center gap-2 rounded-md px-2 py-1 text-xs font-medium ring-offset-background transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
+                      newTrip.dropoffMode === 'map' ? "bg-background text-foreground shadow-sm" : "text-muted-foreground hover:bg-background/50 hover:text-foreground"
+                    )}
                     onClick={() => setNewTrip({...newTrip, dropoffMode: 'map'})}
                   >
-                    Газрын зураг
+                    <MapIcon className="h-3 w-3" /> Газрын зураг
                   </button>
                 </div>
               </div>
               {newTrip.dropoffMode === 'text' ? (
-                <Input 
-                  value={newTrip.dropoffLocation.address}
-                  onChange={(e) => setNewTrip({...newTrip, dropoffLocation: {...newTrip.dropoffLocation, address: e.target.value}})}
-                  placeholder="Зайсан"
-                />
+                <div className="relative">
+                  <MapPin className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+                  <Input 
+                    id="dropoff"
+                    value={newTrip.dropoffLocation.address}
+                    onChange={(e) => setNewTrip({...newTrip, dropoffLocation: {...newTrip.dropoffLocation, address: e.target.value}})}
+                    placeholder="Зайсан"
+                    className="pl-9"
+                  />
+                </div>
               ) : (
-                <div className="h-20 w-full rounded-md border border-dashed border-input bg-muted/50 flex flex-col items-center justify-center text-sm text-muted-foreground gap-1">
-                  <MapPin className="h-4 w-4" />
-                  <span>Газрын зураг сонгох хэсэг</span>
+                <div className="h-24 w-full rounded-md border border-dashed border-input bg-muted/50 flex flex-col items-center justify-center text-sm text-muted-foreground gap-2 hover:bg-muted/80 transition-colors cursor-pointer">
+                  <MapPin className="h-6 w-6 opacity-50" />
+                  <span>Газрын зураг дээр сонгох</span>
                 </div>
               )}
             </div>
 
-            <div className="space-y-2">
-              <label className="text-sm font-medium">Үнэ (₮)</label>
-              <Input 
-                type="number"
-                value={newTrip.price}
-                onChange={(e) => setNewTrip({...newTrip, price: e.target.value})}
-                placeholder="15000"
-              />
+            <div className="grid grid-cols-2 gap-4">
+              <div className="grid gap-2">
+                <Label htmlFor="distance">Зай (км)</Label>
+                <Input 
+                  id="distance"
+                  type="number"
+                  value={newTrip.distance}
+                  onChange={(e) => setNewTrip({...newTrip, distance: e.target.value})}
+                  placeholder="5.5"
+                />
+              </div>
+              <div className="grid gap-2">
+                <Label htmlFor="price">Үнэ (₮)</Label>
+                <Input 
+                  id="price"
+                  type="number"
+                  value={newTrip.price}
+                  onChange={(e) => setNewTrip({...newTrip, price: e.target.value})}
+                  placeholder="15000"
+                />
+              </div>
+              <div className="grid gap-2">
+                <Label htmlFor="vehicle">Ямар машин</Label>
+                <div className="relative">
+                  <Car className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+                  <Input 
+                    id="vehicle"
+                    value={newTrip.vehicleModel}
+                    onChange={(e) => setNewTrip({...newTrip, vehicleModel: e.target.value})}
+                    placeholder="Приус 20..."
+                    className="pl-9"
+                  />
+                </div>
+              </div>
             </div>
 
-            <div className="space-y-2">
-              <label className="text-sm font-medium">Ямар машин</label>
-              <Input 
-                value={newTrip.vehicleModel}
-                onChange={(e) => setNewTrip({...newTrip, vehicleModel: e.target.value})}
-                placeholder="Приус 20, Портер г.м"
-              />
-            </div>
-
-            <div className="space-y-2">
-               <label className="text-sm font-medium">Эвдрэл гэмтэл байгаа эсэх</label>
+            <div className="grid gap-2">
+               <Label htmlFor="damage">Эвдрэл гэмтэл байгаа эсэх</Label>
                <select 
+                 id="damage"
                  className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
-                 value={newTrip.hasDamage.toString()}
+                 value={newTrip.hasDamage ? "true" : "false"}
                  onChange={(e) => setNewTrip({...newTrip, hasDamage: e.target.value === 'true'})}
                >
                  <option value="false">Үгүй</option>
@@ -414,29 +511,40 @@ const TripManagement = () => {
 
       {/* Edit Trip Dialog */}
       <Dialog open={isEditOpen} onOpenChange={setIsEditOpen}>
-        <DialogContent>
+        <DialogContent className="sm:max-w-[500px]">
           <DialogHeader>
             <DialogTitle>Дуудлага засах</DialogTitle>
           </DialogHeader>
           {editingTrip && (
-            <div className="space-y-4 py-4">
-              <div className="space-y-2">
-                <label className="text-sm font-medium">Авах хаяг</label>
-                <Input 
-                  value={editingTrip.pickupLocation.address}
-                  onChange={(e) => setEditingTrip({...editingTrip, pickupLocation: {...editingTrip.pickupLocation, address: e.target.value}})}
-                />
+            <div className="grid gap-4 py-4">
+              <div className="grid gap-2">
+                <Label htmlFor="edit-pickup">Авах хаяг</Label>
+                <div className="relative">
+                   <MapPin className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+                   <Input 
+                    id="edit-pickup"
+                    value={editingTrip.pickupLocation.address}
+                    onChange={(e) => setEditingTrip({...editingTrip, pickupLocation: {...editingTrip.pickupLocation, address: e.target.value}})}
+                    className="pl-9"
+                  />
+                </div>
               </div>
-              <div className="space-y-2">
-                <label className="text-sm font-medium">Хүргэх хаяг</label>
-                <Input 
-                  value={editingTrip.dropoffLocation.address}
-                  onChange={(e) => setEditingTrip({...editingTrip, dropoffLocation: {...editingTrip.dropoffLocation, address: e.target.value}})}
-                />
+              <div className="grid gap-2">
+                <Label htmlFor="edit-dropoff">Хүргэх хаяг</Label>
+                <div className="relative">
+                   <MapPin className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+                   <Input 
+                    id="edit-dropoff"
+                    value={editingTrip.dropoffLocation.address}
+                    onChange={(e) => setEditingTrip({...editingTrip, dropoffLocation: {...editingTrip.dropoffLocation, address: e.target.value}})}
+                    className="pl-9"
+                  />
+                </div>
               </div>
-              <div className="space-y-2">
-                <label className="text-sm font-medium">Үнэ (₮)</label>
+              <div className="grid gap-2">
+                <Label htmlFor="edit-price">Үнэ (₮)</Label>
                 <Input 
+                  id="edit-price"
                   type="number"
                   value={editingTrip.price}
                   onChange={(e) => setEditingTrip({...editingTrip, price: e.target.value})}
@@ -454,25 +562,29 @@ const TripManagement = () => {
 
       {/* Assign Driver Dialog */}
       <Dialog open={isAssignOpen} onOpenChange={setIsAssignOpen}>
-        <DialogContent>
+        <DialogContent className="sm:max-w-[425px]">
           <DialogHeader>
             <DialogTitle>Жолооч хуваарилах</DialogTitle>
           </DialogHeader>
-          <div className="space-y-4 py-4">
-            <div className="space-y-2">
-              <label className="text-sm font-medium">Жолооч сонгох</label>
-              <select 
-                className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
-                value={selectedDriverId}
-                onChange={(e) => setSelectedDriverId(e.target.value)}
-              >
-                <option value="">Жолооч сонгоно уу</option>
-                {drivers.map(d => (
-                  <option key={d._id} value={d._id}>
-                    {d.name || d.phone} ({d.isOnline ? 'Online' : 'Offline'}) - {d.vehicle?.plateNumber}
-                  </option>
-                ))}
-              </select>
+          <div className="grid gap-4 py-4">
+            <div className="grid gap-2">
+              <Label htmlFor="assign-driver">Жолооч сонгох</Label>
+              <div className="relative">
+                 <Car className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+                 <select 
+                    id="assign-driver"
+                    className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 pl-9 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+                    value={selectedDriverId}
+                    onChange={(e) => setSelectedDriverId(e.target.value)}
+                  >
+                    <option value="">Жолооч сонгоно уу</option>
+                    {drivers.map(d => (
+                      <option key={d._id} value={d._id}>
+                        {d.name || d.phone} ({d.isOnline ? 'Online' : 'Offline'}) - {d.vehicle?.plateNumber}
+                      </option>
+                    ))}
+                  </select>
+              </div>
             </div>
           </div>
           <DialogFooter>

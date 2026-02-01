@@ -1,47 +1,66 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity } from 'react-native';
+import { useFocusEffect } from '@react-navigation/native';
 import { theme } from '../constants/theme';
 import { User, Home, DollarSign, HelpCircle, ChevronRight, CreditCard, Wallet, History } from 'lucide-react-native';
 import { API_URL } from '../config';
+import { io } from 'socket.io-client';
 
 export default function ProfileScreen({ navigation, route }) {
   const { driverId } = route.params || { driverId: 'Unknown' };
   const [driverName, setDriverName] = useState(route.params?.driverName || 'Partner');
   const [walletBalance, setWalletBalance] = useState(0);
 
-  useEffect(() => {
-    const fetchDriverInfo = async () => {
-      if (!driverId || driverId === 'Unknown') return;
-      try {
-        // Fetch profile
-        const response = await fetch(`${API_URL}/api/driver/${driverId}`);
-        if (response.ok) {
-          const data = await response.json();
-          setDriverName(data.name || 'Partner');
-          // If wallet data is included in driver object
-          if (data.wallet) {
-            setWalletBalance(data.wallet.balance || 0);
-          }
+  const fetchDriverInfo = async () => {
+    if (!driverId || driverId === 'Unknown') return;
+    try {
+      // Fetch profile
+      const response = await fetch(`${API_URL}/api/driver/${driverId}`);
+      if (response.ok) {
+        const data = await response.json();
+        setDriverName(data.name || 'Partner');
+        // If wallet data is included in driver object
+        if (data.wallet) {
+          setWalletBalance(data.wallet.balance || 0);
         }
-        
-        // Fetch specific wallet info to be sure (and get fresh balance)
-        const walletRes = await fetch(`${API_URL}/api/driver/${driverId}/wallet`);
-        if (walletRes.ok) {
-          const walletData = await walletRes.json();
-          setWalletBalance(walletData.balance || 0);
-        }
-      } catch (error) {
-        console.error("Failed to fetch driver info", error);
       }
-    };
+      
+      // Fetch specific wallet info to be sure (and get fresh balance)
+      const walletRes = await fetch(`${API_URL}/api/driver/${driverId}/wallet`);
+      if (walletRes.ok) {
+        const walletData = await walletRes.json();
+        setWalletBalance(walletData.balance || 0);
+      }
+    } catch (error) {
+      console.error("Failed to fetch driver info", error);
+    }
+  };
 
+  useFocusEffect(
+    useCallback(() => {
+      fetchDriverInfo();
+    }, [driverId])
+  );
+
+  useEffect(() => {
     const unsubscribe = navigation.addListener('focus', () => {
       fetchDriverInfo();
     });
 
     fetchDriverInfo();
+    
+    // Socket listener for real-time wallet updates
+    const socket = io(API_URL);
+    socket.on('walletUpdated', (data) => {
+      if (data.driverId === driverId) {
+        setWalletBalance(data.balance);
+      }
+    });
 
-    return unsubscribe;
+    return () => {
+        unsubscribe();
+        socket.disconnect();
+    };
   }, [navigation, driverId]);
   
   const MenuOption = ({ title, onPress, icon, isLast, value }) => (
@@ -123,7 +142,7 @@ export default function ProfileScreen({ navigation, route }) {
           <MenuOption 
             title="Ажлын түүх" 
             icon={<History size={20} color={theme.colors.textSecondary} />} // Changed icon
-            onPress={() => navigation.navigate('JobHistory')} 
+            onPress={() => navigation.navigate('JobHistory', { driverId })} 
           />
           <View style={styles.divider} />
           <MenuOption 
@@ -155,7 +174,8 @@ const styles = StyleSheet.create({
   },
   content: {
     padding: theme.spacing.l,
-    paddingTop: 60, 
+    paddingTop: 60,
+    paddingBottom: 100, 
   },
   profileHeader: {
     alignItems: 'center',

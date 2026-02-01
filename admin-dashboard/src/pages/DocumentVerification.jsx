@@ -127,7 +127,7 @@ const DocumentVerification = () => {
 
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
         {selectedDoc && (
-            <DialogContent className="sm:max-w-[600px]" onClose={handleClose}>
+            <DialogContent className="sm:max-w-[600px]">
                 <DialogHeader>
                     <DialogTitle>Баримт бичиг: {selectedDoc.type === 'license' ? 'Жолооны үнэмлэх' : 'Тээврийн гэрчилгээ'}</DialogTitle>
                     <DialogDescription>

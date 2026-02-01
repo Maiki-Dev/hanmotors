@@ -1,7 +1,8 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Alert, ActivityIndicator, Linking, Platform } from 'react-native';
 import MapView, { Marker, PROVIDER_GOOGLE } from 'react-native-maps';
 import { Navigation, Phone, MessageCircle } from 'lucide-react-native';
+import * as Location from 'expo-location';
 import { API_URL } from '../config';
 import { theme } from '../constants/theme';
 import { GoldButton } from '../components/GoldButton';
@@ -37,6 +38,106 @@ export default function ActiveJobScreen({ route, navigation }) {
     job?.status === 'in_progress' ? 'in_progress' : 'pickup'
   );
   const [loading, setLoading] = useState(false);
+  const [userLocation, setUserLocation] = useState(null);
+  const [tripStats, setTripStats] = useState({ duration: 0, distance: 0 });
+  const mapRef = useRef(null);
+  const statusRef = useRef(status);
+  const lastLocRef = useRef(null);
+
+  useEffect(() => {
+    statusRef.current = status;
+  }, [status]);
+
+  // Timer effect
+  useEffect(() => {
+    let interval;
+    if (status === 'in_progress') {
+      const startTime = Date.now() - (tripStats.duration * 1000);
+      interval = setInterval(() => {
+        setTripStats(prev => ({
+          ...prev,
+          duration: Math.floor((Date.now() - startTime) / 1000)
+        }));
+      }, 1000);
+    }
+    return () => clearInterval(interval);
+  }, [status]);
+
+  const getDistanceFromLatLonInKm = (lat1, lon1, lat2, lon2) => {
+    const R = 6371; // Radius of the earth in km
+    const dLat = (lat2 - lat1) * (Math.PI / 180);
+    const dLon = (lon2 - lon1) * (Math.PI / 180);
+    const a =
+      Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+      Math.cos(lat1 * (Math.PI / 180)) * Math.cos(lat2 * (Math.PI / 180)) *
+      Math.sin(dLon / 2) * Math.sin(dLon / 2);
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+    return R * c;
+  };
+
+  // Target location (Pickup or Dropoff)
+  const targetLocation = {
+    latitude: status === 'pickup' ? (job?.pickupLocation?.lat || 47.9188) : (job?.dropoffLocation?.lat || 47.9188),
+    longitude: status === 'pickup' ? (job?.pickupLocation?.lng || 106.9176) : (job?.dropoffLocation?.lng || 106.9176),
+  };
+
+  useEffect(() => {
+    (async () => {
+      let { status } = await Location.requestForegroundPermissionsAsync();
+      if (status !== 'granted') {
+        // Alert.alert('Permission to access location was denied');
+        return;
+      }
+
+      // Get initial location
+      let location = await Location.getCurrentPositionAsync({});
+      setUserLocation({
+        latitude: location.coords.latitude,
+        longitude: location.coords.longitude,
+        latitudeDelta: 0.01,
+        longitudeDelta: 0.01,
+      });
+
+      // Watch location
+      const subscription = await Location.watchPositionAsync(
+        {
+          accuracy: Location.Accuracy.High,
+          timeInterval: 2000,
+          distanceInterval: 5,
+        },
+        (loc) => {
+           setUserLocation({
+            latitude: loc.coords.latitude,
+            longitude: loc.coords.longitude,
+            latitudeDelta: 0.01,
+            longitudeDelta: 0.01,
+          });
+
+          // Calculate distance if in progress
+          if (statusRef.current === 'in_progress') {
+            if (lastLocRef.current) {
+              const d = getDistanceFromLatLonInKm(
+                lastLocRef.current.latitude,
+                lastLocRef.current.longitude,
+                loc.coords.latitude,
+                loc.coords.longitude
+              );
+              // Only add if reasonable distance (e.g. > 5 meters to avoid jitter)
+              if (d > 0.005) {
+                setTripStats(prev => ({ ...prev, distance: prev.distance + d }));
+                lastLocRef.current = { latitude: loc.coords.latitude, longitude: loc.coords.longitude };
+              }
+            } else {
+              lastLocRef.current = { latitude: loc.coords.latitude, longitude: loc.coords.longitude };
+            }
+          } else {
+            lastLocRef.current = null;
+          }
+        }
+      );
+      return () => subscription.remove();
+    })();
+  }, []);
 
   const openNavigation = () => {
     const lat = status === 'pickup' ? job?.pickupLocation?.lat || 47.9188 : job?.dropoffLocation?.lat || 47.9188;
@@ -94,19 +195,24 @@ export default function ActiveJobScreen({ route, navigation }) {
   return (
     <View style={styles.container}>
       <MapView 
+        ref={mapRef}
         provider={PROVIDER_GOOGLE}
         style={styles.map} 
         customMapStyle={darkMapStyle}
-        initialRegion={{
+        region={userLocation || {
           latitude: 47.9188,
           longitude: 106.9176,
           latitudeDelta: 0.01,
           longitudeDelta: 0.01,
         }}
+        showsUserLocation={true}
+        followsUserLocation={true}
       >
         <Marker 
-          coordinate={{ latitude: 47.9188, longitude: 106.9176 }} 
+          coordinate={targetLocation} 
           pinColor={theme.colors.primary}
+          title={status === 'pickup' ? 'Авах цэг' : 'Хүргэх цэг'}
+          description={status === 'pickup' ? job?.pickupLocation?.address : job?.dropoffLocation?.address}
         />
       </MapView>
 
@@ -124,9 +230,9 @@ export default function ActiveJobScreen({ route, navigation }) {
               <View style={styles.customerInfo}>
                 <Text style={styles.customerLabel}>Үйлчлүүлэгч</Text>
                 <Text style={styles.customerName}>Зочин</Text>
-                <View style={styles.ratingContainer}>
-                   <Text style={styles.rating}>★ 4.9</Text>
-                </View>
+                <Text style={{ ...theme.typography.h3, color: theme.colors.success, marginTop: 4, fontWeight: 'bold' }}>
+                  ₮{(job?.price || 0).toLocaleString()}
+                </Text>
               </View>
               <View style={styles.actions}>
                 <TouchableOpacity style={styles.iconButton}>
@@ -225,6 +331,27 @@ const styles = StyleSheet.create({
     padding: 12,
     borderRadius: 25,
     marginLeft: theme.spacing.s,
+  },
+  statsContainer: {
+    flexDirection: 'row',
+    backgroundColor: theme.colors.surfaceLight,
+    padding: 8,
+    borderRadius: 12,
+    marginHorizontal: 8,
+  },
+  statItem: {
+    marginHorizontal: 8,
+    alignItems: 'center',
+  },
+  statLabel: {
+    fontSize: 10,
+    color: theme.colors.textSecondary,
+    marginBottom: 2,
+  },
+  statValue: {
+    fontSize: 14,
+    fontWeight: 'bold',
+    color: theme.colors.primary,
   },
   divider: {
     height: 1,

@@ -61,7 +61,7 @@ const DashboardOverview = () => {
 
   // Formatter for currency
   const formatCurrency = (amount) => {
-    return new Intl.NumberFormat('mn-MN', { style: 'currency', currency: 'MNT' }).format(amount);
+    return (amount || 0).toLocaleString() + '₮';
   };
 
   const stats = [
@@ -146,7 +146,7 @@ const DashboardOverview = () => {
                   <stat.icon className="h-4 w-4 text-muted-foreground" />
                 </CardHeader>
                 <CardContent>
-                  <div className="text-2xl font-bold">{stat.value}</div>
+                  <div className="text-2xl font-bold break-words">{stat.value}</div>
                   <p className="text-xs text-muted-foreground">
                     {stat.description}
                   </p>

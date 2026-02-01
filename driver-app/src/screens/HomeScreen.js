@@ -3,8 +3,18 @@ import { View, Text, StyleSheet, Switch, TouchableOpacity, Dimensions, Alert, Pl
 import MapView, { Marker, PROVIDER_GOOGLE } from 'react-native-maps';
 import { io } from 'socket.io-client';
 import * as Location from 'expo-location';
+import * as Notifications from 'expo-notifications';
 import { IncomingJobModal } from '../components/IncomingJobModal';
 import { API_URL } from '../config';
+
+// Configure notifications to show even when app is in foreground
+Notifications.setNotificationHandler({
+  handleNotification: async () => ({
+    shouldShowAlert: true,
+    shouldPlaySound: true,
+    shouldSetBadge: false,
+  }),
+});
 import { theme } from '../constants/theme';
 import { PremiumCard } from '../components/PremiumCard';
 import { MapPin, Navigation as NavIcon } from 'lucide-react-native';
@@ -22,13 +32,41 @@ export default function HomeScreen({ navigation, route }) {
   });
   const [incomingRequest, setIncomingRequest] = useState(null);
   const socketRef = useRef(null);
+  const isOnlineRef = useRef(isOnline);
+
+  useEffect(() => {
+    isOnlineRef.current = isOnline;
+  }, [isOnline]);
 
   useEffect(() => {
     (async () => {
+      // Request Location Permissions
       let { status } = await Location.requestForegroundPermissionsAsync();
       if (status !== 'granted') {
         Alert.alert('Permission to access location was denied');
         return;
+      }
+
+      // Request Notification Permissions
+      const { status: existingStatus } = await Notifications.getPermissionsAsync();
+      let finalStatus = existingStatus;
+      if (existingStatus !== 'granted') {
+        const { status } = await Notifications.requestPermissionsAsync();
+        finalStatus = status;
+      }
+      
+      if (finalStatus !== 'granted') {
+        Alert.alert('Failed to get push token for push notification!');
+      }
+
+      // Android Channel
+      if (Platform.OS === 'android') {
+        await Notifications.setNotificationChannelAsync('default', {
+          name: 'default',
+          importance: Notifications.AndroidImportance.MAX,
+          vibrationPattern: [0, 250, 250, 250],
+          lightColor: '#FF231F7C',
+        });
       }
 
       // Initial location
@@ -76,6 +114,34 @@ export default function HomeScreen({ navigation, route }) {
       setIncomingRequest(tripData);
     });
 
+    socketRef.current.on('newJobRequest', async (tripData) => {
+      if (isOnlineRef.current) {
+        setIncomingRequest(tripData);
+        
+        // Schedule local notification
+        await Notifications.scheduleNotificationAsync({
+          content: {
+            title: "🔔 Шинэ дуудлага!",
+            body: `${tripData.pickupLocation?.address || 'Хаяг тодорхойгүй'} -> ${tripData.dropoffLocation?.address || 'Хаяг тодорхойгүй'}`,
+            data: { tripId: tripData._id },
+            sound: true,
+            priority: Notifications.AndroidNotificationPriority.MAX,
+          },
+          trigger: null, // Immediate
+        });
+      }
+    });
+
+    socketRef.current.on('jobTaken', ({ tripId }) => {
+      setIncomingRequest(current => {
+        if (current && current._id === tripId) {
+          Alert.alert('Мэдээлэл', 'Захиалгыг өөр жолооч авсан байна.');
+          return null;
+        }
+        return current;
+      });
+    });
+
     return () => {
       if (socketRef.current) {
         socketRef.current.disconnect();
@@ -119,7 +185,11 @@ export default function HomeScreen({ navigation, route }) {
         setIncomingRequest(null);
         navigation.navigate('ActiveJob', { trip: updatedTrip });
       } else {
-        Alert.alert('Алдаа', 'Захиалга авахад алдаа гарлаа');
+        const errorData = await response.json();
+        Alert.alert('Алдаа', errorData.message || 'Захиалга авахад алдаа гарлаа');
+        if (response.status === 400 && errorData.message?.includes('already been accepted')) {
+          setIncomingRequest(null);
+        }
       }
     } catch (error) {
       console.error('Accept job error:', error);
@@ -345,7 +415,7 @@ const styles = StyleSheet.create({
   },
   bottomSheet: {
     position: 'absolute',
-    bottom: 20,
+    bottom: 110,
     left: 20,
     right: 20,
   },

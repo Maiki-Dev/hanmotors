@@ -1,10 +1,12 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert, FlatList } from 'react-native';
+import { useFocusEffect } from '@react-navigation/native';
 import { theme } from '../constants/theme';
 import { Header } from '../components/Header';
 import { GoldButton } from '../components/GoldButton';
 import { CreditCard, History, Plus } from 'lucide-react-native';
 import { API_URL } from '../config';
+import { io } from 'socket.io-client';
 
 export default function WalletScreen({ navigation, route }) {
   const { driverId } = route.params || {};
@@ -12,9 +14,27 @@ export default function WalletScreen({ navigation, route }) {
   const [transactions, setTransactions] = useState([]);
   const [loading, setLoading] = useState(false);
 
+  useFocusEffect(
+    useCallback(() => {
+      fetchWallet();
+    }, [driverId])
+  );
+
   useEffect(() => {
     fetchWallet();
-  }, []);
+
+    const socket = io(API_URL);
+    socket.on('walletUpdated', (data) => {
+      if (data.driverId === driverId) {
+        setBalance(data.balance);
+        setTransactions(data.transactions);
+      }
+    });
+
+    return () => {
+      socket.disconnect();
+    };
+  }, [driverId]);
 
   const fetchWallet = async () => {
     try {

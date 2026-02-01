@@ -11,6 +11,8 @@ const PaymentsReport = () => {
   const [stats, setStats] = useState({
     totalRevenue: 0,
     totalWalletDeposits: 0,
+    totalWalletDebits: 0,
+    totalCurrentBalance: 0,
     transactionCount: 0
   });
   const [loading, setLoading] = useState(true);
