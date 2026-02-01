@@ -1,41 +1,32 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from "../components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "../components/ui/table";
 import { Badge } from "../components/ui/badge";
 import { Button } from "../components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "../components/ui/dialog";
 import { Eye, Check, X } from 'lucide-react';
+import api from '../services/api';
 
 const DocumentVerification = () => {
+  const [documents, setDocuments] = useState([]);
   const [selectedDoc, setSelectedDoc] = useState(null);
   const [dialogOpen, setDialogOpen] = useState(false);
 
-  const documents = [
-    {
-      id: "DOC-001",
-      driver: "Г.Тулга",
-      type: "Driver's License",
-      status: "pending",
-      submittedDate: "2024-02-01 09:30",
-      image: "https://via.placeholder.com/600x400?text=Drivers+License",
-    },
-    {
-      id: "DOC-002",
-      driver: "Г.Тулга",
-      type: "Vehicle Registration",
-      status: "pending",
-      submittedDate: "2024-02-01 09:35",
-      image: "https://via.placeholder.com/600x400?text=Vehicle+Registration",
-    },
-    {
-      id: "DOC-003",
-      driver: "С.Сүх",
-      type: "Insurance",
-      status: "rejected",
-      submittedDate: "2024-01-30 14:00",
-      image: "https://via.placeholder.com/600x400?text=Insurance",
-    },
-  ];
+  const fetchDocuments = async () => {
+    try {
+      const response = await api.get('/admin/documents');
+      setDocuments(response.data);
+    } catch (error) {
+      console.error('Error fetching documents:', error);
+    }
+  };
+
+  useEffect(() => {
+    fetchDocuments();
+    // Poll every 10 seconds for updates
+    const interval = setInterval(fetchDocuments, 10000);
+    return () => clearInterval(interval);
+  }, []);
 
   const handleView = (doc) => {
     setSelectedDoc(doc);
@@ -45,6 +36,18 @@ const DocumentVerification = () => {
   const handleClose = () => {
     setDialogOpen(false);
     setSelectedDoc(null);
+  };
+
+  const handleStatusUpdate = async (doc, status) => {
+    try {
+      await api.post(`/admin/documents/${doc.driverId}/${doc.type}/status`, { status });
+      fetchDocuments();
+      if (selectedDoc && selectedDoc.id === doc.id) {
+        handleClose();
+      }
+    } catch (error) {
+      console.error('Error updating status:', error);
+    }
   };
 
   const getStatusBadge = (status) => {
@@ -77,28 +80,46 @@ const DocumentVerification = () => {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {documents.map((doc) => (
-                <TableRow key={doc.id}>
-                  <TableCell className="font-medium">{doc.id}</TableCell>
-                  <TableCell>{doc.driver}</TableCell>
-                  <TableCell>{doc.type}</TableCell>
-                  <TableCell>{doc.submittedDate}</TableCell>
-                  <TableCell>{getStatusBadge(doc.status)}</TableCell>
-                  <TableCell className="text-right">
-                    <div className="flex justify-end gap-2">
-                      <Button variant="outline" size="icon" onClick={() => handleView(doc)}>
-                        <Eye className="h-4 w-4" />
-                      </Button>
-                      <Button variant="outline" size="icon" className="text-green-600 hover:text-green-700">
-                        <Check className="h-4 w-4" />
-                      </Button>
-                      <Button variant="outline" size="icon" className="text-red-600 hover:text-red-700">
-                        <X className="h-4 w-4" />
-                      </Button>
-                    </div>
+              {documents.length === 0 ? (
+                <TableRow>
+                  <TableCell colSpan={6} className="text-center py-4">
+                    Баримт бичиг байхгүй байна
                   </TableCell>
                 </TableRow>
-              ))}
+              ) : (
+                documents.map((doc) => (
+                  <TableRow key={doc.id}>
+                    <TableCell className="font-medium">{doc.id.substring(0, 8)}...</TableCell>
+                    <TableCell>{doc.driver}</TableCell>
+                    <TableCell>{doc.type === 'license' ? 'Жолооны үнэмлэх' : doc.type === 'vehicleRegistration' ? 'Тээврийн гэрчилгээ' : doc.type}</TableCell>
+                    <TableCell>{new Date(doc.submittedDate).toLocaleDateString()}</TableCell>
+                    <TableCell>{getStatusBadge(doc.status)}</TableCell>
+                    <TableCell className="text-right">
+                      <div className="flex justify-end gap-2">
+                        <Button variant="outline" size="icon" onClick={() => handleView(doc)}>
+                          <Eye className="h-4 w-4" />
+                        </Button>
+                        <Button 
+                          variant="outline" 
+                          size="icon" 
+                          className="text-green-600 hover:text-green-700"
+                          onClick={() => handleStatusUpdate(doc, 'approved')}
+                        >
+                          <Check className="h-4 w-4" />
+                        </Button>
+                        <Button 
+                          variant="outline" 
+                          size="icon" 
+                          className="text-red-600 hover:text-red-700"
+                          onClick={() => handleStatusUpdate(doc, 'rejected')}
+                        >
+                          <X className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                ))
+              )}
             </TableBody>
           </Table>
         </CardContent>
@@ -108,22 +129,27 @@ const DocumentVerification = () => {
         {selectedDoc && (
             <DialogContent className="sm:max-w-[600px]" onClose={handleClose}>
                 <DialogHeader>
-                    <DialogTitle>Баримт бичиг: {selectedDoc.type}</DialogTitle>
+                    <DialogTitle>Баримт бичиг: {selectedDoc.type === 'license' ? 'Жолооны үнэмлэх' : 'Тээврийн гэрчилгээ'}</DialogTitle>
                     <DialogDescription>
-                        Жолооч: {selectedDoc.driver} | ID: {selectedDoc.id}
+                        Жолооч: {selectedDoc.driver}
                     </DialogDescription>
                 </DialogHeader>
                 <div className="grid gap-4 py-4">
-                    <div className="aspect-video w-full overflow-hidden rounded-lg border bg-muted relative">
-                        {/* Placeholder for image */}
-                        <div className="absolute inset-0 flex items-center justify-center bg-gray-100 dark:bg-gray-800 text-muted-foreground">
-                            {selectedDoc.type} Image Preview
-                        </div>
+                    <div className="aspect-video w-full overflow-hidden rounded-lg border bg-muted relative flex items-center justify-center">
+                        {selectedDoc.image ? (
+                            <img 
+                              src={selectedDoc.image} 
+                              alt={selectedDoc.type} 
+                              className="max-w-full max-h-full object-contain" 
+                            />
+                        ) : (
+                            <div className="text-muted-foreground">Зураг алга</div>
+                        )}
                     </div>
                 </div>
                 <DialogFooter>
-                    <Button variant="destructive" onClick={handleClose}>Татгалзах</Button>
-                    <Button onClick={handleClose}>Баталгаажуулах</Button>
+                    <Button variant="destructive" onClick={() => handleStatusUpdate(selectedDoc, 'rejected')}>Татгалзах</Button>
+                    <Button onClick={() => handleStatusUpdate(selectedDoc, 'approved')}>Баталгаажуулах</Button>
                 </DialogFooter>
             </DialogContent>
         )}

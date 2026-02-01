@@ -28,11 +28,29 @@ export default function LoginScreen({ navigation }) {
 
       const data = await response.json();
 
+      if (data.exists === false) {
+        Alert.alert(
+          'Бүртгэлгүй дугаар',
+          'Энэ дугаар бүртгэлгүй байна. Бүртгүүлэх хэсэг рүү шилжих үү?',
+          [
+            {
+              text: 'Үгүй',
+              style: 'cancel',
+            },
+            {
+              text: 'Тийм',
+              onPress: () => navigation.navigate('Register', { phone }),
+            },
+          ]
+        );
+        return;
+      }
+
       if (response.ok) {
         Alert.alert('OTP илгээгдлээ', `Таны код: ${data.dev_otp}`); // Show dev OTP
         setStep(2);
       } else {
-        Alert.alert('Алдаа', data.message || 'OTP илгээж чадсангүй. Бүртгэлтэй эсэхээ шалгана уу.');
+        Alert.alert('Алдаа', data.message || 'OTP илгээж чадсангүй.');
       }
     } catch (error) {
       Alert.alert('Алдаа', 'Сүлжээний алдаа. Дахин оролдоно уу.');
@@ -90,7 +108,7 @@ export default function LoginScreen({ navigation }) {
             <>
               <Text style={styles.label}>Утасны дугаараа оруулна уу</Text>
               <Input
-                placeholder="99112233"
+                placeholder="80080810"
                 value={phone}
                 onChangeText={setPhone}
                 keyboardType="phone-pad"

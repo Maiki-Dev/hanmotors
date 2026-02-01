@@ -15,6 +15,8 @@ const DashboardOverview = () => {
     todayRequests: 0,
     totalRevenue: 0
   });
+  const [revenueData, setRevenueData] = useState([]);
+  const [transactions, setTransactions] = useState([]);
 
   useEffect(() => {
     const fetchStats = async () => {
@@ -25,10 +27,35 @@ const DashboardOverview = () => {
         console.error("Failed to fetch stats", error);
       }
     };
+    
+    const fetchRevenue = async () => {
+      try {
+        const response = await api.get('/admin/revenue-chart');
+        setRevenueData(response.data);
+      } catch (error) {
+        console.error("Failed to fetch revenue", error);
+      }
+    };
+
+    const fetchTransactions = async () => {
+      try {
+        const response = await api.get('/admin/transactions');
+        setTransactions(response.data.transactions);
+      } catch (error) {
+        console.error("Failed to fetch transactions", error);
+      }
+    };
+
     fetchStats();
+    fetchRevenue();
+    fetchTransactions();
     
     // Refresh every 30 seconds
-    const interval = setInterval(fetchStats, 30000);
+    const interval = setInterval(() => {
+        fetchStats();
+        fetchRevenue();
+        fetchTransactions();
+    }, 30000);
     return () => clearInterval(interval);
   }, []);
 
@@ -111,7 +138,7 @@ const DashboardOverview = () => {
         <TabsContent isActive={activeTab === 'overview'} className="space-y-4">
           <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
             {stats.map((stat, index) => (
-              <Card key={index}>
+               <Card key={index}>
                 <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                   <CardTitle className="text-sm font-medium">
                     {stat.title}
@@ -127,25 +154,24 @@ const DashboardOverview = () => {
               </Card>
             ))}
           </div>
-
           <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-7">
             <Card className="col-span-4">
               <CardHeader>
                 <CardTitle>Орлогын тойм</CardTitle>
               </CardHeader>
               <CardContent className="pl-2">
-                <Overview />
+                <Overview data={revenueData} />
               </CardContent>
             </Card>
             <Card className="col-span-3">
               <CardHeader>
                 <CardTitle>Сүүлийн гүйлгээнүүд</CardTitle>
                 <CardDescription>
-                  Энэ сард нийт 265 дуудлага хийгдсэн байна.
+                  Энэ сард хийгдсэн нийт гүйлгээнүүд
                 </CardDescription>
               </CardHeader>
               <CardContent>
-                <RecentSales />
+                <RecentSales data={transactions} />
               </CardContent>
             </Card>
           </div>

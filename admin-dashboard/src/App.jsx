@@ -10,9 +10,35 @@ import DriverManagement from './pages/DriverManagement';
 import TripManagement from './pages/TripManagement';
 import PaymentsReport from './pages/PaymentsReport';
 import DocumentVerification from './pages/DocumentVerification';
+import SettingsPage from './pages/Settings';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "./components/ui/dropdown-menu";
 
 const Sidebar = ({ className, onClose }) => {
   const location = useLocation();
+  const [profile, setProfile] = useState({
+    name: 'Admin User',
+    email: 'admin@hanmotors.mn'
+  });
+
+  React.useEffect(() => {
+    const loadProfile = () => {
+        const saved = localStorage.getItem('adminProfile');
+        if (saved) {
+            setProfile(JSON.parse(saved));
+        }
+    };
+    loadProfile();
+    window.addEventListener('profileUpdated', loadProfile);
+    return () => window.removeEventListener('profileUpdated', loadProfile);
+  }, []);
+
   const menuItems = [
     { icon: LayoutDashboard, label: 'Ерөнхий самбар', path: '/' },
     { icon: Users, label: 'Жолоочийн удирдлага', path: '/drivers' },
@@ -69,17 +95,36 @@ const Sidebar = ({ className, onClose }) => {
       </div>
 
       <div className="p-4 border-t border-sidebar-border/50 bg-sidebar-accent/20 relative z-10">
-        <div className="flex items-center gap-3 p-3 rounded-xl bg-sidebar-accent/50 border border-sidebar-border/50 hover:bg-sidebar-accent cursor-pointer transition-all hover:scale-[1.02] active:scale-[0.98]">
-            <Avatar className="h-10 w-10 border-2 border-primary/20">
-                <AvatarImage src="/placeholder-user.jpg" />
-                <AvatarFallback className="bg-primary text-primary-foreground">AD</AvatarFallback>
-            </Avatar>
-            <div className="flex flex-col flex-1 min-w-0">
-                <span className="text-sm font-semibold truncate">Admin User</span>
-                <span className="text-xs text-sidebar-foreground/60 truncate">admin@hanmotors.mn</span>
-            </div>
-            <Settings className="h-4 w-4 text-sidebar-foreground/50" />
-        </div>
+        <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+                <div className="flex items-center gap-3 p-3 rounded-xl bg-sidebar-accent/50 border border-sidebar-border/50 hover:bg-sidebar-accent cursor-pointer transition-all hover:scale-[1.02] active:scale-[0.98]">
+                    <Avatar className="h-10 w-10 border-2 border-primary/20">
+                        <AvatarImage src="/placeholder-user.jpg" />
+                        <AvatarFallback className="bg-primary text-primary-foreground">AD</AvatarFallback>
+                    </Avatar>
+                    <div className="flex flex-col flex-1 min-w-0 text-left">
+                        <span className="text-sm font-semibold truncate">{profile.name}</span>
+                        <span className="text-xs text-sidebar-foreground/60 truncate">{profile.email}</span>
+                    </div>
+                    <Settings className="h-4 w-4 text-sidebar-foreground/50" />
+                </div>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-56" side="right" sideOffset={10}>
+                <DropdownMenuLabel>Миний хаяг</DropdownMenuLabel>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem asChild>
+                    <Link to="/settings" className="cursor-pointer w-full flex items-center" onClick={onClose}>
+                        <Settings className="mr-2 h-4 w-4" />
+                        <span>Тохиргоо</span>
+                    </Link>
+                </DropdownMenuItem>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem className="text-red-600 focus:text-red-600 cursor-pointer">
+                    <LogOut className="mr-2 h-4 w-4" />
+                    <span>Гарах</span>
+                </DropdownMenuItem>
+            </DropdownMenuContent>
+        </DropdownMenu>
       </div>
     </div>
   );
@@ -133,6 +178,7 @@ function App() {
             <Route path="/requests" element={<TripManagement />} />
             <Route path="/payments" element={<PaymentsReport />} />
             <Route path="/verification" element={<DocumentVerification />} />
+            <Route path="/settings" element={<SettingsPage />} />
           </Routes>
         </div>
       </main>

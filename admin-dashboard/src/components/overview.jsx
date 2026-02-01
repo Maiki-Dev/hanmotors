@@ -1,58 +1,7 @@
 import React from 'react';
 import { Bar, BarChart, ResponsiveContainer, XAxis, YAxis, Tooltip } from "recharts"
 
-const data = [
-  {
-    name: "1-р сар",
-    total: Math.floor(Math.random() * 5000) + 1000,
-  },
-  {
-    name: "2-р сар",
-    total: Math.floor(Math.random() * 5000) + 1000,
-  },
-  {
-    name: "3-р сар",
-    total: Math.floor(Math.random() * 5000) + 1000,
-  },
-  {
-    name: "4-р сар",
-    total: Math.floor(Math.random() * 5000) + 1000,
-  },
-  {
-    name: "5-р сар",
-    total: Math.floor(Math.random() * 5000) + 1000,
-  },
-  {
-    name: "6-р сар",
-    total: Math.floor(Math.random() * 5000) + 1000,
-  },
-  {
-    name: "7-р сар",
-    total: Math.floor(Math.random() * 5000) + 1000,
-  },
-  {
-    name: "8-р сар",
-    total: Math.floor(Math.random() * 5000) + 1000,
-  },
-  {
-    name: "9-р сар",
-    total: Math.floor(Math.random() * 5000) + 1000,
-  },
-  {
-    name: "10-р сар",
-    total: Math.floor(Math.random() * 5000) + 1000,
-  },
-  {
-    name: "11-р сар",
-    total: Math.floor(Math.random() * 5000) + 1000,
-  },
-  {
-    name: "12-р сар",
-    total: Math.floor(Math.random() * 5000) + 1000,
-  },
-]
-
-export function Overview() {
+export function Overview({ data }) {
   return (
     <ResponsiveContainer width="100%" height={350}>
       <BarChart data={data}>
@@ -73,6 +22,7 @@ export function Overview() {
         <Tooltip 
             cursor={{fill: 'transparent'}}
             contentStyle={{ backgroundColor: 'oklch(var(--card))', borderRadius: 'var(--radius)', border: '1px solid oklch(var(--border))' }}
+            formatter={(value) => [`₮${new Intl.NumberFormat('en-US').format(value)}`, 'Орлого']}
         />
         <Bar
           dataKey="total"

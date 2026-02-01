@@ -25,8 +25,21 @@ const DriverSchema = new mongoose.Schema({
     photoUrl: String
   },
   documents: {
-    licenseUrl: String,
-    registrationUrl: String,
+    license: {
+      url: String,
+      status: { type: String, enum: ['pending', 'approved', 'rejected'], default: 'pending' },
+      rejectionReason: String
+    },
+    vehicleRegistration: {
+      url: String,
+      status: { type: String, enum: ['pending', 'approved', 'rejected'], default: 'pending' },
+      rejectionReason: String
+    },
+    insurance: {
+      url: String,
+      status: { type: String, enum: ['pending', 'approved', 'rejected'], default: 'pending' },
+      rejectionReason: String
+    },
     isVerified: { type: Boolean, default: false }
   },
   settings: {

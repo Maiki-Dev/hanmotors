@@ -88,7 +88,8 @@ router.post('/driver/register', async (req, res) => {
       phone,
       password, // In production, hash this!
       vehicleType,
-      status: 'pending' // Default to pending
+      documents: req.body.documents || {},
+      status: 'active' // Default to active for immediate login
     });
 
     await driver.save();
@@ -123,7 +124,7 @@ router.post('/driver/auth/otp/request', async (req, res) => {
 
   try {
     const driver = await Driver.findOne({ phone });
-    if (!driver) return res.status(404).json({ message: 'Driver not found' });
+    if (!driver) return res.json({ exists: false, message: 'Driver not found' });
 
     // Generate 4 digit OTP
     const otp = Math.floor(1000 + Math.random() * 9000).toString();
@@ -730,6 +731,7 @@ router.get('/admin/transactions', async (req, res) => {
             id: tx._id,
             driver: driver.name,
             driverId: driver._id,
+            email: driver.email, // Added email
             amount: tx.amount,
             type: tx.type, // 'credit' or 'debit'
             description: tx.description,
@@ -762,6 +764,117 @@ router.get('/admin/transactions', async (req, res) => {
       transactions: allTransactions
     });
 
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+router.get('/admin/revenue-chart', async (req, res) => {
+  if (isOffline()) {
+      const data = Array.from({ length: 12 }, (_, i) => ({
+          name: `${i + 1}-р сар`,
+          total: Math.floor(Math.random() * 5000000) + 1000000,
+      }));
+      return res.json(data);
+  }
+  try {
+      const currentYear = new Date().getFullYear();
+      const revenue = await Trip.aggregate([
+          {
+              $match: {
+                  status: 'completed',
+                  createdAt: {
+                      $gte: new Date(`${currentYear}-01-01`),
+                      $lte: new Date(`${currentYear}-12-31`)
+                  }
+              }
+          },
+          {
+              $group: {
+                  _id: { $month: "$createdAt" },
+                  total: { $sum: "$price" }
+              }
+          },
+          { $sort: { _id: 1 } }
+      ]);
+
+      // Format for frontend: [{ name: "1-р сар", total: 1000 }, ...]
+      const formattedData = Array.from({ length: 12 }, (_, i) => {
+          const monthData = revenue.find(r => r._id === i + 1);
+          return {
+              name: `${i + 1}-р сар`,
+              total: monthData ? monthData.total : 0
+          };
+      });
+
+      res.json(formattedData);
+  } catch (err) {
+      res.status(500).json({ error: err.message });
+  }
+});
+
+// --- ADMIN DOCUMENT ENDPOINTS ---
+
+router.get('/admin/documents', async (req, res) => {
+  if (isOffline()) return res.json([]);
+
+  try {
+    const drivers = await Driver.find({ 
+      $or: [
+        { 'documents.license.url': { $exists: true } },
+        { 'documents.vehicleRegistration.url': { $exists: true } },
+        { 'documents.insurance.url': { $exists: true } }
+      ]
+    });
+
+    const allDocs = [];
+    drivers.forEach(d => {
+      const docTypes = ['license', 'vehicleRegistration', 'insurance'];
+      docTypes.forEach(type => {
+        if (d.documents && d.documents[type] && d.documents[type].url) {
+           allDocs.push({
+             id: `${d._id}_${type}`,
+             driverId: d._id,
+             driver: d.name,
+             type: type,
+             status: d.documents[type].status,
+             submittedDate: d.createdAt, // Ideally track updated time
+             image: d.documents[type].url
+           });
+        }
+      });
+    });
+
+    res.json(allDocs);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+router.post('/admin/documents/:driverId/:docType/status', async (req, res) => {
+  if (isOffline()) return res.json({ success: true });
+
+  try {
+    const { driverId, docType } = req.params;
+    const { status } = req.body; // 'approved' or 'rejected'
+    
+    if (!['license', 'vehicleRegistration', 'insurance'].includes(docType)) {
+      return res.status(400).json({ message: 'Invalid document type' });
+    }
+
+    const updateField = {};
+    updateField[`documents.${docType}.status`] = status;
+    
+    const driver = await Driver.findByIdAndUpdate(driverId, { $set: updateField }, { new: true });
+    
+    // Check if all docs are approved to verify driver
+    if (driver.documents.license?.status === 'approved' && 
+        driver.documents.vehicleRegistration?.status === 'approved') {
+       driver.documents.isVerified = true;
+       await driver.save();
+    }
+
+    res.json(driver);
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
