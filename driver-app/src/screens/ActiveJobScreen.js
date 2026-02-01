@@ -192,6 +192,12 @@ export default function ActiveJobScreen({ route, navigation }) {
     }
   };
 
+  const formatTime = (seconds) => {
+    const mins = Math.floor(seconds / 60);
+    const secs = seconds % 60;
+    return `${mins}:${secs < 10 ? '0' : ''}${secs}`;
+  };
+
   return (
     <View style={styles.container}>
       <MapView 
@@ -225,6 +231,20 @@ export default function ActiveJobScreen({ route, navigation }) {
         </View>
 
         <View style={styles.bottomSheet}>
+          {status === 'in_progress' && (
+            <View style={styles.statsContainer}>
+              <View style={styles.statItem}>
+                <Text style={styles.statLabel}>ХУГАЦАА</Text>
+                <Text style={styles.statValue}>{formatTime(tripStats.duration)}</Text>
+              </View>
+              <View style={styles.statDivider} />
+              <View style={styles.statItem}>
+                <Text style={styles.statLabel}>ЗАЙ</Text>
+                <Text style={styles.statValue}>{tripStats.distance.toFixed(2)} км</Text>
+              </View>
+            </View>
+          )}
+
           <PremiumCard>
             <View style={styles.customerHeader}>
               <View style={styles.customerInfo}>
@@ -334,24 +354,36 @@ const styles = StyleSheet.create({
   },
   statsContainer: {
     flexDirection: 'row',
-    backgroundColor: theme.colors.surfaceLight,
-    padding: 8,
-    borderRadius: 12,
-    marginHorizontal: 8,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: 'rgba(0,0,0,0.8)',
+    padding: 16,
+    borderRadius: 16,
+    marginBottom: 16,
+    borderWidth: 1,
+    borderColor: theme.colors.primary,
   },
   statItem: {
-    marginHorizontal: 8,
     alignItems: 'center',
+    minWidth: 80,
+  },
+  statDivider: {
+    width: 1,
+    height: 30,
+    backgroundColor: theme.colors.textSecondary,
+    marginHorizontal: 20,
+    opacity: 0.3,
   },
   statLabel: {
-    fontSize: 10,
+    fontSize: 12,
     color: theme.colors.textSecondary,
-    marginBottom: 2,
+    marginBottom: 4,
+    letterSpacing: 1,
   },
   statValue: {
-    fontSize: 14,
+    fontSize: 24,
     fontWeight: 'bold',
-    color: theme.colors.primary,
+    color: '#FFF',
   },
   divider: {
     height: 1,

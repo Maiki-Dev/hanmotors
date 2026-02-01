@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { View, Text, StyleSheet, Switch, TouchableOpacity, Dimensions, Alert, Platform } from 'react-native';
+import { View, Text, StyleSheet, Switch, TouchableOpacity, Dimensions, Alert, Platform, Modal } from 'react-native';
 import MapView, { Marker, PROVIDER_GOOGLE } from 'react-native-maps';
 import { io } from 'socket.io-client';
 import * as Location from 'expo-location';
@@ -10,20 +10,47 @@ import { API_URL } from '../config';
 // Configure notifications to show even when app is in foreground
 Notifications.setNotificationHandler({
   handleNotification: async () => ({
-    shouldShowAlert: true,
+    shouldShowBanner: true,
+    shouldShowList: true,
     shouldPlaySound: true,
     shouldSetBadge: false,
   }),
 });
 import { theme } from '../constants/theme';
 import { PremiumCard } from '../components/PremiumCard';
-import { MapPin, Navigation as NavIcon } from 'lucide-react-native';
+import { MapPin, Navigation as NavIcon, Power, X, Plus, Menu, Truck, Eye, Star, Wallet } from 'lucide-react-native';
 
 const { width, height } = Dimensions.get('window');
 
 export default function HomeScreen({ navigation, route }) {
   const { driverId } = route.params || {}; 
   const [isOnline, setIsOnline] = useState(false);
+  const [isServiceModalVisible, setIsServiceModalVisible] = useState(false);
+  const [walletBalance, setWalletBalance] = useState(0);
+  const [isStatsVisible, setIsStatsVisible] = useState(true); // Default visible
+  
+  // Stats State (Mock data for now, should be fetched)
+  const [stats, setStats] = useState({
+    today: {
+      earnings: 0,
+      success: 0,
+      calls: 0
+    },
+    month: {
+      totalTrips: 0,
+      totalKm: 0,
+      avgRating: 0.0,
+      totalEarnings: 0
+    }
+  });
+  const [services, setServices] = useState({
+    all: false,
+    towing: true,
+    driver: false,
+    delivery: false,
+    taxi: false
+  });
+
   const [location, setLocation] = useState({
     latitude: 47.9188,
     longitude: 106.9176,
@@ -33,6 +60,46 @@ export default function HomeScreen({ navigation, route }) {
   const [incomingRequest, setIncomingRequest] = useState(null);
   const socketRef = useRef(null);
   const isOnlineRef = useRef(isOnline);
+
+  useEffect(() => {
+    const fetchDriverData = async () => {
+      if (!driverId) return;
+      try {
+        const response = await fetch(`${API_URL}/api/driver/${driverId}`);
+        if (response.ok) {
+          const data = await response.json();
+          setWalletBalance(data.wallet?.balance || 0);
+        }
+      } catch (error) {
+        console.error('Failed to fetch driver data:', error);
+      }
+    };
+
+    const fetchStats = async () => {
+      if (!driverId) return;
+      try {
+        const response = await fetch(`${API_URL}/api/driver/${driverId}/stats`);
+        if (response.ok) {
+          const data = await response.json();
+          console.log('Stats data:', data); 
+          setStats(data);
+        }
+      } catch (error) {
+        console.error('Failed to fetch stats:', error);
+      }
+    };
+
+    if (isServiceModalVisible) {
+        fetchDriverData();
+    }
+    
+    // Always fetch initial data
+    fetchDriverData();
+    
+    // Always fetch stats on mount/update
+    fetchStats();
+
+  }, [driverId, isServiceModalVisible]);
 
   useEffect(() => {
     isOnlineRef.current = isOnline;
@@ -110,6 +177,10 @@ export default function HomeScreen({ navigation, route }) {
       socketRef.current.emit('driverJoin', driverId);
     }
 
+    socketRef.current.on('walletUpdated', ({ balance }) => {
+      setWalletBalance(balance);
+    });
+
     socketRef.current.on('requestAssigned', (tripData) => {
       setIncomingRequest(tripData);
     });
@@ -132,9 +203,14 @@ export default function HomeScreen({ navigation, route }) {
       }
     });
 
-    socketRef.current.on('jobTaken', ({ tripId }) => {
+    socketRef.current.on('jobTaken', ({ tripId, driverId: takenByDriverId }) => {
       setIncomingRequest(current => {
         if (current && current._id === tripId) {
+          // If I am the one who took it, don't show the alert
+          // Use String() to ensure safe comparison between ObjectId and string
+          if (String(takenByDriverId) === String(driverId)) {
+             return null; 
+          }
           Alert.alert('Мэдээлэл', 'Захиалгыг өөр жолооч авсан байна.');
           return null;
         }
@@ -169,6 +245,39 @@ export default function HomeScreen({ navigation, route }) {
     };
     updateStatus();
   }, [isOnline, driverId]);
+
+  const handleToggleOnline = () => {
+    if (isOnline) {
+      setIsOnline(false);
+      setServices(prev => ({ ...prev, all: false }));
+    } else {
+      setIsServiceModalVisible(true);
+    }
+  };
+
+  const handleServiceToggle = (key, value) => {
+    if (key === 'all') {
+       const newValue = value;
+       setServices({
+         all: newValue,
+         towing: newValue,
+         driver: newValue,
+         delivery: newValue,
+         taxi: newValue
+       });
+    } else {
+       setServices(prev => {
+           const newState = { ...prev, [key]: !prev[key] };
+           const allSelected = newState.towing && newState.driver && newState.delivery && newState.taxi;
+           return { ...newState, all: allSelected };
+       });
+    }
+  };
+
+  const confirmGoOnline = () => {
+      setIsOnline(true);
+      setIsServiceModalVisible(false);
+  };
 
   const handleAcceptJob = async () => {
     if (!incomingRequest || !driverId) return;
@@ -219,70 +328,136 @@ export default function HomeScreen({ navigation, route }) {
         style={styles.map}
         region={location}
         customMapStyle={darkMapStyle}
-        showsUserLocation={true}
+        showsUserLocation={false} // Disable default blue dot to show custom marker
         userInterfaceStyle="dark"
       >
-        {/* Render markers if needed */}
+        {/* Custom Truck Marker */}
+        <Marker coordinate={location}>
+           <View style={styles.truckMarker}>
+             <Truck size={24} color={theme.colors.primary} fill={theme.colors.primary} />
+           </View>
+        </Marker>
       </MapView>
 
       {/* Top Status Bar */}
       <View style={styles.topBar}>
-        <View style={styles.statusContainer}>
-          <Text style={[styles.statusText, isOnline ? styles.onlineText : styles.offlineText]}>
-            {isOnline ? 'ТА ОНЛАЙН БАЙНА' : 'ТА ОФФЛАЙН БАЙНА'}
-          </Text>
+        {/* Prime Stats Popup - Box Layout */}
+        <View style={styles.primeStatsCard}>
+           <View style={styles.primeHeader}>
+              <View style={styles.walletRow}>
+                 <Wallet size={16} color="#FFD700" style={{marginRight: 6}} />
+                 <Text style={styles.primeBalanceText}>{walletBalance.toLocaleString()}₮</Text>
+              </View>
+              <View style={styles.primeDivider} />
+              <View style={styles.primeDateRow}>
+                 <Text style={styles.primeDateText}>{new Date().getMonth() + 1}-р сарын {new Date().getDate()}</Text>
+              </View>
+           </View>
+           
+           <View style={styles.primeStatsRow}>
+              <View style={styles.primeStatItem}>
+                 <Text style={styles.primeStatLabel}>Орлого</Text>
+                 <Text style={styles.primeStatValue}>{stats.today?.earnings?.toLocaleString() || 0}₮</Text>
+              </View>
+              <View style={styles.primeStatItem}>
+                 <Text style={styles.primeStatLabel}>Дуудлага</Text>
+                 <Text style={styles.primeStatValue}>{stats.today?.trips || 0}</Text>
+              </View>
+           </View>
         </View>
-        <Switch
-          value={isOnline}
-          onValueChange={setIsOnline}
-          trackColor={{ false: theme.colors.surfaceLight, true: theme.colors.success }}
-          thumbColor={theme.colors.white}
-        />
+
+        <TouchableOpacity 
+          onPress={handleToggleOnline}
+          style={[styles.powerButton, { backgroundColor: isOnline ? theme.colors.success : theme.colors.error }]}
+        >
+          <Power size={24} color="#FFF" />
+        </TouchableOpacity>
       </View>
 
-      {/* Bottom Sheet Status */}
-      <View style={styles.bottomSheet}>
-        <PremiumCard style={styles.statusCard} noPadding>
-          <View style={styles.statusContent}>
-            {isOnline ? (
-              <>
-                <View style={styles.radarAnimation}>
-                  <View style={styles.radarPulse} />
-                  <NavIcon size={24} color={theme.colors.primary} />
+      {/* Bottom Sheet Stats - REMOVED */}
+
+      <Modal
+        animationType="slide"
+        transparent={true}
+        visible={isServiceModalVisible}
+        onRequestClose={() => setIsServiceModalVisible(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>ҮЙЛЧИЛГЭЭНИЙ ТӨЛӨВ</Text>
+            </View>
+
+            {/* Service Toggles */}
+            <View style={styles.servicesList}>
+              <View style={styles.serviceRow}>
+                <Text style={styles.serviceLabel}>Бүх үйлчилгээ</Text>
+                <Switch
+                  value={services.all}
+                  onValueChange={(val) => handleServiceToggle('all', val)}
+                  trackColor={{ false: '#E0E0E0', true: theme.colors.primary }}
+                  thumbColor="#FFF"
+                />
+              </View>
+
+              <View style={styles.serviceRow}>
+                <View style={styles.serviceInfo}>
+                    <Text style={styles.serviceName}>Ачилтын машин</Text>
                 </View>
-                <View>
-                  <Text style={styles.statusTitle}>Захиалга хайж байна...</Text>
-                  <Text style={styles.statusSubtitle}>Таны ойролцоо эрэлт их байна</Text>
+                <Switch
+                  value={services.towing}
+                  onValueChange={() => handleServiceToggle('towing')}
+                  trackColor={{ false: '#E0E0E0', true: theme.colors.primary }}
+                  thumbColor="#FFF"
+                />
+              </View>
+
+              <View style={styles.serviceRow}>
+                <View style={styles.serviceInfo}>
+                    <Text style={styles.serviceName}>Дуудлагын жолооч</Text>
                 </View>
-              </>
-            ) : (
-              <>
-                <View style={[styles.radarAnimation, { backgroundColor: theme.colors.surfaceLight }]}>
-                   <View style={[styles.radarPulse, { borderColor: theme.colors.textSecondary }]} />
-                   <Text style={{fontSize: 20}}>😴</Text>
+                <Switch
+                  value={services.driver}
+                  onValueChange={() => handleServiceToggle('driver')}
+                  trackColor={{ false: '#E0E0E0', true: theme.colors.primary }}
+                  thumbColor="#FFF"
+                />
+              </View>
+              
+               <View style={styles.serviceRow}>
+                <View style={styles.serviceInfo}>
+                    <Text style={styles.serviceName}>Хүргэлт</Text>
                 </View>
-                <View>
-                  <Text style={styles.statusTitle}>Та оффлайн байна</Text>
-                  <Text style={styles.statusSubtitle}>Орлого олж эхлэхийн тулд онлайн болоорой</Text>
-                </View>
-              </>
-            )}
-          </View>
-          
-          {/* Dev Button */}
-          {isOnline && (
-            <TouchableOpacity onPress={simulateRequest} style={styles.devButton}>
-              <Text style={styles.devButtonText}>[DEV] ЗАХИАЛГА ТУРШИХ</Text>
+                <Switch
+                  value={services.delivery}
+                  onValueChange={() => handleServiceToggle('delivery')}
+                  trackColor={{ false: '#E0E0E0', true: theme.colors.primary }}
+                  thumbColor="#FFF"
+                />
+              </View>
+            </View>
+
+            <TouchableOpacity style={styles.closeButton} onPress={() => setIsServiceModalVisible(false)}>
+              <Text style={styles.closeButtonText}>Хаах</Text>
             </TouchableOpacity>
-          )}
-        </PremiumCard>
-      </View>
+            
+             <TouchableOpacity 
+                style={[styles.goOnlineButton, { opacity: (services.towing || services.driver || services.delivery) ? 1 : 0.5 }]} 
+                onPress={confirmGoOnline}
+                disabled={!(services.towing || services.driver || services.delivery)}
+             >
+              <Text style={styles.goOnlineButtonText}>Эхлэх</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
 
       <IncomingJobModal 
         visible={!!incomingRequest}
         job={incomingRequest}
         onAccept={handleAcceptJob}
         onDecline={handleDeclineJob}
+        userLocation={location}
       />
     </View>
   );
@@ -394,72 +569,177 @@ const styles = StyleSheet.create({
     right: 20,
     flexDirection: 'row',
     justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    zIndex: 10,
+  },
+  primeStatsCard: {
+    backgroundColor: '#1E1E1E',
+    borderRadius: 16,
+    padding: 12,
+    borderWidth: 1,
+    borderColor: '#FFD700',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 5,
+    elevation: 8,
+    minWidth: 180,
+  },
+  primeHeader: {
+    flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: theme.colors.surface,
-    padding: theme.spacing.m,
-    borderRadius: theme.borderRadius.xl,
-    ...theme.shadows.medium,
+    justifyContent: 'space-between',
+    marginBottom: 8,
+    paddingBottom: 8,
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(255, 255, 255, 0.2)',
   },
-  statusContainer: {
-    flex: 1,
-  },
-  statusText: {
-    ...theme.typography.h3,
-    fontSize: 16,
-  },
-  onlineText: {
-    color: theme.colors.success,
-  },
-  offlineText: {
-    color: theme.colors.textSecondary,
-  },
-  bottomSheet: {
-    position: 'absolute',
-    bottom: 110,
-    left: 20,
-    right: 20,
-  },
-  statusCard: {
-    padding: theme.spacing.m,
-  },
-  statusContent: {
+  walletRow: {
     flexDirection: 'row',
     alignItems: 'center',
   },
-  radarAnimation: {
-    width: 60,
-    height: 60,
-    borderRadius: 30,
-    backgroundColor: 'rgba(251, 191, 36, 0.15)', // Primary color low opacity
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginRight: theme.spacing.m,
+  primeBalanceText: {
+    color: '#FFF',
+    fontSize: 16,
+    fontWeight: 'bold',
   },
-  radarPulse: {
-    position: 'absolute',
+  primeDivider: {
+    width: 1,
+    height: 12,
+    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+    marginHorizontal: 8,
+  },
+  primeDateRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  primeDateText: {
+    color: '#FFF',
+    fontSize: 10,
+    textTransform: 'uppercase',
+  },
+  primeStatsRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+  },
+  primeStatItem: {
+    alignItems: 'flex-start',
+    marginRight: 16,
+  },
+  primeStatLabel: {
+    color: '#FFF',
+    fontSize: 10,
+    marginBottom: 2,
+    opacity: 0.7,
+  },
+  primeStatValue: {
+    color: '#FFF',
+    fontSize: 14,
+    fontWeight: 'bold',
+  },
+  truckMarker: {
     width: 48,
     height: 48,
     borderRadius: 24,
-    borderWidth: 2,
-    borderColor: theme.colors.primary,
-    opacity: 0.6,
-  },
-  statusTitle: {
-    ...theme.typography.h3,
-    marginBottom: 4,
-  },
-  statusSubtitle: {
-    ...theme.typography.caption,
-  },
-  devButton: {
-    marginTop: 10,
-    padding: 8,
-    backgroundColor: 'rgba(255, 255, 255, 0.1)',
-    borderRadius: 4,
+    backgroundColor: '#FFF',
     alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.3,
+    shadowRadius: 4,
+    elevation: 5,
+    borderWidth: 2,
+    borderColor: '#2563EB',
+  },
+  bottomSheet: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
   },
   devButtonText: {
     color: theme.colors.textSecondary,
     fontSize: 10,
+  },
+  powerButton: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    alignItems: 'center',
+    justifyContent: 'center',
+    elevation: 5,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 3.84,
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
+  },
+  modalContent: {
+    backgroundColor: 'white',
+    borderRadius: 20,
+    width: '100%',
+    padding: 20,
+    maxHeight: '80%',
+  },
+  modalHeader: {
+    alignItems: 'center',
+    marginBottom: 20,
+  },
+  modalTitle: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: '#333',
+    textTransform: 'uppercase',
+  },
+  servicesList: {
+    marginBottom: 20,
+  },
+  serviceRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F0F0F0',
+  },
+  serviceLabel: {
+    fontSize: 16,
+    color: '#333',
+    fontWeight: '500',
+  },
+  serviceInfo: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  serviceName: {
+    fontSize: 16,
+    color: '#333',
+  },
+  closeButton: {
+    paddingVertical: 12,
+    alignItems: 'center',
+    marginBottom: 10,
+  },
+  closeButtonText: {
+    color: '#666',
+    fontSize: 16,
+  },
+  goOnlineButton: {
+    backgroundColor: theme.colors.primary,
+    paddingVertical: 16,
+    borderRadius: 12,
+    alignItems: 'center',
+  },
+  goOnlineButtonText: {
+    color: '#333',
+    fontSize: 16,
+    fontWeight: 'bold',
   }
 });

@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Routes, Route, Link, useLocation } from 'react-router-dom';
-import { LayoutDashboard, Users, Truck, CreditCard, FileCheck, Menu, X, Settings, LogOut, ChevronRight } from 'lucide-react';
+import { LayoutDashboard, Users, Truck, CreditCard, FileCheck, Menu, X, Settings, LogOut, ChevronRight, Calculator } from 'lucide-react';
 import { cn } from "./lib/utils";
 import { Button } from "./components/ui/button";
 import { Avatar, AvatarFallback, AvatarImage } from "./components/ui/avatar";
@@ -8,6 +8,7 @@ import { Avatar, AvatarFallback, AvatarImage } from "./components/ui/avatar";
 import DashboardOverview from './pages/DashboardOverview';
 import DriverManagement from './pages/DriverManagement';
 import TripManagement from './pages/TripManagement';
+import PricingRules from './pages/PricingRules';
 import PaymentsReport from './pages/PaymentsReport';
 import DocumentVerification from './pages/DocumentVerification';
 import SettingsPage from './pages/Settings';
@@ -41,6 +42,7 @@ const Sidebar = ({ className, onClose }) => {
 
   const menuItems = [
     { icon: LayoutDashboard, label: 'Ерөнхий самбар', path: '/' },
+    { icon: Calculator, label: 'Тарифын тохиргоо', path: '/pricing' },
     { icon: Users, label: 'Жолоочийн удирдлага', path: '/drivers' },
     { icon: Truck, label: 'Дуудлагын хүсэлтүүд', path: '/requests' },
     { icon: CreditCard, label: 'Төлбөрийн тайлан', path: '/payments' },
@@ -176,6 +178,7 @@ function App() {
             <Route path="/" element={<DashboardOverview />} />
             <Route path="/drivers" element={<DriverManagement />} />
             <Route path="/requests" element={<TripManagement />} />
+            <Route path="/pricing" element={<PricingRules />} />
             <Route path="/payments" element={<PaymentsReport />} />
             <Route path="/verification" element={<DocumentVerification />} />
             <Route path="/settings" element={<SettingsPage />} />

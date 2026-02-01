@@ -21,10 +21,16 @@ import NotificationSettingsScreen from './src/screens/NotificationSettingsScreen
 import ProfileScreen from './src/screens/ProfileScreen';
 import WalletScreen from './src/screens/WalletScreen';
 
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView, LogBox } from 'react-native';
 import { Header } from './src/components/Header';
 import { PremiumCard } from './src/components/PremiumCard';
 import { ChevronRight } from 'lucide-react-native';
+
+// Ignore specific warnings
+LogBox.ignoreLogs([
+  'expo-notifications: Android Push notifications',
+  'Calling getPermissionsAsync() on Android is deprecated'
+]);
 
 const Stack = createStackNavigator();
 const Tab = createBottomTabNavigator();

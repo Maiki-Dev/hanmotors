@@ -1,7 +1,9 @@
 const express = require('express');
 const router = express.Router();
+const mongoose = require('mongoose');
 const Driver = require('../models/Driver');
 const Trip = require('../models/Trip');
+const Pricing = require('../models/Pricing');
 
 // --- MOCK DATA STORE (For Offline Mode) ---
 let mockDrivers = [
@@ -88,6 +90,7 @@ router.post('/driver/register', async (req, res) => {
       phone,
       password, // In production, hash this!
       vehicleType,
+      vehicle: req.body.vehicle, // Add vehicle details
       documents: req.body.documents || {},
       status: 'active' // Default to active for immediate login
     });
@@ -249,6 +252,84 @@ router.get('/driver/:id', async (req, res) => {
   }
 });
 
+// Get Driver Stats (Real-time calculation)
+router.get('/driver/:id/stats', async (req, res) => {
+  if (isOffline()) {
+    const driver = mockDrivers.find(d => d._id === req.params.id);
+    if (!driver) return res.status(404).json({ message: 'Driver not found' });
+    return res.json({
+      today: { trips: 5, earnings: 125000 },
+      month: { trips: 45, earnings: 1500000 },
+      total: { trips: 120, earnings: 3500000 }
+    });
+  }
+
+  try {
+    const driverId = req.params.id;
+    const now = new Date();
+    
+    // Start of Today
+    const startOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    
+    // Start of Month
+    const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+
+    // Aggregate Stats
+    const stats = await Trip.aggregate([
+      { 
+        $match: { 
+          driver: new mongoose.Types.ObjectId(driverId), 
+          status: 'completed' 
+        } 
+      },
+      {
+        $group: {
+          _id: null,
+          totalTrips: { $sum: 1 },
+          totalEarnings: { $sum: '$price' },
+          todayTrips: {
+            $sum: {
+              $cond: [{ $gte: ['$createdAt', startOfDay] }, 1, 0]
+            }
+          },
+          todayEarnings: {
+            $sum: {
+              $cond: [{ $gte: ['$createdAt', startOfDay] }, '$price', 0]
+            }
+          },
+          monthTrips: {
+            $sum: {
+              $cond: [{ $gte: ['$createdAt', startOfMonth] }, 1, 0]
+            }
+          },
+          monthEarnings: {
+            $sum: {
+              $cond: [{ $gte: ['$createdAt', startOfMonth] }, '$price', 0]
+            }
+          }
+        }
+      }
+    ]);
+
+    if (stats.length > 0) {
+      res.json({
+        today: { trips: stats[0].todayTrips, earnings: stats[0].todayEarnings },
+        month: { trips: stats[0].monthTrips, earnings: stats[0].monthEarnings },
+        total: { trips: stats[0].totalTrips, earnings: stats[0].totalEarnings }
+      });
+    } else {
+      res.json({
+        today: { trips: 0, earnings: 0 },
+        month: { trips: 0, earnings: 0 },
+        total: { trips: 0, earnings: 0 }
+      });
+    }
+  } catch (err) {
+    console.error('Stats Error:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 router.put('/driver/:id/profile', async (req, res) => {
   if (isOffline()) {
     const driver = mockDrivers.find(d => d._id === req.params.id);
@@ -357,6 +438,21 @@ router.put('/driver/:id/settings', async (req, res) => {
       { settings }, 
       { new: true }
     );
+    res.json(driver);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+router.get('/driver/:id', async (req, res) => {
+  if (isOffline()) {
+    const driver = mockDrivers.find(d => d._id === req.params.id);
+    return driver ? res.json(driver) : res.status(404).json({ message: 'Not found' });
+  }
+
+  try {
+    const driver = await Driver.findById(req.params.id);
+    if (!driver) return res.status(404).json({ message: 'Driver not found' });
     res.json(driver);
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -509,18 +605,31 @@ router.post('/trip/request', async (req, res) => {
   try {
     let tripData = { ...req.body };
     
-    // Auto-calculate price for Tow Truck
-    if (tripData.serviceType === 'Tow' && tripData.distance) {
+    // Auto-calculate price based on Pricing rules
+    if (tripData.distance) {
       const dist = Number(tripData.distance);
-      let calculatedPrice = 80000; // Base price <= 4km
+      let pricingRule = null;
 
-      if (dist > 4 && dist <= 20) {
-        calculatedPrice += (dist - 4) * 10000;
-      } else if (dist > 20) {
-        calculatedPrice += (16 * 10000) + (dist - 20) * 5000;
+      if (tripData.vehicleModel) {
+        pricingRule = await Pricing.findOne({ vehicleType: tripData.vehicleModel });
       }
-      
-      tripData.price = calculatedPrice;
+
+      if (pricingRule) {
+        let calculatedPrice = pricingRule.basePrice;
+        if (dist > 4) {
+          calculatedPrice += (dist - 4) * pricingRule.pricePerKm;
+        }
+        tripData.price = calculatedPrice;
+      } else if (tripData.serviceType === 'Tow') {
+        // Fallback to default logic if no specific rule found
+        let calculatedPrice = 80000; // Base price <= 4km
+        if (dist > 4 && dist <= 20) {
+          calculatedPrice += (dist - 4) * 10000;
+        } else if (dist > 20) {
+          calculatedPrice += (16 * 10000) + (dist - 20) * 5000;
+        }
+        tripData.price = calculatedPrice;
+      }
     }
 
     const trip = new Trip(tripData);
@@ -592,6 +701,16 @@ router.post('/trip/:id/assign', async (req, res) => {
 router.post('/trip/:id/accept', async (req, res) => {
   try {
     const { driverId } = req.body;
+    
+    // Check driver wallet balance
+    const driver = await Driver.findById(driverId);
+    if (!driver) {
+      return res.status(404).json({ message: 'Driver not found' });
+    }
+    
+    if (driver.wallet.balance <= 0) {
+      return res.status(403).json({ message: 'Таны хэтэвчний үлдэгдэл хүрэлцэхгүй байна. Цэнэглэнэ үү.' });
+    }
     
     // Check if trip is already taken
     const existingTrip = await Trip.findById(req.params.id);
@@ -951,4 +1070,90 @@ router.post('/admin/documents/:driverId/:docType/status', async (req, res) => {
   }
 });
 
+
+// --- PRICING API ---
+
+// Get all pricing rules
+router.get('/admin/pricing', async (req, res) => {
+  try {
+    let rules = await Pricing.find().sort('order');
+    if (rules.length === 0) {
+      // Seed default rules if empty
+      const defaultRules = [
+        { vehicleType: 'Суудлын машин (Дунд SUV)', basePrice: 80000, pricePerKm: 10000, order: 1 },
+        { vehicleType: 'Том SUV / Pickup', basePrice: 100000, pricePerKm: 15000, order: 2 },
+        { vehicleType: 'Micro автобус / Porter / Bongo', basePrice: 120000, pricePerKm: 20000, order: 3 },
+        { vehicleType: '5 тонн хүртэл ачааны машин', basePrice: 180000, pricePerKm: 25000, order: 4 },
+        { vehicleType: 'Том оврын Truck', basePrice: 250000, pricePerKm: 35000, order: 5 },
+        { vehicleType: 'Bobcat техник', basePrice: 220000, pricePerKm: 30000, order: 6 }
+      ];
+      rules = await Pricing.insertMany(defaultRules);
+    }
+    res.json(rules);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Update pricing rule
+router.put('/admin/pricing/:id', async (req, res) => {
+  try {
+    const rule = await Pricing.findByIdAndUpdate(req.params.id, req.body, { new: true });
+    res.json(rule);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Driver Stats Endpoint
+router.get('/driver/:id/stats', async (req, res) => {
+  if (isOffline()) {
+    const driver = mockDrivers.find(d => d._id === req.params.id);
+    if (!driver) return res.status(404).json({ message: 'Driver not found' });
+    return res.json({
+      today: { trips: 5, earnings: 125000 },
+      month: { trips: 45, earnings: 1500000 },
+      total: { trips: 120, earnings: 3500000 }
+    });
+  }
+  try {
+    const driverId = req.params.id;
+    const now = new Date();
+    const startOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+
+    const stats = await Trip.aggregate([
+      { $match: { driver: new mongoose.Types.ObjectId(driverId), status: 'completed' } },
+      { $group: {
+          _id: null,
+          totalTrips: { $sum: 1 },
+          totalEarnings: { $sum: '$price' },
+          todayTrips: { $sum: { $cond: [{ $gte: ['$createdAt', startOfDay] }, 1, 0] } },
+          todayEarnings: { $sum: { $cond: [{ $gte: ['$createdAt', startOfDay] }, '$price', 0] } },
+          monthTrips: { $sum: { $cond: [{ $gte: ['$createdAt', startOfMonth] }, 1, 0] } },
+          monthEarnings: { $sum: { $cond: [{ $gte: ['$createdAt', startOfMonth] }, '$price', 0] } }
+        }
+      }
+    ]);
+
+    if (stats.length > 0) {
+      res.json({
+        today: { trips: stats[0].todayTrips, earnings: stats[0].todayEarnings },
+        month: { trips: stats[0].monthTrips, earnings: stats[0].monthEarnings },
+        total: { trips: stats[0].totalTrips, earnings: stats[0].totalEarnings }
+      });
+    } else {
+      res.json({
+        today: { trips: 0, earnings: 0 },
+        month: { trips: 0, earnings: 0 },
+        total: { trips: 0, earnings: 0 }
+      });
+    }
+  } catch (err) {
+    console.error('Stats Error:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 module.exports = router;
+

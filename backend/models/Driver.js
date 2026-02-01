@@ -15,7 +15,7 @@ const DriverSchema = new mongoose.Schema({
     lat: Number,
     lng: Number
   },
-  vehicleType: { type: String, enum: ['Tow'], default: 'Tow' },
+  vehicleType: { type: String, default: 'Tow' },
   profilePhoto: { type: String },
   vehicle: {
     model: String,

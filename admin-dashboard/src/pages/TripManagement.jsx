@@ -26,6 +26,7 @@ const TripManagement = () => {
   const [activeTab, setActiveTab] = useState("pending");
   const [trips, setTrips] = useState([]);
   const [drivers, setDrivers] = useState([]);
+  const [vehicleTypes, setVehicleTypes] = useState([]);
   const [loading, setLoading] = useState(true);
   
   // Socket Listeners
@@ -84,21 +85,34 @@ const TripManagement = () => {
   const [selectedTrip, setSelectedTrip] = useState(null);
   const [selectedDriverId, setSelectedDriverId] = useState('');
 
-  // Auto-calculate price for Tow
+  // Auto-calculate price based on vehicle type and distance
   useEffect(() => {
-    if (newTrip.serviceType === 'Tow' && newTrip.distance) {
+    if (newTrip.distance) {
       const dist = Number(newTrip.distance);
-      let calculatedPrice = 80000;
+      let calculatedPrice = 0;
       
-      if (dist > 4 && dist <= 20) {
-        calculatedPrice += (dist - 4) * 10000;
-      } else if (dist > 20) {
-        calculatedPrice += (16 * 10000) + (dist - 20) * 5000;
+      const selectedRule = vehicleTypes.find(v => v.vehicleType === newTrip.vehicleModel);
+      
+      if (selectedRule) {
+        calculatedPrice = selectedRule.basePrice;
+        if (dist > 4) {
+          calculatedPrice += (dist - 4) * selectedRule.pricePerKm;
+        }
+      } else if (newTrip.serviceType === 'Tow') {
+        // Fallback to default logic
+        calculatedPrice = 80000;
+        if (dist > 4 && dist <= 20) {
+          calculatedPrice += (dist - 4) * 10000;
+        } else if (dist > 20) {
+          calculatedPrice += (16 * 10000) + (dist - 20) * 5000;
+        }
       }
       
-      setNewTrip(prev => ({ ...prev, price: calculatedPrice.toString() }));
+      if (calculatedPrice > 0) {
+        setNewTrip(prev => ({ ...prev, price: calculatedPrice.toString() }));
+      }
     }
-  }, [newTrip.distance, newTrip.serviceType]);
+  }, [newTrip.distance, newTrip.serviceType, newTrip.vehicleModel, vehicleTypes]);
 
   useEffect(() => {
     fetchData();
@@ -107,12 +121,14 @@ const TripManagement = () => {
   const fetchData = async () => {
     try {
       setLoading(true);
-      const [tripsRes, driversRes] = await Promise.all([
+      const [tripsRes, driversRes, pricingRes] = await Promise.all([
         api.get('/admin/trips'),
-        api.get('/admin/drivers')
+        api.get('/admin/drivers'),
+        api.get('/admin/pricing')
       ]);
       setTrips(tripsRes.data);
       setDrivers(driversRes.data.filter(d => d.status === 'active')); // Only active drivers
+      setVehicleTypes(pricingRes.data);
     } catch (error) {
       console.error("Error fetching data:", error);
     } finally {
@@ -475,16 +491,22 @@ const TripManagement = () => {
                 />
               </div>
               <div className="grid gap-2">
-                <Label htmlFor="vehicle">Ямар машин</Label>
+                <Label htmlFor="vehicle">Машины төрөл</Label>
                 <div className="relative">
                   <Car className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-                  <Input 
+                  <select
                     id="vehicle"
+                    className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 pl-9 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
                     value={newTrip.vehicleModel}
                     onChange={(e) => setNewTrip({...newTrip, vehicleModel: e.target.value})}
-                    placeholder="Приус 20..."
-                    className="pl-9"
-                  />
+                  >
+                    <option value="">Сонгоно уу</option>
+                    {vehicleTypes.map((v) => (
+                      <option key={v._id} value={v.vehicleType}>
+                        {v.vehicleType}
+                      </option>
+                    ))}
+                  </select>
                 </div>
               </div>
             </div>

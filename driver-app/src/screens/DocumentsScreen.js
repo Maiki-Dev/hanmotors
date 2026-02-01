@@ -1,20 +1,25 @@
-import React, { useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert } from 'react-native';
+import React, { useState, useEffect } from 'react';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert, RefreshControl, ActivityIndicator } from 'react-native';
 import { theme } from '../constants/theme';
 import { Header } from '../components/Header';
 import { GoldButton } from '../components/GoldButton';
-import { Upload, CheckCircle, AlertCircle } from 'lucide-react-native';
+import { Upload, CheckCircle, AlertCircle, XCircle } from 'lucide-react-native';
 import { API_URL } from '../config';
 
-const DocumentItem = ({ title, status, onUpload }) => (
-  <View style={styles.docItem}>
+const DocumentItem = ({ title, status, onUpload, disabled }) => (
+  <View style={[styles.docItem, disabled && styles.docItemDisabled]}>
     <View style={styles.docInfo}>
       <Text style={styles.docTitle}>{title}</Text>
       <View style={styles.statusRow}>
-        {status ? (
+        {status === 'approved' ? (
           <>
             <CheckCircle size={16} color={theme.colors.success} />
-            <Text style={styles.statusTextVerified}>Илгээсэн</Text>
+            <Text style={styles.statusTextVerified}>Баталгаажсан</Text>
+          </>
+        ) : status === 'rejected' ? (
+          <>
+            <XCircle size={16} color={theme.colors.error} />
+            <Text style={styles.statusTextRejected}>Татгалзсан</Text>
           </>
         ) : (
           <>
@@ -24,8 +29,12 @@ const DocumentItem = ({ title, status, onUpload }) => (
         )}
       </View>
     </View>
-    <TouchableOpacity style={styles.uploadButton} onPress={onUpload}>
-      <Upload size={20} color={theme.colors.primary} />
+    <TouchableOpacity 
+      style={[styles.uploadButton, disabled && styles.uploadButtonDisabled]} 
+      onPress={onUpload}
+      disabled={disabled}
+    >
+      <Upload size={20} color={disabled ? theme.colors.textSecondary : theme.colors.primary} />
     </TouchableOpacity>
   </View>
 );
@@ -33,17 +42,51 @@ const DocumentItem = ({ title, status, onUpload }) => (
 export default function DocumentsScreen({ navigation, route }) {
   const { driverId } = route.params || {};
   const [documents, setDocuments] = useState({
-    licenseUrl: null,
-    registrationUrl: null
+    license: { url: null, status: 'pending' },
+    vehicleRegistration: { url: null, status: 'pending' }
   });
+  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [saving, setSaving] = useState(false);
+
+  const fetchDocuments = async () => {
+    try {
+      const response = await fetch(`${API_URL}/api/driver/${driverId}`);
+      if (response.ok) {
+        const data = await response.json();
+        if (data.documents) {
+          // Ensure structure matches expectation
+          setDocuments({
+            license: data.documents.license || { url: null, status: 'pending' },
+            vehicleRegistration: data.documents.vehicleRegistration || { url: null, status: 'pending' }
+          });
+        }
+      }
+    } catch (error) {
+      console.error('Error fetching documents:', error);
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchDocuments();
+  }, [driverId]);
+
+  const onRefresh = () => {
+    setRefreshing(true);
+    fetchDocuments();
+  };
 
   // In a real app, this would pick an image and upload to S3/Cloudinary
   // Here we just simulate an upload by setting a dummy URL
   const handleUpload = (type) => {
+    if (loading) return; // Prevent upload while loading
+    
     Alert.alert(
       'Баримт бичиг оруулах',
-      `Үйлдэл сонгоно уу: ${type}`,
+      `Үйлдэл сонгоно уу: ${type === 'license' ? 'Жолооны үнэмлэх' : 'Тээврийн хэрэгслийн гэрчилгээ'}`,
       [
         { text: 'Болих', style: 'cancel' },
         { 
@@ -61,7 +104,10 @@ export default function DocumentsScreen({ navigation, route }) {
   const simulateUpload = async (type) => {
     // Simulating upload
     const dummyUrl = `https://fake-url.com/${type}.jpg`;
-    const newDocs = { ...documents, [type]: dummyUrl };
+    
+    // Optimistic update
+    const updatedDoc = { url: dummyUrl, status: 'pending' };
+    const newDocs = { ...documents, [type]: updatedDoc };
     setDocuments(newDocs);
 
     try {
@@ -73,34 +119,54 @@ export default function DocumentsScreen({ navigation, route }) {
       });
       
       if (response.ok) {
-        Alert.alert('Амжилттай', `${type} амжилттай илгээгдлээ`);
+        Alert.alert('Амжилттай', 'Баримт бичиг амжилттай илгээгдлээ');
+        fetchDocuments(); // Refresh to get server state
       }
     } catch (error) {
       console.error(error);
+      Alert.alert('Алдаа', 'Илгээхэд алдаа гарлаа');
     } finally {
       setSaving(false);
     }
   };
 
+  if (loading && !refreshing) {
+    return (
+      <View style={styles.container}>
+        <Header title="Баримт бичиг" onBack={() => navigation.goBack()} />
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color={theme.colors.primary} />
+        </View>
+      </View>
+    );
+  }
+
   return (
     <View style={styles.container}>
       <Header title="Баримт бичиг" onBack={() => navigation.goBack()} />
       
-      <ScrollView contentContainerStyle={styles.content}>
+      <ScrollView 
+        contentContainerStyle={styles.content}
+        refreshControl={
+          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={theme.colors.primary} />
+        }
+      >
         <Text style={styles.description}>
           Баримт бичгийн тод зургийг оруулна уу. Баталгаажуулалт 24 цаг хүртэл үргэлжилж магадгүй.
         </Text>
 
         <DocumentItem 
           title="Жолооны үнэмлэх" 
-          status={documents.licenseUrl} 
-          onUpload={() => handleUpload('licenseUrl')}
+          status={documents.license?.status} 
+          onUpload={() => handleUpload('license')}
+          disabled={saving}
         />
 
         <DocumentItem 
-          title="Vehicle Registration" 
-          status={documents.registrationUrl} 
-          onUpload={() => handleUpload('registrationUrl')}
+          title="Тээврийн хэрэгслийн гэрчилгээ" 
+          status={documents.vehicleRegistration?.status} 
+          onUpload={() => handleUpload('vehicleRegistration')}
+          disabled={saving}
         />
 
       </ScrollView>
@@ -153,9 +219,25 @@ const styles = StyleSheet.create({
     color: theme.colors.warning,
     marginLeft: 4,
   },
+  statusTextRejected: {
+    ...theme.typography.caption,
+    color: theme.colors.error,
+    marginLeft: 4,
+  },
   uploadButton: {
     padding: theme.spacing.s,
     backgroundColor: theme.colors.surfaceLight,
     borderRadius: theme.borderRadius.s,
+  },
+  docItemDisabled: {
+    opacity: 0.6,
+  },
+  uploadButtonDisabled: {
+    backgroundColor: theme.colors.background,
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
   }
 });

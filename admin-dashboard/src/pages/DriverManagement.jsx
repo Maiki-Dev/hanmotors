@@ -27,8 +27,24 @@ const DriverManagement = () => {
   const [isAddOpen, setIsAddOpen] = useState(false);
   const [isDeleteOpen, setIsDeleteOpen] = useState(false);
   const [isDetailOpen, setIsDetailOpen] = useState(false);
-  const [formData, setFormData] = useState({ firstName: '', lastName: '', phone: '', email: '', status: '' });
-  const [addFormData, setAddFormData] = useState({ firstName: '', lastName: '', phone: '', email: '', password: 'password', vehicleType: 'Ride' });
+  const [formData, setFormData] = useState({ 
+    firstName: '', 
+    lastName: '', 
+    phone: '', 
+    email: '', 
+    status: '',
+    vehicleType: '',
+    vehicle: { plateNumber: '', model: '', color: '', year: '' }
+  });
+  const [addFormData, setAddFormData] = useState({ 
+    firstName: '', 
+    lastName: '', 
+    phone: '', 
+    email: '', 
+    password: 'password', 
+    vehicleType: 'Ride',
+    vehicle: { plateNumber: '', model: '', color: '', year: '' }
+  });
   const [error, setError] = useState(null);
 
   useEffect(() => {
@@ -57,7 +73,15 @@ const DriverManagement = () => {
   }, []);
 
   const handleAddClick = () => {
-    setAddFormData({ firstName: '', lastName: '', phone: '', email: '', password: 'password', vehicleType: 'Ride' });
+    setAddFormData({ 
+      firstName: '', 
+      lastName: '', 
+      phone: '', 
+      email: '', 
+      password: 'password', 
+      vehicleType: 'Ride',
+      vehicle: { plateNumber: '', model: '', color: '', year: '' }
+    });
     setIsAddOpen(true);
     setError(null);
   };
@@ -86,7 +110,14 @@ const DriverManagement = () => {
       lastName: driver.lastName || nameParts[0] || '',
       phone: driver.phone,
       email: driver.email,
-      status: driver.status
+      status: driver.status,
+      vehicleType: driver.vehicleType || 'Tow',
+      vehicle: {
+        plateNumber: driver.vehicle?.plateNumber || '',
+        model: driver.vehicle?.model || '',
+        color: driver.vehicle?.color || '',
+        year: driver.vehicle?.year || ''
+      }
     });
     setIsEditOpen(true);
     setError(null);
@@ -107,10 +138,20 @@ const DriverManagement = () => {
   const handleVerify = async () => {
     try {
       setError(null);
-      const updatedDriver = await driverService.updateDriver(selectedDriver._id, { status: 'active' });
+      // Approve all documents and activate driver
+      const updates = {
+        status: 'active',
+        documents: {
+          ...selectedDriver.documents,
+          license: { ...selectedDriver.documents?.license, status: 'approved' },
+          vehicleRegistration: { ...selectedDriver.documents?.vehicleRegistration, status: 'approved' },
+          isVerified: true
+        }
+      };
+      
+      const updatedDriver = await driverService.updateDriver(selectedDriver._id, updates);
       setDrivers(prev => prev.map(d => d._id === updatedDriver._id ? updatedDriver : d));
-      setSelectedDriver(updatedDriver); // Update local selected driver to reflect changes
-      // Optional: Close dialog or keep it open with updated status
+      setSelectedDriver(updatedDriver); 
     } catch (error) {
       console.error("Failed to verify driver", error);
       setError("Баталгаажуулахад алдаа гарлаа. " + (error.response?.data?.message || error.message));
@@ -231,17 +272,18 @@ const DriverManagement = () => {
 
       {/* Add Dialog */}
       <Dialog open={isAddOpen} onOpenChange={setIsAddOpen}>
-        <DialogContent className="sm:max-w-[500px]">
+        <DialogContent className="sm:max-w-[500px] max-h-[85vh] flex flex-col">
           <DialogHeader>
             <DialogTitle>Шинэ жолооч нэмэх</DialogTitle>
           </DialogHeader>
-          {error && (
-            <div className="bg-destructive/15 text-destructive text-sm p-3 rounded-md mb-4">
-              {error}
-            </div>
-          )}
-          <div className="grid gap-4 py-4">
-            <div className="grid grid-cols-2 gap-4">
+          <div className="flex-1 overflow-y-auto pr-2">
+            {error && (
+              <div className="bg-destructive/15 text-destructive text-sm p-3 rounded-md mb-4">
+                {error}
+              </div>
+            )}
+            <div className="grid gap-4 py-4">
+              <div className="grid grid-cols-2 gap-4">
               <div className="grid gap-2">
                 <Label htmlFor="lastName">Овог</Label>
                 <div className="relative">
@@ -324,6 +366,66 @@ const DriverManagement = () => {
                   </select>
               </div>
             </div>
+            
+            <div className="border-t pt-4 mt-2">
+              <h4 className="text-sm font-semibold mb-3">Тээврийн хэрэгсэл</h4>
+              <div className="grid gap-4">
+                 <div className="grid grid-cols-2 gap-4">
+                    <div className="grid gap-2">
+                      <Label htmlFor="add-plate">Улсын дугаар</Label>
+                      <Input 
+                        id="add-plate"
+                        value={addFormData.vehicle.plateNumber} 
+                        onChange={(e) => setAddFormData({
+                          ...addFormData, 
+                          vehicle: { ...addFormData.vehicle, plateNumber: e.target.value }
+                        })} 
+                        placeholder="1234 УБА"
+                      />
+                    </div>
+                    <div className="grid gap-2">
+                      <Label htmlFor="add-model">Загвар</Label>
+                      <Input 
+                        id="add-model"
+                        value={addFormData.vehicle.model} 
+                        onChange={(e) => setAddFormData({
+                          ...addFormData, 
+                          vehicle: { ...addFormData.vehicle, model: e.target.value }
+                        })} 
+                        placeholder="Porter"
+                      />
+                    </div>
+                 </div>
+
+                 <div className="grid grid-cols-2 gap-4">
+                    <div className="grid gap-2">
+                      <Label htmlFor="add-year">Он</Label>
+                      <Input 
+                        id="add-year"
+                        value={addFormData.vehicle.year} 
+                        onChange={(e) => setAddFormData({
+                          ...addFormData, 
+                          vehicle: { ...addFormData.vehicle, year: e.target.value }
+                        })} 
+                        placeholder="2015"
+                      />
+                    </div>
+                    <div className="grid gap-2">
+                      <Label htmlFor="add-color">Өнгө</Label>
+                      <Input 
+                        id="add-color"
+                        value={addFormData.vehicle.color} 
+                        onChange={(e) => setAddFormData({
+                          ...addFormData, 
+                          vehicle: { ...addFormData.vehicle, color: e.target.value }
+                        })} 
+                        placeholder="Цагаан"
+                      />
+                    </div>
+                 </div>
+              </div>
+            </div>
+            </div>
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setIsAddOpen(false)}>Болих</Button>
@@ -334,17 +436,18 @@ const DriverManagement = () => {
 
       {/* Edit Dialog */}
       <Dialog open={isEditOpen} onOpenChange={setIsEditOpen}>
-        <DialogContent className="sm:max-w-[500px]">
+        <DialogContent className="sm:max-w-[500px] max-h-[85vh] flex flex-col">
           <DialogHeader>
             <DialogTitle>Жолоочийн мэдээлэл засах</DialogTitle>
           </DialogHeader>
-          {error && (
-            <div className="bg-destructive/15 text-destructive text-sm p-3 rounded-md mb-4">
-              {error}
-            </div>
-          )}
-          <div className="grid gap-4 py-4">
-            <div className="grid grid-cols-2 gap-4">
+          <div className="flex-1 overflow-y-auto pr-2">
+            {error && (
+              <div className="bg-destructive/15 text-destructive text-sm p-3 rounded-md mb-4">
+                {error}
+              </div>
+            )}
+            <div className="grid gap-4 py-4">
+              <div className="grid grid-cols-2 gap-4">
               <div className="grid gap-2">
                 <Label htmlFor="edit-lastName">Овог</Label>
                 <div className="relative">
@@ -411,6 +514,83 @@ const DriverManagement = () => {
                   </select>
               </div>
             </div>
+            
+            <div className="border-t pt-4 mt-2">
+              <h4 className="text-sm font-semibold mb-3">Тээврийн хэрэгсэл</h4>
+              <div className="grid gap-4">
+                 <div className="grid gap-2">
+                    <Label htmlFor="edit-vehicleType">Төрөл</Label>
+                    <div className="relative">
+                       <Car className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+                       <select 
+                          id="edit-vehicleType"
+                          className="flex h-10 w-full items-center justify-between rounded-md border border-input bg-background px-3 py-2 pl-9 text-sm ring-offset-background placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+                          value={formData.vehicleType} 
+                          onChange={(e) => setFormData({...formData, vehicleType: e.target.value})}
+                        >
+                          <option value="Ride">Ride</option>
+                          <option value="Cargo">Cargo</option>
+                          <option value="Tow">Tow (Ачигч)</option>
+                        </select>
+                    </div>
+                 </div>
+
+                 <div className="grid grid-cols-2 gap-4">
+                    <div className="grid gap-2">
+                      <Label htmlFor="edit-plate">Улсын дугаар</Label>
+                      <Input 
+                        id="edit-plate"
+                        value={formData.vehicle.plateNumber} 
+                        onChange={(e) => setFormData({
+                          ...formData, 
+                          vehicle: { ...formData.vehicle, plateNumber: e.target.value }
+                        })} 
+                        placeholder="1234 УБА"
+                      />
+                    </div>
+                    <div className="grid gap-2">
+                      <Label htmlFor="edit-model">Загвар</Label>
+                      <Input 
+                        id="edit-model"
+                        value={formData.vehicle.model} 
+                        onChange={(e) => setFormData({
+                          ...formData, 
+                          vehicle: { ...formData.vehicle, model: e.target.value }
+                        })} 
+                        placeholder="Porter"
+                      />
+                    </div>
+                 </div>
+
+                 <div className="grid grid-cols-2 gap-4">
+                    <div className="grid gap-2">
+                      <Label htmlFor="edit-year">Он</Label>
+                      <Input 
+                        id="edit-year"
+                        value={formData.vehicle.year} 
+                        onChange={(e) => setFormData({
+                          ...formData, 
+                          vehicle: { ...formData.vehicle, year: e.target.value }
+                        })} 
+                        placeholder="2015"
+                      />
+                    </div>
+                    <div className="grid gap-2">
+                      <Label htmlFor="edit-color">Өнгө</Label>
+                      <Input 
+                        id="edit-color"
+                        value={formData.vehicle.color} 
+                        onChange={(e) => setFormData({
+                          ...formData, 
+                          vehicle: { ...formData.vehicle, color: e.target.value }
+                        })} 
+                        placeholder="Цагаан"
+                      />
+                    </div>
+                 </div>
+              </div>
+            </div>
+            </div>
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setIsEditOpen(false)}>Болих</Button>
@@ -442,19 +622,20 @@ const DriverManagement = () => {
 
       {/* Detail & Verify Dialog */}
       <Dialog open={isDetailOpen} onOpenChange={setIsDetailOpen}>
-        <DialogContent className="max-w-3xl">
+        <DialogContent className="max-w-3xl max-h-[85vh] flex flex-col">
           <DialogHeader>
             <DialogTitle>Жолоочийн дэлгэрэнгүй мэдээлэл</DialogTitle>
           </DialogHeader>
           
-          {error && (
-            <div className="bg-destructive/15 text-destructive text-sm p-3 rounded-md mb-4">
-              {error}
-            </div>
-          )}
+          <div className="flex-1 overflow-y-auto pr-2">
+            {error && (
+              <div className="bg-destructive/15 text-destructive text-sm p-3 rounded-md mb-4">
+                {error}
+              </div>
+            )}
 
-          {selectedDriver && (
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 py-4">
+            {selectedDriver && (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6 py-4">
               {/* Profile Section */}
               <div className="space-y-4">
                 <div className="flex items-center gap-4">
@@ -536,13 +717,55 @@ const DriverManagement = () => {
                  <div className="space-y-2 border rounded-md p-4">
                   <h4 className="font-semibold text-sm text-muted-foreground uppercase mb-4">Баримт бичиг</h4>
                   
-                  <div className="space-y-4">
+                  <div className="space-y-6">
+                    {/* License */}
                     <div>
-                      <span className="text-sm text-muted-foreground block mb-1">Жолооны үнэмлэх:</span>
-                      {selectedDriver.documents?.licenseUrl ? (
-                        <div className="h-32 bg-muted rounded-md flex items-center justify-center overflow-hidden border">
-                           {/* Placeholder for image - in real app use <img> */}
-                           <span className="text-xs text-muted-foreground">Зураг байна</span>
+                      <div className="flex justify-between items-center mb-2">
+                        <span className="text-sm font-medium">Жолооны үнэмлэх</span>
+                        {selectedDriver.documents?.license?.status && (
+                           <Badge variant={selectedDriver.documents.license.status === 'approved' ? 'default' : selectedDriver.documents.license.status === 'rejected' ? 'destructive' : 'secondary'}>
+                             {selectedDriver.documents.license.status}
+                           </Badge>
+                        )}
+                      </div>
+                      {selectedDriver.documents?.license?.url ? (
+                        <div className="h-48 bg-muted rounded-md overflow-hidden border relative group">
+                           <img 
+                             src={selectedDriver.documents.license.url} 
+                             alt="License" 
+                             className="w-full h-full object-contain bg-black/5" 
+                           />
+                           <a href={selectedDriver.documents.license.url} target="_blank" rel="noopener noreferrer" className="absolute inset-0 flex items-center justify-center bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity text-white font-medium cursor-pointer">
+                             Томоор харах
+                           </a>
+                        </div>
+                      ) : (
+                        <div className="h-32 bg-muted/50 rounded-md flex items-center justify-center border border-dashed">
+                          <span className="text-xs text-muted-foreground">Зураг байхгүй</span>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Vehicle Registration */}
+                    <div>
+                      <div className="flex justify-between items-center mb-2">
+                        <span className="text-sm font-medium">Тээврийн хэрэгслийн гэрчилгээ</span>
+                         {selectedDriver.documents?.vehicleRegistration?.status && (
+                           <Badge variant={selectedDriver.documents.vehicleRegistration.status === 'approved' ? 'default' : selectedDriver.documents.vehicleRegistration.status === 'rejected' ? 'destructive' : 'secondary'}>
+                             {selectedDriver.documents.vehicleRegistration.status}
+                           </Badge>
+                        )}
+                      </div>
+                      {selectedDriver.documents?.vehicleRegistration?.url ? (
+                        <div className="h-48 bg-muted rounded-md overflow-hidden border relative group">
+                           <img 
+                             src={selectedDriver.documents.vehicleRegistration.url} 
+                             alt="Vehicle Registration" 
+                             className="w-full h-full object-contain bg-black/5" 
+                           />
+                           <a href={selectedDriver.documents.vehicleRegistration.url} target="_blank" rel="noopener noreferrer" className="absolute inset-0 flex items-center justify-center bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity text-white font-medium cursor-pointer">
+                             Томоор харах
+                           </a>
                         </div>
                       ) : (
                         <div className="h-32 bg-muted/50 rounded-md flex items-center justify-center border border-dashed">
@@ -556,15 +779,10 @@ const DriverManagement = () => {
             </div>
           )}
 
-          <DialogFooter className="sm:justify-between">
-             <div className="flex items-center text-sm text-muted-foreground">
-                {selectedDriver?.status === 'active' ? (
-                  <span className="flex items-center text-green-600 font-medium">
-                    <CheckCircle className="mr-2 h-4 w-4" /> Баталгаажсан жолооч
-                  </span>
-                ) : (
-                  <span>Баталгаажуулах шаардлагатай</span>
-                )}
+          </div>
+          <DialogFooter className="flex justify-between items-center sm:justify-between">
+             <div className="text-sm text-muted-foreground">
+               {selectedDriver?.status === 'pending' && "Шалгаж баталгаажуулна уу."}
              </div>
              <div className="flex gap-2">
                 <Button variant="outline" onClick={() => setIsDetailOpen(false)}>Хаах</Button>
