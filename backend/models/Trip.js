@@ -20,6 +20,7 @@ const TripSchema = new mongoose.Schema({
   price: { type: Number, required: true },
   serviceType: { type: String, enum: ['Ride', 'Cargo', 'Tow'], required: true },
   vehicleModel: String,
+  distance: Number,
   hasDamage: { type: Boolean, default: false },
   startTime: Date,
   endTime: Date,

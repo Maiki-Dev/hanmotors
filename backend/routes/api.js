@@ -507,7 +507,23 @@ router.get('/admin/trips', async (req, res) => {
 
 router.post('/trip/request', async (req, res) => {
   try {
-    const trip = new Trip(req.body);
+    let tripData = { ...req.body };
+    
+    // Auto-calculate price for Tow Truck
+    if (tripData.serviceType === 'Tow' && tripData.distance) {
+      const dist = Number(tripData.distance);
+      let calculatedPrice = 80000; // Base price <= 4km
+
+      if (dist > 4 && dist <= 20) {
+        calculatedPrice += (dist - 4) * 10000;
+      } else if (dist > 20) {
+        calculatedPrice += (16 * 10000) + (dist - 20) * 5000;
+      }
+      
+      tripData.price = calculatedPrice;
+    }
+
+    const trip = new Trip(tripData);
     await trip.save();
     const io = req.app.get('io');
     io.emit('newJobRequest', trip);
@@ -576,13 +592,27 @@ router.post('/trip/:id/assign', async (req, res) => {
 router.post('/trip/:id/accept', async (req, res) => {
   try {
     const { driverId } = req.body;
+    
+    // Check if trip is already taken
+    const existingTrip = await Trip.findById(req.params.id);
+    if (!existingTrip) {
+      return res.status(404).json({ message: 'Trip not found' });
+    }
+    if (existingTrip.status !== 'pending') {
+      return res.status(400).json({ message: 'This trip has already been accepted by another driver.' });
+    }
+
     const trip = await Trip.findByIdAndUpdate(req.params.id, { 
       status: 'accepted',
       driver: driverId
     }, { new: true });
     
     const io = req.app.get('io');
+    io.emit('tripUpdated', trip); // Emit generic update for Admin Dashboard
     io.emit('driverAccepted', { tripId: trip._id, driverId });
+    // Also emit to other drivers to remove the request from their screen if they have it open
+    io.emit('jobTaken', { tripId: trip._id, driverId });
+
     res.json(trip);
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -606,26 +636,63 @@ router.post('/trip/:id/start', async (req, res) => {
 
 router.post('/trip/:id/complete', async (req, res) => {
   try {
+    console.log(`[Trip Complete] Attempting to complete trip: ${req.params.id}`);
     const trip = await Trip.findByIdAndUpdate(req.params.id, { 
       status: 'completed',
       endTime: new Date()
     }, { new: true });
+
+    if (!trip) {
+      console.log(`[Trip Complete] Trip not found: ${req.params.id}`);
+      return res.status(404).json({ message: 'Trip not found' });
+    }
     
-    // Update driver earnings
+    console.log(`[Trip Complete] Trip found. Price: ${trip.price}, Driver: ${trip.driver}`);
+
+    // Update driver earnings and deduct commission
     if (trip.driver) {
-      await Driver.findByIdAndUpdate(trip.driver, {
+      const commissionRate = 0.10; // 10%
+      const price = Number(trip.price) || 0; // Ensure number
+      const commission = price * commissionRate;
+      console.log(`[Trip Complete] Calculating commission: ${commission} (Rate: ${commissionRate}, Price: ${price})`);
+
+      const updateResult = await Driver.findByIdAndUpdate(trip.driver, {
         $inc: {
-          'earnings.total': trip.price,
-          'earnings.daily': trip.price,
-          'earnings.weekly': trip.price
+          'earnings.total': price,
+          'earnings.daily': price,
+          'earnings.weekly': price,
+          'wallet.balance': -commission // Deduct commission
+        },
+        $push: {
+          'wallet.transactions': {
+            type: 'debit',
+            amount: commission,
+            description: `Commission for trip #${trip._id.toString().slice(-6)} (${price}₮)`,
+            date: new Date()
+          }
         }
+      }, { new: true }); // Get updated driver to log
+
+      console.log(`[Trip Complete] Driver wallet updated. New Balance: ${updateResult?.wallet?.balance}`);
+
+      // Emit wallet update to the driver
+      const updatedDriver = await Driver.findById(trip.driver).select('wallet');
+      const io = req.app.get('io');
+      io.emit('walletUpdated', { 
+        driverId: trip.driver.toString(),
+        balance: updatedDriver.wallet.balance,
+        transactions: updatedDriver.wallet.transactions 
       });
+      console.log(`[Trip Complete] Wallet update emitted for driver: ${trip.driver}`);
+    } else {
+      console.log(`[Trip Complete] No driver assigned to trip ${trip._id}`);
     }
 
     const io = req.app.get('io');
     io.emit('tripCompleted', { tripId: trip._id });
     res.json(trip);
   } catch (err) {
+    console.error(`[Trip Complete] Error:`, err);
     res.status(500).json({ error: err.message });
   }
 });
@@ -723,25 +790,29 @@ router.get('/admin/transactions', async (req, res) => {
     let allTransactions = [];
     let totalWalletCredits = 0; // Money entering system via wallet recharge
     let totalWalletDebits = 0;  // Money leaving wallet
+    let totalCurrentBalance = 0; // Real-time balance sum
 
     drivers.forEach(driver => {
+      // Sum current balance
+      totalCurrentBalance += (driver.wallet?.balance || 0);
+
       if (driver.wallet && driver.wallet.transactions) {
         driver.wallet.transactions.forEach(tx => {
           allTransactions.push({
             id: tx._id,
             driver: driver.name,
             driverId: driver._id,
-            email: driver.email, // Added email
+            email: driver.email,
             amount: tx.amount,
             type: tx.type, // 'credit' or 'debit'
             description: tx.description,
             date: tx.date,
-            method: 'Wallet', // or parse from description
-            status: 'completed' // Wallet transactions are immediate
+            method: 'Wallet',
+            status: 'completed'
           });
 
-          if (tx.type === 'credit') totalWalletCredits += tx.amount;
-          if (tx.type === 'debit') totalWalletDebits += tx.amount;
+          if (tx.type === 'credit') totalWalletCredits += Number(tx.amount || 0);
+          if (tx.type === 'debit') totalWalletDebits += Number(tx.amount || 0);
         });
       }
     });
@@ -750,15 +821,15 @@ router.get('/admin/transactions', async (req, res) => {
     allTransactions.sort((a, b) => new Date(b.date) - new Date(a.date));
 
     // Get Total Revenue from Trips (Platform Revenue)
-    // Assuming revenue is the total price of all completed trips for now
-    // Or if we implement commission, it would be commission.
     const completedTrips = await Trip.find({ status: 'completed' });
     const totalTripRevenue = completedTrips.reduce((acc, trip) => acc + (trip.price || 0), 0);
 
     res.json({
       stats: {
         totalRevenue: totalTripRevenue, // Total value of trips
-        totalWalletDeposits: totalWalletCredits, // Total money loaded into wallets
+        totalWalletDeposits: totalWalletCredits, // Total money loaded into wallets (GROSS)
+        totalWalletDebits: totalWalletDebits, // Total commissions/withdrawals
+        totalCurrentBalance: totalCurrentBalance, // Actual money currently in driver wallets
         transactionCount: allTransactions.length
       },
       transactions: allTransactions
