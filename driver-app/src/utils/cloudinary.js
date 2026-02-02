@@ -1,7 +1,7 @@
 // Cloudinary Configuration for Driver App
 // REPLACE THESE VALUES
 const CLOUD_NAME = "dtqjqv79k"; 
-const UPLOAD_PRESET = "ml-default2"; 
+const UPLOAD_PRESET = "ml_default2"; 
 
 /**
  * Uploads a file to Cloudinary
@@ -34,7 +34,8 @@ export const uploadToCloudinary = async (imageAsset) => {
         body: formData,
         headers: {
           'Accept': 'application/json',
-          'Content-Type': 'multipart/form-data',
+          // Content-Type must be left undefined for multipart/form-data in React Native
+          // so that the browser/engine can set the boundary automatically
         },
       }
     );

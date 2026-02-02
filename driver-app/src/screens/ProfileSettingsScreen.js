@@ -1,16 +1,19 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, ScrollView, Image, TouchableOpacity, Alert } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, Image, TouchableOpacity, Alert, ActivityIndicator } from 'react-native';
+import * as ImagePicker from 'expo-image-picker';
 import { theme } from '../constants/theme';
 import { Header } from '../components/Header';
 import { Input } from '../components/Input';
 import { GoldButton } from '../components/GoldButton';
 import { User, Mail, Phone, Camera } from 'lucide-react-native';
 import { API_URL } from '../config';
+import { uploadToCloudinary } from '../utils/cloudinary';
 
 export default function ProfileSettingsScreen({ navigation, route }) {
   const { driverId } = route.params || {};
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [uploading, setUploading] = useState(false);
   const [profile, setProfile] = useState({
     firstName: '',
     lastName: '',
@@ -43,6 +46,44 @@ export default function ProfileSettingsScreen({ navigation, route }) {
       console.error(error);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleImagePick = async () => {
+    try {
+      const permissionResult = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      
+      if (permissionResult.status !== 'granted') {
+        Alert.alert('Permission needed', 'Permission to access camera roll is required!');
+        return;
+      }
+
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        allowsEditing: true,
+        aspect: [1, 1],
+        quality: 0.5,
+      });
+
+      if (!result.canceled && result.assets && result.assets.length > 0) {
+        await handleUpload(result.assets[0]);
+      }
+    } catch (error) {
+      console.error('Image picker error:', error);
+      Alert.alert('Error', 'Failed to pick image');
+    }
+  };
+
+  const handleUpload = async (asset) => {
+    try {
+      setUploading(true);
+      const imageUrl = await uploadToCloudinary(asset);
+      setProfile(prev => ({ ...prev, profilePhoto: imageUrl }));
+    } catch (error) {
+      console.error('Upload error:', error);
+      Alert.alert('Upload Failed', error.message || 'Failed to upload image');
+    } finally {
+      setUploading(false);
     }
   };
 

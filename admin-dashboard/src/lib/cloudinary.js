@@ -8,7 +8,7 @@
 // 6. Copy your "Cloud name" from the Dashboard (e.g., "demo" or your custom name)
 
 const CLOUD_NAME = "dtqjqv79k"; 
-const UPLOAD_PRESET = "ml-default2";
+const UPLOAD_PRESET = "ml_default2";
 
 /**
  * Uploads a file to Cloudinary

@@ -90,7 +90,7 @@ const Sidebar = ({ className, onClose }) => {
             <DropdownMenuTrigger asChild>
                 <div className="flex items-center gap-3 p-3 rounded-xl bg-sidebar-accent/50 border border-sidebar-border/50 hover:bg-sidebar-accent cursor-pointer transition-all hover:scale-[1.02] active:scale-[0.98]">
                     <Avatar className="h-10 w-10 border-2 border-primary/20">
-                        <AvatarImage src="/placeholder-user.jpg" />
+                        <AvatarImage src={profile?.avatar_url || "/placeholder-user.jpg"} />
                         <AvatarFallback className="bg-primary text-primary-foreground">
                           {profile?.full_name?.substring(0,2).toUpperCase() || 'AD'}
                         </AvatarFallback>

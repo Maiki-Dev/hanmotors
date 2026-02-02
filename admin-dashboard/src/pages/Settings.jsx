@@ -11,6 +11,7 @@ import { Badge } from "../components/ui/badge";
 import { Bell, Lock, User, Mail, Save, ShieldCheck, CheckCircle, XCircle, Edit, Camera } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { supabase } from '../lib/supabase';
+import { uploadToCloudinary } from '../lib/cloudinary';
 import {
   Dialog,
   DialogContent,
@@ -58,7 +59,8 @@ const Settings = () => {
       setProfile({
         name: authProfile.full_name || '',
         email: authProfile.email || user?.email || '',
-        role: authProfile.role || 'editor'
+        role: authProfile.role || 'editor',
+        avatar_url: authProfile.avatar_url || ''
       });
     }
   }, [authProfile, user]);
@@ -92,6 +94,7 @@ const Settings = () => {
 
   const handleAvatarUpload = async (event) => {
     try {
+      console.log("Starting avatar upload...");
       setUploading(true);
       if (!event.target.files || event.target.files.length === 0) {
         throw new Error('You must select an image to upload.');
@@ -100,7 +103,9 @@ const Settings = () => {
       const file = event.target.files[0];
       
       // Upload to Cloudinary
+      console.log("Uploading file to Cloudinary:", file.name);
       const publicUrl = await uploadToCloudinary(file);
+      console.log("Upload successful, URL:", publicUrl);
 
       // Update profile in DB
       const { error: updateError } = await supabase
@@ -119,6 +124,9 @@ const Settings = () => {
       alert('Error uploading avatar: ' + error.message);
     } finally {
       setUploading(false);
+      if (fileInputRef.current) {
+        fileInputRef.current.value = '';
+      }
     }
   };
 
@@ -246,7 +254,7 @@ const Settings = () => {
               <div className="flex items-center gap-4">
                   <div className="relative group cursor-pointer" onClick={handleAvatarClick}>
                     <Avatar className="h-16 w-16 border-2 border-primary/20 group-hover:opacity-75 transition-opacity">
-                        <AvatarImage src={profile.avatar_url || "/placeholder-user.jpg"} />
+                        <AvatarImage src={profile.avatar_url} />
                         <AvatarFallback className="bg-primary text-primary-foreground text-xl">
                           {profile.name?.substring(0,2).toUpperCase() || 'AD'}
                         </AvatarFallback>

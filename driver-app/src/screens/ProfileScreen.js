@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Image } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
 import { theme } from '../constants/theme';
 import { User, Home, DollarSign, HelpCircle, ChevronRight, CreditCard, Wallet, History } from 'lucide-react-native';
@@ -10,6 +10,7 @@ export default function ProfileScreen({ navigation, route }) {
   const { driverId } = route.params || { driverId: 'Unknown' };
   const [driverName, setDriverName] = useState(route.params?.driverName || 'Partner');
   const [walletBalance, setWalletBalance] = useState(0);
+  const [profilePhoto, setProfilePhoto] = useState(null);
 
   const fetchDriverInfo = async () => {
     if (!driverId || driverId === 'Unknown') return;
@@ -19,6 +20,7 @@ export default function ProfileScreen({ navigation, route }) {
       if (response.ok) {
         const data = await response.json();
         setDriverName(data.name || 'Partner');
+        setProfilePhoto(data.profilePhoto);
         // If wallet data is included in driver object
         if (data.wallet) {
           setWalletBalance(data.wallet.balance || 0);
@@ -83,9 +85,13 @@ export default function ProfileScreen({ navigation, route }) {
       <ScrollView contentContainerStyle={styles.content}>
         <View style={styles.profileHeader}>
           <View style={styles.avatarContainer}>
-             <View style={styles.avatarPlaceholder}>
-                <Text style={styles.avatarText}>{driverName ? driverName[0] : 'U'}</Text>
-             </View>
+             {profilePhoto ? (
+               <Image source={{ uri: profilePhoto }} style={styles.avatarImage} />
+             ) : (
+               <View style={styles.avatarPlaceholder}>
+                  <Text style={styles.avatarText}>{driverName ? driverName[0] : 'U'}</Text>
+               </View>
+             )}
              <View style={styles.onlineBadge} />
           </View>
           <Text style={styles.driverName}>{driverName}</Text>
@@ -192,6 +198,13 @@ const styles = StyleSheet.create({
     backgroundColor: theme.colors.surface,
     alignItems: 'center',
     justifyContent: 'center',
+    borderWidth: 3,
+    borderColor: theme.colors.primary,
+  },
+  avatarImage: {
+    width: 100,
+    height: 100,
+    borderRadius: 50,
     borderWidth: 3,
     borderColor: theme.colors.primary,
   },
