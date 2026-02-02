@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { View, Text, StyleSheet, Switch, TouchableOpacity, Dimensions, Alert, Platform, Modal } from 'react-native';
+import { View, Text, StyleSheet, Switch, TouchableOpacity, Dimensions, Alert, Platform, Modal, Image } from 'react-native';
 import MapView, { Marker, PROVIDER_GOOGLE } from 'react-native-maps';
 import { io } from 'socket.io-client';
 import * as Location from 'expo-location';
@@ -18,7 +18,7 @@ Notifications.setNotificationHandler({
 });
 import { theme } from '../constants/theme';
 import { PremiumCard } from '../components/PremiumCard';
-import { MapPin, Navigation as NavIcon, Power, X, Plus, Menu, Truck, Eye, Star, Wallet } from 'lucide-react-native';
+import { MapPin, Navigation as NavIcon, Power, X, Plus, Menu, Truck, Eye, Star, Wallet, Car, Layers, Activity } from 'lucide-react-native';
 
 const { width, height } = Dimensions.get('window');
 
@@ -51,15 +51,62 @@ export default function HomeScreen({ navigation, route }) {
     taxi: false
   });
 
-  const [location, setLocation] = useState({
+  const [driverLocation, setDriverLocation] = useState({
+    latitude: 47.9188,
+    longitude: 106.9176,
+  });
+  const [mapRegion, setMapRegion] = useState({
     latitude: 47.9188,
     longitude: 106.9176,
     latitudeDelta: 0.0922,
     longitudeDelta: 0.0421,
   });
+  const [isFollowing, setIsFollowing] = useState(true);
+  const isFollowingRef = useRef(true);
+
+  // Synchronous update helper
+  const updateFollowing = (val) => {
+    setIsFollowing(val);
+    isFollowingRef.current = val;
+  };
+
   const [incomingRequest, setIncomingRequest] = useState(null);
   const socketRef = useRef(null);
   const isOnlineRef = useRef(isOnline);
+  const mapRef = useRef(null);
+  const [mapMode, setMapMode] = useState('dark'); // Default to dark
+  const [showsTraffic, setShowsTraffic] = useState(false);
+
+  const handleCenterLocation = () => {
+    updateFollowing(true);
+    if (mapRef.current && driverLocation) {
+      const newRegion = {
+        ...driverLocation,
+        latitudeDelta: 0.005, // Zoom in closer
+        longitudeDelta: 0.005,
+      };
+      // setMapRegion(newRegion); // Removed to prevent state loop
+      mapRef.current.animateToRegion(newRegion, 1000);
+    }
+  };
+
+  const handleToggleMapMode = () => {
+    let nextMode = 'standard';
+    if (mapMode === 'standard') nextMode = 'dark';
+    else if (mapMode === 'dark') nextMode = 'hybrid';
+    
+    setMapMode(nextMode);
+    
+    if (mapRef.current) {
+        const is3D = nextMode === 'hybrid';
+        mapRef.current.animateCamera({
+            pitch: is3D ? 45 : 0,
+            heading: is3D ? 90 : 0,
+            altitude: is3D ? 1000 : 15000,
+            zoom: is3D ? 18 : 15
+        }, { duration: 1000 });
+    }
+  };
 
   useEffect(() => {
     const fetchDriverData = async () => {
@@ -106,6 +153,8 @@ export default function HomeScreen({ navigation, route }) {
   }, [isOnline]);
 
   useEffect(() => {
+    let locationSubscription = null;
+
     (async () => {
       // Request Location Permissions
       let { status } = await Location.requestForegroundPermissionsAsync();
@@ -138,14 +187,25 @@ export default function HomeScreen({ navigation, route }) {
 
       // Initial location
       let currentLocation = await Location.getCurrentPositionAsync({});
-      setLocation({
-        ...location,
-        latitude: currentLocation.coords.latitude,
-        longitude: currentLocation.coords.longitude,
+      const { latitude: initLat, longitude: initLng } = currentLocation.coords;
+      
+      setDriverLocation({
+        latitude: initLat,
+        longitude: initLng,
       });
+      
+      // Only center map if we are following (and user hasn't moved away while loading)
+      if (isFollowingRef.current && mapRef.current) {
+        mapRef.current.animateToRegion({
+          latitude: initLat,
+          longitude: initLng,
+          latitudeDelta: 0.0922,
+          longitudeDelta: 0.0421,
+        }, 1000);
+      }
 
       // Watch location
-      await Location.watchPositionAsync(
+      locationSubscription = await Location.watchPositionAsync(
         {
           accuracy: Location.Accuracy.High,
           timeInterval: 5000,
@@ -153,11 +213,15 @@ export default function HomeScreen({ navigation, route }) {
         },
         (newLocation) => {
           const { latitude, longitude } = newLocation.coords;
-          setLocation(prev => ({
-            ...prev,
-            latitude,
-            longitude,
-          }));
+          
+          setDriverLocation({ latitude, longitude });
+          
+          // Smoothly follow user if tracking is enabled
+          if (isFollowingRef.current && mapRef.current) {
+             mapRef.current.animateCamera({ 
+               center: { latitude, longitude } 
+             }, { duration: 1000 });
+          }
 
           if (isOnline && socketRef.current && driverId) {
             socketRef.current.emit('driverLocationUpdated', {
@@ -168,6 +232,12 @@ export default function HomeScreen({ navigation, route }) {
         }
       );
     })();
+
+    return () => {
+      if (locationSubscription) {
+        locationSubscription.remove();
+      }
+    };
   }, [isOnline, driverId]);
 
   useEffect(() => {
@@ -292,7 +362,7 @@ export default function HomeScreen({ navigation, route }) {
       if (response.ok) {
         const updatedTrip = await response.json();
         setIncomingRequest(null);
-        navigation.navigate('ActiveJob', { trip: updatedTrip });
+        navigation.navigate('ActiveJob', { trip: updatedTrip, driverId });
       } else {
         const errorData = await response.json();
         Alert.alert('Алдаа', errorData.message || 'Захиалга авахад алдаа гарлаа');
@@ -324,46 +394,76 @@ export default function HomeScreen({ navigation, route }) {
   return (
     <View style={styles.container}>
       <MapView
+        ref={mapRef}
         provider={PROVIDER_GOOGLE}
         style={styles.map}
-        region={location}
-        customMapStyle={darkMapStyle}
+        initialRegion={mapRegion}
+        onPanDrag={() => updateFollowing(false)}
+        onTouchStart={() => updateFollowing(false)}
+        onRegionChangeStart={() => updateFollowing(false)}
+        mapType={mapMode === 'hybrid' ? "hybrid" : "standard"}
+        customMapStyle={mapMode === 'dark' ? darkMapStyle : []}
         showsUserLocation={false} // Disable default blue dot to show custom marker
-        userInterfaceStyle="dark"
+        userInterfaceStyle={mapMode === 'dark' ? "dark" : "light"}
+        showsBuildings={true}
+        showsPointsOfInterest={true}
+        showsIndoors={true}
+        showsTraffic={showsTraffic}
       >
-        {/* Custom Truck Marker */}
-        <Marker coordinate={location}>
-           <View style={styles.truckMarker}>
-             <Truck size={24} color={theme.colors.primary} fill={theme.colors.primary} />
-           </View>
+        {/* Custom Car Marker */}
+        <Marker coordinate={driverLocation} anchor={{ x: 0.5, y: 0.5 }}>
+           <Image 
+             source={require('../../assets/car_icon.png')} 
+             style={styles.carMarker}
+           />
         </Marker>
       </MapView>
 
       {/* Top Status Bar */}
       <View style={styles.topBar}>
-        {/* Prime Stats Popup - Box Layout */}
-        <View style={styles.primeStatsCard}>
-           <View style={styles.primeHeader}>
-              <View style={styles.walletRow}>
-                 <Wallet size={16} color="#FFD700" style={{marginRight: 6}} />
-                 <Text style={styles.primeBalanceText}>{walletBalance.toLocaleString()}₮</Text>
-              </View>
-              <View style={styles.primeDivider} />
-              <View style={styles.primeDateRow}>
-                 <Text style={styles.primeDateText}>{new Date().getMonth() + 1}-р сарын {new Date().getDate()}</Text>
-              </View>
-           </View>
-           
-           <View style={styles.primeStatsRow}>
-              <View style={styles.primeStatItem}>
-                 <Text style={styles.primeStatLabel}>Орлого</Text>
-                 <Text style={styles.primeStatValue}>{stats.today?.earnings?.toLocaleString() || 0}₮</Text>
-              </View>
-              <View style={styles.primeStatItem}>
-                 <Text style={styles.primeStatLabel}>Дуудлага</Text>
-                 <Text style={styles.primeStatValue}>{stats.today?.trips || 0}</Text>
-              </View>
-           </View>
+        <View style={styles.leftContainer}>
+          {/* Prime Stats Popup - Box Layout */}
+          <View style={styles.primeStatsCard}>
+             <View style={styles.primeHeader}>
+                <View style={styles.walletRow}>
+                   <Wallet size={16} color="#FFD700" style={{marginRight: 6}} />
+                   <Text style={styles.primeBalanceText}>{walletBalance.toLocaleString()}₮</Text>
+                </View>
+                <View style={styles.primeDivider} />
+                <View style={styles.primeDateRow}>
+                   <Text style={styles.primeDateText}>{new Date().getMonth() + 1}-р сарын {new Date().getDate()}</Text>
+                </View>
+             </View>
+             
+             <View style={styles.primeStatsRow}>
+                <View style={styles.primeStatItem}>
+                   <Text style={styles.primeStatLabel}>Орлого</Text>
+                   <Text style={styles.primeStatValue}>{stats.today?.earnings?.toLocaleString() || 0}₮</Text>
+                </View>
+                <View style={styles.primeStatItem}>
+                   <Text style={styles.primeStatLabel}>Дуудлага</Text>
+                   <Text style={styles.primeStatValue}>{stats.today?.trips || 0}</Text>
+                </View>
+             </View>
+          </View>
+
+          {/* Locate Me Button */}
+          <TouchableOpacity onPress={handleCenterLocation} style={styles.locateButton}>
+            <NavIcon size={20} color="#333" fill="#333" />
+          </TouchableOpacity>
+
+          {/* Map Mode Toggle Button */}
+          <TouchableOpacity onPress={handleToggleMapMode} style={styles.locateButton}>
+            <Layers size={20} color="#333" />
+          </TouchableOpacity>
+
+          {/* Traffic Toggle Button */}
+          <TouchableOpacity 
+            onPress={() => setShowsTraffic(!showsTraffic)} 
+            style={[styles.locateButton, showsTraffic && { backgroundColor: theme.colors.primary }]}
+          >
+            <Activity size={20} color={showsTraffic ? "#FFF" : "#333"} />
+          </TouchableOpacity>
         </View>
 
         <TouchableOpacity 
@@ -457,7 +557,7 @@ export default function HomeScreen({ navigation, route }) {
         job={incomingRequest}
         onAccept={handleAcceptJob}
         onDecline={handleDeclineJob}
-        userLocation={location}
+        userLocation={driverLocation}
       />
     </View>
   );
@@ -572,6 +672,24 @@ const styles = StyleSheet.create({
     alignItems: 'flex-start',
     zIndex: 10,
   },
+  leftContainer: {
+    flexDirection: 'column',
+    alignItems: 'flex-start',
+    gap: 12,
+  },
+  locateButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: '#FFF',
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 3,
+    elevation: 4,
+  },
   primeStatsCard: {
     backgroundColor: '#1E1E1E',
     borderRadius: 16,
@@ -637,20 +755,10 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: 'bold',
   },
-  truckMarker: {
+  carMarker: {
     width: 48,
     height: 48,
-    borderRadius: 24,
-    backgroundColor: '#FFF',
-    alignItems: 'center',
-    justifyContent: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.3,
-    shadowRadius: 4,
-    elevation: 5,
-    borderWidth: 2,
-    borderColor: '#2563EB',
+    resizeMode: 'contain',
   },
   bottomSheet: {
     position: 'absolute',

@@ -8,6 +8,22 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 import { Input } from "../components/ui/input";
 import { Label } from "../components/ui/label";
 import { Eye, MapPin, Plus, Car, Pencil, Trash2, MoreHorizontal, Type, Map as MapIcon } from 'lucide-react';
+import { MapContainer, TileLayer, Marker, useMapEvents } from 'react-leaflet';
+import 'leaflet/dist/leaflet.css';
+import L from 'leaflet';
+
+// Fix Leaflet default icon issue
+import icon from 'leaflet/dist/images/marker-icon.png';
+import iconShadow from 'leaflet/dist/images/marker-shadow.png';
+
+let DefaultIcon = L.icon({
+    iconUrl: icon,
+    shadowUrl: iconShadow,
+    iconSize: [25, 41],
+    iconAnchor: [12, 41]
+});
+L.Marker.prototype.options.icon = DefaultIcon;
+
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -21,6 +37,16 @@ import {
 } from "../components/ui/dropdown-menu";
 import api, { socket } from '../services/api';
 import { cn } from "../lib/utils";
+
+const LocationPicker = ({ position, onLocationSelect }) => {
+  const map = useMapEvents({
+    click(e) {
+      onLocationSelect(e.latlng);
+    },
+  });
+
+  return position && position.lat ? <Marker position={position} /> : null;
+};
 
 const TripManagement = () => {
   const [activeTab, setActiveTab] = useState("pending");
@@ -84,6 +110,30 @@ const TripManagement = () => {
   const [isAssignOpen, setIsAssignOpen] = useState(false);
   const [selectedTrip, setSelectedTrip] = useState(null);
   const [selectedDriverId, setSelectedDriverId] = useState('');
+
+  const getDistanceFromLatLonInKm = (lat1, lon1, lat2, lon2) => {
+    const R = 6371; // Radius of the earth in km
+    const dLat = (lat2 - lat1) * (Math.PI / 180);
+    const dLon = (lon2 - lon1) * (Math.PI / 180);
+    const a =
+      Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+      Math.cos(lat1 * (Math.PI / 180)) * Math.cos(lat2 * (Math.PI / 180)) *
+      Math.sin(dLon / 2) * Math.sin(dLon / 2);
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+    return R * c;
+  };
+
+  // Auto-calculate distance when map locations change
+  useEffect(() => {
+    if (newTrip.pickupMode === 'map' && newTrip.dropoffMode === 'map' &&
+        newTrip.pickupLocation.lat && newTrip.dropoffLocation.lat) {
+      const dist = getDistanceFromLatLonInKm(
+        newTrip.pickupLocation.lat, newTrip.pickupLocation.lng,
+        newTrip.dropoffLocation.lat, newTrip.dropoffLocation.lng
+      );
+      setNewTrip(prev => ({ ...prev, distance: dist.toFixed(1) }));
+    }
+  }, [newTrip.pickupLocation, newTrip.dropoffLocation, newTrip.pickupMode, newTrip.dropoffMode]);
 
   // Auto-calculate price based on vehicle type and distance
   useEffect(() => {
@@ -419,9 +469,31 @@ const TripManagement = () => {
                   />
                 </div>
               ) : (
-                <div className="h-24 w-full rounded-md border border-dashed border-input bg-muted/50 flex flex-col items-center justify-center text-sm text-muted-foreground gap-2 hover:bg-muted/80 transition-colors cursor-pointer">
-                  <MapPin className="h-6 w-6 opacity-50" />
-                  <span>Газрын зураг дээр сонгох</span>
+                <div className="h-64 w-full rounded-md border overflow-hidden relative z-0">
+                  <MapContainer 
+                    center={[newTrip.pickupLocation.lat || 47.9188, newTrip.pickupLocation.lng || 106.9176]} 
+                    zoom={13} 
+                    style={{ height: '100%', width: '100%' }}
+                  >
+                    <TileLayer
+                      attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+                      url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+                    />
+                    <LocationPicker 
+                      position={newTrip.pickupLocation} 
+                      onLocationSelect={(latlng) => {
+                        setNewTrip({
+                          ...newTrip, 
+                          pickupLocation: {
+                            ...newTrip.pickupLocation,
+                            lat: latlng.lat,
+                            lng: latlng.lng,
+                            address: `Map (${latlng.lat.toFixed(4)}, ${latlng.lng.toFixed(4)})`
+                          }
+                        });
+                      }} 
+                    />
+                  </MapContainer>
                 </div>
               )}
             </div>
@@ -462,9 +534,31 @@ const TripManagement = () => {
                   />
                 </div>
               ) : (
-                <div className="h-24 w-full rounded-md border border-dashed border-input bg-muted/50 flex flex-col items-center justify-center text-sm text-muted-foreground gap-2 hover:bg-muted/80 transition-colors cursor-pointer">
-                  <MapPin className="h-6 w-6 opacity-50" />
-                  <span>Газрын зураг дээр сонгох</span>
+                <div className="h-64 w-full rounded-md border overflow-hidden relative z-0">
+                  <MapContainer 
+                    center={[newTrip.dropoffLocation.lat || 47.90, newTrip.dropoffLocation.lng || 106.90]} 
+                    zoom={13} 
+                    style={{ height: '100%', width: '100%' }}
+                  >
+                    <TileLayer
+                      attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+                      url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+                    />
+                    <LocationPicker 
+                      position={newTrip.dropoffLocation} 
+                      onLocationSelect={(latlng) => {
+                        setNewTrip({
+                          ...newTrip, 
+                          dropoffLocation: {
+                            ...newTrip.dropoffLocation,
+                            lat: latlng.lat,
+                            lng: latlng.lng,
+                            address: `Map (${latlng.lat.toFixed(4)}, ${latlng.lng.toFixed(4)})`
+                          }
+                        });
+                      }} 
+                    />
+                  </MapContainer>
                 </div>
               )}
             </div>

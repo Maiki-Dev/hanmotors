@@ -1,9 +1,11 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Alert, ActivityIndicator, Linking, Platform } from 'react-native';
 import MapView, { Marker, PROVIDER_GOOGLE } from 'react-native-maps';
+import MapViewDirections from 'react-native-maps-directions';
+import { io } from 'socket.io-client';
 import { Navigation, Phone, MessageCircle } from 'lucide-react-native';
 import * as Location from 'expo-location';
-import { API_URL } from '../config';
+import { API_URL, GOOGLE_MAPS_APIKEY } from '../config';
 import { theme } from '../constants/theme';
 import { GoldButton } from '../components/GoldButton';
 import { PremiumCard } from '../components/PremiumCard';
@@ -31,7 +33,7 @@ const darkMapStyle = [
 ];
 
 export default function ActiveJobScreen({ route, navigation }) {
-  const { job: paramJob, trip: paramTrip } = route.params || {};
+  const { job: paramJob, trip: paramTrip, driverId } = route.params || {};
   const job = paramJob || paramTrip;
 
   const [status, setStatus] = useState(
@@ -43,10 +45,22 @@ export default function ActiveJobScreen({ route, navigation }) {
   const mapRef = useRef(null);
   const statusRef = useRef(status);
   const lastLocRef = useRef(null);
+  const socketRef = useRef(null);
 
   useEffect(() => {
     statusRef.current = status;
   }, [status]);
+
+  // Socket connection
+  useEffect(() => {
+    socketRef.current = io(API_URL);
+    if (driverId) {
+      socketRef.current.emit('driverJoin', driverId);
+    }
+    return () => {
+      if (socketRef.current) socketRef.current.disconnect();
+    };
+  }, [driverId]);
 
   // Timer effect
   useEffect(() => {
@@ -113,6 +127,14 @@ export default function ActiveJobScreen({ route, navigation }) {
             longitudeDelta: 0.01,
           });
 
+          // Emit location update
+          if (socketRef.current && driverId) {
+            socketRef.current.emit('driverLocationUpdated', {
+              driverId,
+              location: { lat: loc.coords.latitude, lng: loc.coords.longitude }
+            });
+          }
+
           // Calculate distance if in progress
           if (statusRef.current === 'in_progress') {
             if (lastLocRef.current) {
@@ -169,17 +191,34 @@ export default function ActiveJobScreen({ route, navigation }) {
         });
         if (response.ok) {
           setStatus('in_progress');
+          if (socketRef.current) socketRef.current.emit('tripStarted', { tripId: job._id });
         } else {
           Alert.alert('Алдаа', 'Аялал эхлүүлж чадсангүй');
         }
       } else if (status === 'in_progress') {
         const response = await fetch(`${API_URL}/api/trip/${job._id}/complete`, {
           method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            distance: tripStats.distance,
+            duration: tripStats.duration
+          }),
         });
+        const data = await response.json();
+        
         if (response.ok) {
-          Alert.alert('Амжилттай', 'Аялал дууслаа!', [
-            { text: 'OK', onPress: () => navigation.navigate('Main') }
-          ]);
+          // Stop tracking
+          if (socketRef.current) socketRef.current.emit('tripCompleted', { tripId: job._id });
+          
+          Alert.alert(
+            'Аялал амжилттай', 
+            `Төлбөр: ${data.price?.toLocaleString() || job.price?.toLocaleString()}₮\nЗай: ${tripStats.distance.toFixed(1)} км`, 
+            [
+              { text: 'OK', onPress: () => navigation.navigate('Main') }
+            ]
+          );
         } else {
           Alert.alert('Алдаа', 'Аялал дуусгаж чадсангүй');
         }
@@ -220,6 +259,24 @@ export default function ActiveJobScreen({ route, navigation }) {
           title={status === 'pickup' ? 'Авах цэг' : 'Хүргэх цэг'}
           description={status === 'pickup' ? job?.pickupLocation?.address : job?.dropoffLocation?.address}
         />
+        
+        {userLocation && (
+          <MapViewDirections
+            origin={{ latitude: userLocation.latitude, longitude: userLocation.longitude }}
+            destination={targetLocation}
+            apikey={GOOGLE_MAPS_APIKEY}
+            strokeWidth={4}
+            strokeColor={theme.colors.primary}
+            optimizeWaypoints={true}
+            onReady={result => {
+              console.log(`Route found: ${result.distance} km, ${result.duration} min`);
+            }}
+            onError={(errorMessage) => {
+              // Fail silently or log
+              console.log('Directions Error:', errorMessage);
+            }}
+          />
+        )}
       </MapView>
 
       <View style={styles.overlay}>

@@ -756,17 +756,63 @@ router.post('/trip/:id/start', async (req, res) => {
 router.post('/trip/:id/complete', async (req, res) => {
   try {
     console.log(`[Trip Complete] Attempting to complete trip: ${req.params.id}`);
-    const trip = await Trip.findByIdAndUpdate(req.params.id, { 
-      status: 'completed',
-      endTime: new Date()
-    }, { new: true });
+    const { distance, duration } = req.body;
 
+    let trip = await Trip.findById(req.params.id);
     if (!trip) {
       console.log(`[Trip Complete] Trip not found: ${req.params.id}`);
       return res.status(404).json({ message: 'Trip not found' });
     }
+
+    // Recalculate price if actual distance is provided
+    if (distance) {
+      const dist = Number(distance);
+      console.log(`[Trip Complete] Recalculating price for distance: ${dist} km`);
+      
+      let pricingRule = null;
+      // Try to find pricing rule for the vehicle type
+      // Note: trip.vehicleModel might need to be populated or ensured it exists
+      // If not on trip, we might need to look up the driver's vehicle type
+      
+      let vehicleType = trip.vehicleModel;
+      if (!vehicleType && trip.driver) {
+         const driver = await Driver.findById(trip.driver);
+         if (driver) vehicleType = driver.vehicleType;
+      }
+
+      if (vehicleType) {
+        pricingRule = await Pricing.findOne({ vehicleType: vehicleType });
+      }
+
+      let newPrice = trip.price;
+
+      if (pricingRule) {
+        let calculatedPrice = pricingRule.basePrice;
+        if (dist > 4) {
+          calculatedPrice += (dist - 4) * pricingRule.pricePerKm;
+        }
+        newPrice = Math.ceil(calculatedPrice / 100) * 100; // Round to nearest 100
+      } else {
+        // Fallback Logic (Default Towing)
+        let calculatedPrice = 80000; 
+        if (dist > 4 && dist <= 20) {
+          calculatedPrice += (dist - 4) * 10000;
+        } else if (dist > 20) {
+          calculatedPrice += (16 * 10000) + (dist - 20) * 5000;
+        }
+        newPrice = calculatedPrice;
+      }
+      
+      console.log(`[Trip Complete] New Price: ${newPrice} (Old: ${trip.price})`);
+      trip.price = newPrice;
+      trip.distance = dist; // Update actual distance
+    }
+
+    trip.status = 'completed';
+    trip.endTime = new Date();
+    trip = await trip.save(); // Save changes
     
-    console.log(`[Trip Complete] Trip found. Price: ${trip.price}, Driver: ${trip.driver}`);
+    console.log(`[Trip Complete] Trip updated. Price: ${trip.price}, Driver: ${trip.driver}`);
 
     // Update driver earnings and deduct commission
     if (trip.driver) {
