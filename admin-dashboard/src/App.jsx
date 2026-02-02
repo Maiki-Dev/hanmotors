@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Routes, Route, Link, useLocation } from 'react-router-dom';
+import { Routes, Route, Link, useLocation, Outlet } from 'react-router-dom';
 import { LayoutDashboard, Users, Truck, CreditCard, FileCheck, Menu, X, Settings, LogOut, ChevronRight, Calculator } from 'lucide-react';
 import { cn } from "./lib/utils";
 import { Button } from "./components/ui/button";
@@ -12,6 +12,10 @@ import PricingRules from './pages/PricingRules';
 import PaymentsReport from './pages/PaymentsReport';
 import DocumentVerification from './pages/DocumentVerification';
 import SettingsPage from './pages/Settings';
+import Login from './pages/Login';
+import { AuthProvider, useAuth } from './context/AuthContext';
+import ProtectedRoute from './components/ProtectedRoute';
+
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -23,23 +27,8 @@ import {
 
 const Sidebar = ({ className, onClose }) => {
   const location = useLocation();
-  const [profile, setProfile] = useState({
-    name: 'Admin User',
-    email: 'admin@hanmotors.mn'
-  });
-
-  React.useEffect(() => {
-    const loadProfile = () => {
-        const saved = localStorage.getItem('adminProfile');
-        if (saved) {
-            setProfile(JSON.parse(saved));
-        }
-    };
-    loadProfile();
-    window.addEventListener('profileUpdated', loadProfile);
-    return () => window.removeEventListener('profileUpdated', loadProfile);
-  }, []);
-
+  const { user, profile, signOut } = useAuth();
+  
   const menuItems = [
     { icon: LayoutDashboard, label: 'Ерөнхий самбар', path: '/' },
     { icon: Calculator, label: 'Тарифын тохиргоо', path: '/pricing' },
@@ -102,11 +91,13 @@ const Sidebar = ({ className, onClose }) => {
                 <div className="flex items-center gap-3 p-3 rounded-xl bg-sidebar-accent/50 border border-sidebar-border/50 hover:bg-sidebar-accent cursor-pointer transition-all hover:scale-[1.02] active:scale-[0.98]">
                     <Avatar className="h-10 w-10 border-2 border-primary/20">
                         <AvatarImage src="/placeholder-user.jpg" />
-                        <AvatarFallback className="bg-primary text-primary-foreground">AD</AvatarFallback>
+                        <AvatarFallback className="bg-primary text-primary-foreground">
+                          {profile?.full_name?.substring(0,2).toUpperCase() || 'AD'}
+                        </AvatarFallback>
                     </Avatar>
                     <div className="flex flex-col flex-1 min-w-0 text-left">
-                        <span className="text-sm font-semibold truncate">{profile.name}</span>
-                        <span className="text-xs text-sidebar-foreground/60 truncate">{profile.email}</span>
+                        <span className="text-sm font-semibold truncate">{profile?.full_name || user?.email}</span>
+                        <span className="text-xs text-sidebar-foreground/60 truncate">{user?.email}</span>
                     </div>
                     <Settings className="h-4 w-4 text-sidebar-foreground/50" />
                 </div>
@@ -121,7 +112,7 @@ const Sidebar = ({ className, onClose }) => {
                     </Link>
                 </DropdownMenuItem>
                 <DropdownMenuSeparator />
-                <DropdownMenuItem className="text-red-600 focus:text-red-600 cursor-pointer">
+                <DropdownMenuItem className="text-red-600 focus:text-red-600 cursor-pointer" onClick={signOut}>
                     <LogOut className="mr-2 h-4 w-4" />
                     <span>Гарах</span>
                 </DropdownMenuItem>
@@ -132,7 +123,7 @@ const Sidebar = ({ className, onClose }) => {
   );
 };
 
-function App() {
+const DashboardLayout = () => {
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
   return (
@@ -174,18 +165,30 @@ function App() {
         </header>
 
         <div className="p-4 md:p-8 max-w-[1600px] mx-auto space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
-          <Routes>
-            <Route path="/" element={<DashboardOverview />} />
-            <Route path="/drivers" element={<DriverManagement />} />
-            <Route path="/requests" element={<TripManagement />} />
-            <Route path="/pricing" element={<PricingRules />} />
-            <Route path="/payments" element={<PaymentsReport />} />
-            <Route path="/verification" element={<DocumentVerification />} />
-            <Route path="/settings" element={<SettingsPage />} />
-          </Routes>
+           <Outlet />
         </div>
       </main>
     </div>
+  );
+};
+
+function App() {
+  return (
+    <AuthProvider>
+      <Routes>
+        <Route path="/login" element={<Login />} />
+        
+        <Route element={<ProtectedRoute><DashboardLayout /></ProtectedRoute>}>
+          <Route path="/" element={<DashboardOverview />} />
+          <Route path="/drivers" element={<DriverManagement />} />
+          <Route path="/requests" element={<TripManagement />} />
+          <Route path="/pricing" element={<PricingRules />} />
+          <Route path="/payments" element={<PaymentsReport />} />
+          <Route path="/verification" element={<DocumentVerification />} />
+          <Route path="/settings" element={<SettingsPage />} />
+        </Route>
+      </Routes>
+    </AuthProvider>
   );
 }
 
