@@ -502,13 +502,26 @@ router.get('/admin/stats', async (req, res) => {
   }
 
   try {
+    const { startDate, endDate } = req.query;
     const activeDrivers = await Driver.countDocuments({ status: 'active' });
     const onlineDrivers = await Driver.countDocuments({ isOnline: true });
+    
+    // Today requests (always today)
     const today = new Date();
     today.setHours(0,0,0,0);
     const todayRequests = await Trip.countDocuments({ createdAt: { $gte: today } });
-    const allTrips = await Trip.find({ status: 'completed' });
-    const totalRevenue = allTrips.reduce((acc, trip) => acc + trip.price, 0);
+    
+    // Total Revenue (Filtered by date if provided)
+    let dateFilter = { status: 'completed' };
+    if (startDate && endDate) {
+      dateFilter.createdAt = {
+        $gte: new Date(startDate),
+        $lte: new Date(new Date(endDate).setHours(23, 59, 59, 999))
+      };
+    }
+    
+    const allTrips = await Trip.find(dateFilter);
+    const totalRevenue = allTrips.reduce((acc, trip) => acc + (trip.price || 0), 0);
 
     res.json({
       activeDrivers,
@@ -517,7 +530,6 @@ router.get('/admin/stats', async (req, res) => {
       totalRevenue
     });
   } catch (err) {
-
     res.status(500).json({ error: err.message });
   }
 });
@@ -963,6 +975,15 @@ router.get('/admin/transactions', async (req, res) => {
   }
 
   try {
+    const { startDate, endDate } = req.query;
+    
+    // Date filter setup
+    let dateStart, dateEnd;
+    if (startDate && endDate) {
+      dateStart = new Date(startDate);
+      dateEnd = new Date(new Date(endDate).setHours(23, 59, 59, 999));
+    }
+
     const drivers = await Driver.find({ 'wallet.transactions': { $exists: true, $not: { $size: 0 } } });
     
     let allTransactions = [];
@@ -971,11 +992,18 @@ router.get('/admin/transactions', async (req, res) => {
     let totalCurrentBalance = 0; // Real-time balance sum
 
     drivers.forEach(driver => {
-      // Sum current balance
+      // Sum current balance (always current, not filtered)
       totalCurrentBalance += (driver.wallet?.balance || 0);
 
       if (driver.wallet && driver.wallet.transactions) {
         driver.wallet.transactions.forEach(tx => {
+          const txDate = new Date(tx.date);
+          
+          // Apply Date Filter if exists
+          if (dateStart && dateEnd) {
+            if (txDate < dateStart || txDate > dateEnd) return;
+          }
+
           allTransactions.push({
             id: tx._id,
             driver: driver.name,
@@ -999,15 +1027,20 @@ router.get('/admin/transactions', async (req, res) => {
     allTransactions.sort((a, b) => new Date(b.date) - new Date(a.date));
 
     // Get Total Revenue from Trips (Platform Revenue)
-    const completedTrips = await Trip.find({ status: 'completed' });
+    let tripFilter = { status: 'completed' };
+    if (dateStart && dateEnd) {
+      tripFilter.createdAt = { $gte: dateStart, $lte: dateEnd };
+    }
+    
+    const completedTrips = await Trip.find(tripFilter);
     const totalTripRevenue = completedTrips.reduce((acc, trip) => acc + (trip.price || 0), 0);
 
     res.json({
       stats: {
-        totalRevenue: totalTripRevenue, // Total value of trips
-        totalWalletDeposits: totalWalletCredits, // Total money loaded into wallets (GROSS)
-        totalWalletDebits: totalWalletDebits, // Total commissions/withdrawals
-        totalCurrentBalance: totalCurrentBalance, // Actual money currently in driver wallets
+        totalRevenue: totalTripRevenue, // Total value of trips in period
+        totalWalletDeposits: totalWalletCredits, // Total money loaded into wallets in period
+        totalWalletDebits: totalWalletDebits, // Total commissions/withdrawals in period
+        totalCurrentBalance: totalCurrentBalance, // Actual money currently in driver wallets (Snapshot)
         transactionCount: allTransactions.length
       },
       transactions: allTransactions

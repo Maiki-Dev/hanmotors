@@ -3,8 +3,10 @@ import { Card, CardContent, CardHeader, CardTitle } from "../components/ui/card"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "../components/ui/table";
 import { Badge } from "../components/ui/badge";
 import { Button } from "../components/ui/button";
+import { Input } from "../components/ui/input";
 import { Download, CreditCard, Wallet, Loader2 } from 'lucide-react';
 import api from '../services/api';
+import * as XLSX from 'xlsx';
 
 const PaymentsReport = () => {
   const [transactions, setTransactions] = useState([]);
@@ -17,19 +19,66 @@ const PaymentsReport = () => {
   });
   const [loading, setLoading] = useState(true);
 
+  // Date State (Default: Current Month)
+  const now = new Date();
+  const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().split('T')[0];
+  const today = now.toISOString().split('T')[0];
+  
+  const [startDate, setStartDate] = useState(startOfMonth);
+  const [endDate, setEndDate] = useState(today);
+
   useEffect(() => {
     fetchTransactions();
-  }, []);
+  }, [startDate, endDate]);
 
   const fetchTransactions = async () => {
+    setLoading(true);
     try {
-      const response = await api.get('/admin/transactions');
+      const response = await api.get(`/admin/transactions?startDate=${startDate}&endDate=${endDate}`);
       setTransactions(response.data.transactions);
       setStats(response.data.stats);
     } catch (error) {
       console.error("Error fetching transactions:", error);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleDownloadReport = () => {
+    try {
+      const wb = XLSX.utils.book_new();
+      
+      // 1. Summary Sheet
+      const summaryData = [
+        ["Тайлангийн хугацаа", `${startDate} - ${endDate}`],
+        ["Нийт орлого (Аялал)", stats.totalRevenue],
+        ["Нийт данс цэнэглэлт", stats.totalWalletDeposits],
+        ["Нийт гүйлгээний тоо", stats.transactionCount],
+        ["Жолооч нарын хэтэвч үлдэгдэл", stats.totalCurrentBalance]
+      ];
+      const wsSummary = XLSX.utils.aoa_to_sheet(summaryData);
+      XLSX.utils.book_append_sheet(wb, wsSummary, "Ерөнхий");
+
+      // 2. Transactions Sheet
+      if (transactions.length > 0) {
+        const txData = transactions.map(t => ({
+          "Огноо": new Date(t.date).toLocaleString(),
+          "Жолооч": t.driver,
+          "Имэйл": t.email,
+          "Төрөл": t.type === 'credit' ? 'Орлого (Цэнэглэлт)' : 'Зарлага (Шимтгэл)',
+          "Дүн": t.amount,
+          "Тайлбар": t.description,
+          "Төлөв": t.status
+        }));
+        const wsTx = XLSX.utils.json_to_sheet(txData);
+        XLSX.utils.book_append_sheet(wb, wsTx, "Гүйлгээнүүд");
+      }
+
+      // Save file
+      XLSX.writeFile(wb, `HanMotors_Payments_${startDate}_${endDate}.xlsx`);
+    } catch (error) {
+      console.error("Export failed", error);
+      alert("Тайлан татахад алдаа гарлаа.");
     }
   };
 
@@ -62,9 +111,26 @@ const PaymentsReport = () => {
     <div className="space-y-8">
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
         <h2 className="text-3xl font-bold tracking-tight text-primary">Төлбөрийн тайлан</h2>
-        <Button variant="outline">
-          <Download className="mr-2 h-4 w-4" /> Тайлан татах
-        </Button>
+        <div className="flex flex-col sm:flex-row items-start sm:items-center space-y-2 sm:space-y-0 sm:space-x-2">
+          <div className="flex items-center space-x-2">
+             <Input 
+               type="date" 
+               value={startDate} 
+               onChange={(e) => setStartDate(e.target.value)} 
+               className="w-[140px]"
+             />
+             <span className="text-muted-foreground">-</span>
+             <Input 
+               type="date" 
+               value={endDate} 
+               onChange={(e) => setEndDate(e.target.value)} 
+               className="w-[140px]"
+             />
+          </div>
+          <Button variant="outline" onClick={handleDownloadReport}>
+            <Download className="mr-2 h-4 w-4" /> Тайлан татах
+          </Button>
+        </div>
       </div>
 
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
