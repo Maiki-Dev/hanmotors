@@ -18,7 +18,7 @@ Notifications.setNotificationHandler({
 });
 import { theme } from '../constants/theme';
 import { PremiumCard } from '../components/PremiumCard';
-import { MapPin, Navigation as NavIcon, Power, X, Plus, Menu, Truck, Eye, Star, Wallet, Car, Layers, Activity } from 'lucide-react-native';
+import { Navigation as NavIcon, Power, Wallet, Car, Truck, Layers, Activity } from 'lucide-react-native';
 
 const { width, height } = Dimensions.get('window');
 
@@ -87,7 +87,7 @@ export default function HomeScreen({ navigation, route }) {
             pitch: 0,
         }, { duration: 1000 });
     }
-  }, [isMapReady]); // Only trigger when map becomes ready (catches "Location Early, Map Late" case)
+  }, [isMapReady, driverLocation]); // Trigger when map is ready OR when location is first found
 
   const handleCenterLocation = async () => {
     updateFollowing(true);
@@ -286,14 +286,16 @@ export default function HomeScreen({ navigation, route }) {
           distanceInterval: 10, // 10 meters
         },
         (newLocation) => {
-          const { latitude, longitude } = newLocation.coords;
+          const { latitude, longitude, heading } = newLocation.coords;
           
-          setDriverLocation({ latitude, longitude });
+          setDriverLocation({ latitude, longitude, heading });
           
           // Smoothly follow user if tracking is enabled
           if (isFollowingRef.current && mapRef.current) {
              mapRef.current.animateCamera({ 
                center: { latitude, longitude },
+               heading: heading || 0,
+               pitch: 45, // Add some pitch for 3D feel
                zoom: 17
              }, { duration: 1000 });
           }
@@ -305,9 +307,11 @@ export default function HomeScreen({ navigation, route }) {
               location: { 
                 lat: latitude, 
                 lng: longitude,
+                heading: heading,
                 plateNumber: vehicle.plateNumber,
                 vehicleModel: vehicle.model,
-                vehicleColor: vehicle.color
+                vehicleColor: vehicle.color,
+                isTowing: services.towing // Broadcast if we are a tow truck
               }
             });
           }
@@ -323,7 +327,11 @@ export default function HomeScreen({ navigation, route }) {
   }, [isOnline, driverId]);
 
   useEffect(() => {
-    socketRef.current = io(API_URL);
+    socketRef.current = io(API_URL, {
+      transports: ['websocket'], // Force websocket for Android reliability
+      reconnection: true,
+      reconnectionAttempts: 5,
+    });
 
     if (driverId) {
       socketRef.current.emit('driverJoin', driverId);
@@ -414,7 +422,8 @@ export default function HomeScreen({ navigation, route }) {
                 lng: driverLocation.longitude,
                 plateNumber: vehicle.plateNumber,
                 vehicleModel: vehicle.model,
-                vehicleColor: vehicle.color
+                vehicleColor: vehicle.color,
+                isTowing: services.towing
               }
             });
           }
@@ -424,7 +433,25 @@ export default function HomeScreen({ navigation, route }) {
       }
     };
     updateStatus();
-  }, [isOnline, driverId]);
+  }, [isOnline, driverId]); // driverLocation added to ensure emit happens when location becomes available
+
+  // Separate effect to broadcast location when it changes while online
+  useEffect(() => {
+    if (isOnline && driverLocation && socketRef.current && driverId) {
+      const vehicle = driverInfoRef.current?.vehicle || {};
+      socketRef.current.emit('driverLocationUpdated', {
+        driverId,
+        location: { 
+          lat: driverLocation.latitude, 
+          lng: driverLocation.longitude,
+          plateNumber: vehicle.plateNumber,
+          vehicleModel: vehicle.model,
+          vehicleColor: vehicle.color,
+          isTowing: services.towing
+        }
+      });
+    }
+  }, [driverLocation, isOnline, driverId, services]);
 
   const handleToggleOnline = () => {
     if (isOnline) {
@@ -454,7 +481,19 @@ export default function HomeScreen({ navigation, route }) {
     }
   };
 
-  const confirmGoOnline = () => {
+  const confirmGoOnline = async () => {
+      // If we don't have location yet, try to get it immediately
+      if (!driverLocation) {
+        try {
+           const location = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
+           if (location) {
+               const { latitude, longitude } = location.coords;
+               setDriverLocation({ latitude, longitude });
+           }
+        } catch (e) {
+            console.log('Failed to get location before going online', e);
+        }
+      }
       setIsOnline(true);
       setIsServiceModalVisible(false);
   };
@@ -518,7 +557,7 @@ export default function HomeScreen({ navigation, route }) {
         // onRegionChangeStart={() => updateFollowing(false)} // Removed to prevent conflict with animateToRegion
         mapType={mapMode === 'hybrid' ? "hybrid" : "standard"}
         customMapStyle={mapMode === 'dark' ? darkMapStyle : []}
-        showsUserLocation={true} // Enabled for better UX/Debugging
+        showsUserLocation={false} // Disable native blue dot, we use custom marker
         followsUserLocation={false} // Disable native following to avoid conflict with animateCamera
         userInterfaceStyle={mapMode === 'dark' ? "dark" : "light"}
         showsBuildings={true}
@@ -528,16 +567,24 @@ export default function HomeScreen({ navigation, route }) {
       >
         {/* Custom Car Marker (Showing car icon for driver) */}
         {driverLocation && (
-          <Marker coordinate={driverLocation} anchor={{ x: 0.5, y: 0.5 }}>
-             <Image 
-               source={require('../../assets/car_icon.png')} 
-               style={styles.carMarker}
-             />
+          <Marker 
+            coordinate={driverLocation} 
+            anchor={{ x: 0.5, y: 0.5 }}
+            rotation={(driverLocation.heading || 0) + (Platform.OS === 'ios' ? 0 : -90)} // iOS respects EXIF orientation (Up), Android needs adjustment (Right)
+            flat={true} // Makes the marker rotate with the map
+          >
+             <View style={styles.carMarkerContainer}>
+               <View style={[styles.carMarkerGlow, { width: 40, height: 40, borderRadius: 20, opacity: 0.5 }]} />
+               <Image 
+                  source={require('../../assets/tow-truck.png')}
+                  style={{ width: 60, height: 60, resizeMode: 'contain' }}
+               />
+             </View>
           </Marker>
         )}
 
-        {/* Other Drivers Markers */}
-        {Object.entries(otherDrivers).map(([id, loc]) => {
+        {/* Other Drivers Markers - Only show when ONLINE */}
+        {isOnline && Object.entries(otherDrivers).map(([id, loc]) => {
           if (!loc || !loc.lat || !loc.lng) return null;
           return (
             <Marker
@@ -547,10 +594,16 @@ export default function HomeScreen({ navigation, route }) {
               description="Идэвхтэй"
               anchor={{ x: 0.5, y: 0.5 }}
             >
-              <Image 
-                source={require('../../assets/car_icon.png')} 
-                style={styles.carMarker}
-              />
+             <View style={styles.carMarkerContainer}>
+               <View style={[styles.carMarkerCircle, { backgroundColor: theme.colors.textSecondary }]}>
+                 {loc.isTowing ? (
+                    <Truck size={20} color="#FFF" fill="#FFF" />
+                 ) : (
+                    <Car size={20} color="#FFF" fill="#FFF" />
+                 )}
+               </View>
+               <View style={[styles.carMarkerArrow, { borderTopColor: theme.colors.textSecondary }]} />
+             </View>
             </Marker>
           );
         })}
@@ -896,6 +949,18 @@ const styles = StyleSheet.create({
     width: 48,
     height: 48,
     resizeMode: 'contain',
+  },
+  carMarkerContainer: {
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  carMarkerGlow: {
+    position: 'absolute',
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: theme.colors.primary,
+    opacity: 0.3,
   },
   bottomSheet: {
     position: 'absolute',

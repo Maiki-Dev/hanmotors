@@ -1,7 +1,9 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, Modal, Dimensions, TouchableOpacity, Animated } from 'react-native';
+import { View, Text, StyleSheet, Modal, Dimensions, TouchableOpacity, Animated, Platform } from 'react-native';
 import { theme } from '../constants/theme';
-import { MapPin, Clock, Truck, Car, Anchor, X, Check, Navigation } from 'lucide-react-native';
+import { MapPin, Clock, Truck, Car, Anchor, X, Check, Navigation, User, Phone } from 'lucide-react-native';
+import { LinearGradient } from 'expo-linear-gradient';
+import { BlurView } from 'expo-blur'; // Check if available, otherwise fallback to View
 
 const { width } = Dimensions.get('window');
 
@@ -9,10 +11,11 @@ export const IncomingJobModal = ({ visible, job, onAccept, onDecline, userLocati
   const [timeLeft, setTimeLeft] = useState(30);
   const fadeAnim = useState(new Animated.Value(0))[0];
   const slideAnim = useState(new Animated.Value(100))[0];
+  const pulseAnim = useState(new Animated.Value(1))[0];
 
   useEffect(() => {
     if (visible && job) {
-      // Calculate remaining time based on creation time (2 mins = 120s)
+      // Calculate remaining time
       const created = job.createdAt ? new Date(job.createdAt).getTime() : Date.now();
       const now = Date.now();
       const elapsedSeconds = Math.floor((now - created) / 1000);
@@ -20,6 +23,7 @@ export const IncomingJobModal = ({ visible, job, onAccept, onDecline, userLocati
 
       setTimeLeft(initialTimeLeft);
       
+      // Entrance Animation
       Animated.parallel([
         Animated.timing(fadeAnim, {
           toValue: 1,
@@ -29,9 +33,26 @@ export const IncomingJobModal = ({ visible, job, onAccept, onDecline, userLocati
         Animated.spring(slideAnim, {
           toValue: 0,
           useNativeDriver: true,
-          damping: 15,
+          damping: 12,
+          stiffness: 100,
         })
       ]).start();
+
+      // Pulse Animation for Timer
+      Animated.loop(
+        Animated.sequence([
+          Animated.timing(pulseAnim, {
+            toValue: 1.1,
+            duration: 500,
+            useNativeDriver: true,
+          }),
+          Animated.timing(pulseAnim, {
+            toValue: 1,
+            duration: 500,
+            useNativeDriver: true,
+          })
+        ])
+      ).start();
 
       const timer = setInterval(() => {
         setTimeLeft((prev) => {
@@ -54,24 +75,14 @@ export const IncomingJobModal = ({ visible, job, onAccept, onDecline, userLocati
 
   const getIcon = () => {
     switch (job.serviceType) {
-      case 'Cargo': return <Truck size={32} color={theme.colors.primary} />;
-      case 'Tow': return <Anchor size={32} color={theme.colors.primary} />;
-      default: return <Car size={32} color={theme.colors.primary} />;
+      case 'Cargo': return <Truck size={28} color="#FFF" />;
+      case 'Tow': return <Anchor size={28} color="#FFF" />;
+      default: return <Car size={28} color="#FFF" />;
     }
   };
 
-  // Calculate distance from driver to pickup if userLocation is provided
   const getDistanceText = () => {
-    if (!userLocation || !job.pickupLocation?.coordinates) return 'Зай тодорхойгүй';
-    
-    // Simple Haversine approximation or just placeholder if complex math is needed
-    // For now, let's assume we want to show it if we have it. 
-    // Since I don't want to import heavy math utils here, I'll keep it simple or use the one from job if available.
-    // If job has 'distance' field (trip distance), show that.
-    
-    // Let's show the trip distance (pickup to dropoff) which is more relevant for price
-    // And maybe driver-to-pickup distance if available in job metadata (often calculated by backend)
-    return job.distance ? `${job.distance.toFixed(1)} км` : '';
+    return job.distance ? `${job.distance.toFixed(1)} км` : '...';
   };
 
   return (
@@ -82,97 +93,137 @@ export const IncomingJobModal = ({ visible, job, onAccept, onDecline, userLocati
       statusBarTranslucent
     >
       <View style={styles.overlay}>
+        {/* Background Blur Effect */}
+        {Platform.OS === 'ios' ? (
+          <BlurView intensity={20} style={StyleSheet.absoluteFill} tint="dark" />
+        ) : (
+          <Animated.View style={[styles.backdrop, { opacity: fadeAnim }]} />
+        )}
+
         <Animated.View style={[
-          styles.card, 
+          styles.cardContainer, 
           { 
             opacity: fadeAnim,
             transform: [{ translateY: slideAnim }]
           }
         ]}>
           
-          {/* Header Section */}
-          <View style={styles.header}>
-            <View style={styles.serviceInfo}>
-              <View style={styles.iconContainer}>
+          {/* Main Card */}
+          <LinearGradient
+            colors={['#2A2A2A', '#1A1A1A']}
+            style={styles.card}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 1 }}
+          >
+            {/* Top Badge - Service Type */}
+            <View style={styles.headerBadge}>
+              <LinearGradient
+                colors={[theme.colors.primary, '#F59E0B']}
+                style={styles.serviceIconBadge}
+              >
                 {getIcon()}
+              </LinearGradient>
+              <View style={styles.headerTextContainer}>
+                <Text style={styles.serviceTitle}>{job.serviceType || 'Service'}</Text>
+                <Text style={styles.serviceSubtitle}>Шинэ дуудлага ирлээ</Text>
               </View>
-              <View>
-                <Text style={styles.serviceType}>{job.serviceType || 'Service'}</Text>
-                <Text style={styles.subText}>Шинэ захиалга</Text>
+              <View style={styles.timerContainer}>
+                 <Animated.Text style={[styles.timerText, { transform: [{ scale: pulseAnim }] }]}>
+                   {timeLeft}
+                 </Animated.Text>
+                 <Text style={styles.timerLabel}>сек</Text>
               </View>
             </View>
-            <View style={styles.timerWrapper}>
-              <Text style={[styles.timerText, timeLeft < 10 && styles.timerUrgent]}>
-                {timeLeft}
+
+            <View style={styles.divider} />
+
+            {/* Price - The Hero */}
+            <View style={styles.priceContainer}>
+              <Text style={styles.priceLabel}>ОРЛОГО</Text>
+              <Text style={styles.priceValue}>
+                {job.price?.toLocaleString() || '0'}
+                <Text style={styles.currencySymbol}>₮</Text>
               </Text>
-              <Text style={styles.secText}>сек</Text>
             </View>
-          </View>
 
-          {/* Price Section */}
-          <View style={styles.priceSection}>
-            <Text style={styles.priceLabel}>ТООЦООЛСОН ОРЛОГО</Text>
-            <Text style={styles.priceValue}>₮{job.price?.toLocaleString() || '0'}</Text>
-          </View>
-
-          {/* Route Section */}
-          <View style={styles.routeSection}>
-            <View style={styles.timelineContainer}>
-              <View style={[styles.dot, styles.pickupDot]} />
-              <View style={styles.line} />
-              <View style={[styles.dot, styles.dropoffDot]} />
-            </View>
-            
-            <View style={styles.addressesContainer}>
-              <View style={styles.addressRow}>
-                <Text style={styles.addressLabel}>Авах хаяг</Text>
-                <Text style={styles.addressText} numberOfLines={2}>
-                  {job.pickupLocation?.address || 'Хаяг тодорхойгүй'}
-                </Text>
+            {/* Customer Info (Modern Glass-like Box) */}
+            {job.customerName && (
+              <View style={styles.customerBox}>
+                <View style={styles.customerRow}>
+                  <View style={styles.customerAvatar}>
+                    <User size={16} color={theme.colors.primary} />
+                  </View>
+                  <Text style={styles.customerName}>{job.customerName}</Text>
+                </View>
+                {job.customerPhone && (
+                  <View style={styles.customerRow}>
+                    <View style={styles.customerAvatar}>
+                      <Phone size={16} color={theme.colors.textSecondary} />
+                    </View>
+                    <Text style={styles.customerPhone}>{job.customerPhone}</Text>
+                  </View>
+                )}
               </View>
-              
-              <View style={styles.addressSpacer} />
-              
-              <View style={styles.addressRow}>
-                <Text style={styles.addressLabel}>Хүргэх хаяг</Text>
-                <Text style={styles.addressText} numberOfLines={2}>
-                  {job.dropoffLocation?.address || 'Хаяг тодорхойгүй'}
-                </Text>
+            )}
+
+            {/* Route Visualization */}
+            <View style={styles.routeContainer}>
+              <View style={styles.routeRow}>
+                <View style={styles.routeIconContainer}>
+                   <View style={[styles.dot, styles.pickupDot]} />
+                   <View style={styles.line} />
+                   <View style={[styles.dot, styles.dropoffDot]} />
+                </View>
+                <View style={styles.routeInfo}>
+                  <View style={styles.locationItem}>
+                    <Text style={styles.locationLabel}>АВАХ</Text>
+                    <Text style={styles.locationText} numberOfLines={1}>{job.pickupLocation?.address || 'Тодорхойгүй'}</Text>
+                  </View>
+                  <View style={styles.locationSpacer} />
+                  <View style={styles.locationItem}>
+                    <Text style={styles.locationLabel}>ХҮРГЭХ</Text>
+                    <Text style={styles.locationText} numberOfLines={1}>{job.dropoffLocation?.address || 'Тодорхойгүй'}</Text>
+                  </View>
+                </View>
               </View>
             </View>
-          </View>
 
-          {/* Additional Info Grid */}
-          <View style={styles.grid}>
-            <View style={styles.gridItem}>
-              <Navigation size={20} color={theme.colors.textSecondary} />
-              <Text style={styles.gridText}>{getDistanceText()}</Text>
-            </View>
-            {/* Can add more info here like payment type */}
-          </View>
-
-          {/* Action Buttons */}
-          <View style={styles.actions}>
-            <TouchableOpacity 
-              style={styles.declineButton} 
-              onPress={onDecline}
-              activeOpacity={0.7}
-            >
-              <X size={28} color="#FF4444" />
-            </TouchableOpacity>
-            
-            <TouchableOpacity 
-              style={styles.acceptButton} 
-              onPress={onAccept}
-              activeOpacity={0.8}
-            >
-              <Text style={styles.acceptText}>ЗАХИАЛГА АВАХ</Text>
-              <View style={styles.acceptIconBg}>
-                <Check size={24} color="#000" />
+            {/* Distance Badge */}
+            <View style={styles.metaContainer}>
+              <View style={styles.metaBadge}>
+                <Navigation size={14} color="#BBB" />
+                <Text style={styles.metaText}>{getDistanceText()}</Text>
               </View>
-            </TouchableOpacity>
-          </View>
+            </View>
 
+            {/* Actions */}
+            <View style={styles.actionContainer}>
+              <TouchableOpacity 
+                style={styles.declineButton}
+                onPress={onDecline}
+                activeOpacity={0.7}
+              >
+                <X size={32} color="#EF4444" />
+              </TouchableOpacity>
+
+              <TouchableOpacity 
+                style={styles.acceptButtonWrapper}
+                onPress={onAccept}
+                activeOpacity={0.9}
+              >
+                <LinearGradient
+                  colors={[theme.colors.primary, '#F59E0B']}
+                  style={styles.acceptButton}
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 1, y: 0 }}
+                >
+                  <Text style={styles.acceptText}>ХҮЛЭЭН АВАХ</Text>
+                  <Check size={24} color="#1A1A1A" strokeWidth={3} />
+                </LinearGradient>
+              </TouchableOpacity>
+            </View>
+
+          </LinearGradient>
         </Animated.View>
       </View>
     </Modal>
@@ -182,201 +233,249 @@ export const IncomingJobModal = ({ visible, job, onAccept, onDecline, userLocati
 const styles = StyleSheet.create({
   overlay: {
     flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.6)',
     justifyContent: 'flex-end',
-    paddingBottom: 20,
+    alignItems: 'center',
+    paddingBottom: Platform.OS === 'ios' ? 40 : 20,
   },
-  card: {
-    backgroundColor: '#1A1A1A',
-    marginHorizontal: 16,
+  backdrop: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(0,0,0,0.7)',
+  },
+  cardContainer: {
+    width: width - 32,
     borderRadius: 24,
-    padding: 24,
-    borderWidth: 1,
-    borderColor: '#333',
     shadowColor: "#000",
     shadowOffset: { width: 0, height: 10 },
     shadowOpacity: 0.5,
     shadowRadius: 20,
-    elevation: 10,
+    elevation: 25,
   },
-  header: {
+  card: {
+    borderRadius: 24,
+    padding: 20,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.1)',
+  },
+  headerBadge: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 24,
+    marginBottom: 16,
   },
-  serviceInfo: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-  },
-  iconContainer: {
+  serviceIconBadge: {
     width: 48,
     height: 48,
-    borderRadius: 24,
-    backgroundColor: 'rgba(251, 191, 36, 0.1)',
-    alignItems: 'center',
+    borderRadius: 16,
     justifyContent: 'center',
-    borderWidth: 1,
-    borderColor: 'rgba(251, 191, 36, 0.3)',
+    alignItems: 'center',
+    shadowColor: theme.colors.primary,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 5,
   },
-  serviceType: {
+  headerTextContainer: {
+    flex: 1,
+    marginLeft: 12,
+  },
+  serviceTitle: {
     color: '#FFF',
-    fontSize: 18,
-    fontWeight: 'bold',
+    fontSize: 20,
+    fontWeight: '800',
+    letterSpacing: 0.5,
   },
-  subText: {
-    color: '#888',
+  serviceSubtitle: {
+    color: '#AAA',
     fontSize: 12,
   },
-  timerWrapper: {
+  timerContainer: {
     alignItems: 'center',
-    backgroundColor: '#2A2A2A',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(255,255,255,0.05)',
     paddingHorizontal: 12,
     paddingVertical: 6,
     borderRadius: 12,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.1)',
   },
   timerText: {
-    color: '#FFF',
+    color: theme.colors.primary,
     fontSize: 20,
-    fontWeight: 'bold',
+    fontWeight: '900',
   },
-  timerUrgent: {
-    color: '#FF4444',
-  },
-  secText: {
+  timerLabel: {
     color: '#666',
-    fontSize: 10,
+    fontSize: 9,
     marginTop: -2,
-  },
-  priceSection: {
-    alignItems: 'center',
-    marginBottom: 24,
-    backgroundColor: '#252525',
-    padding: 16,
-    borderRadius: 16,
-    borderWidth: 1,
-    borderColor: '#333',
-  },
-  priceLabel: {
-    color: '#888',
-    fontSize: 12,
-    letterSpacing: 1,
-    marginBottom: 4,
     textTransform: 'uppercase',
   },
-  priceValue: {
-    color: theme.colors.primary,
-    fontSize: 32,
-    fontWeight: 'bold',
-    textShadowColor: 'rgba(251, 191, 36, 0.3)',
-    textShadowOffset: { width: 0, height: 0 },
-    textShadowRadius: 10,
+  divider: {
+    height: 1,
+    backgroundColor: 'rgba(255,255,255,0.1)',
+    marginVertical: 12,
   },
-  routeSection: {
-    flexDirection: 'row',
-    marginBottom: 24,
-  },
-  timelineContainer: {
+  priceContainer: {
     alignItems: 'center',
+    marginVertical: 8,
+  },
+  priceLabel: {
+    color: '#666',
+    fontSize: 10,
+    fontWeight: 'bold',
+    letterSpacing: 2,
+    marginBottom: 4,
+  },
+  priceValue: {
+    color: '#FFF',
+    fontSize: 36,
+    fontWeight: '900',
+    textShadowColor: 'rgba(251, 191, 36, 0.5)',
+    textShadowOffset: { width: 0, height: 0 },
+    textShadowRadius: 15,
+  },
+  currencySymbol: {
+    fontSize: 24,
+    color: theme.colors.primary,
+  },
+  customerBox: {
+    backgroundColor: 'rgba(0,0,0,0.3)',
+    borderRadius: 12,
+    padding: 12,
+    marginBottom: 16,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.05)',
+  },
+  customerRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 4,
+  },
+  customerAvatar: {
     width: 24,
+    height: 24,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 8,
+  },
+  customerName: {
+    color: '#EEE',
+    fontSize: 15,
+    fontWeight: '600',
+  },
+  customerPhone: {
+    color: '#999',
+    fontSize: 13,
+  },
+  routeContainer: {
+    marginBottom: 16,
+  },
+  routeRow: {
+    flexDirection: 'row',
+  },
+  routeIconContainer: {
+    alignItems: 'center',
+    width: 20,
     marginRight: 12,
-    paddingVertical: 8,
+    paddingVertical: 6,
   },
   dot: {
-    width: 12,
-    height: 12,
-    borderRadius: 6,
+    width: 10,
+    height: 10,
+    borderRadius: 5,
     borderWidth: 2,
   },
   pickupDot: {
-    borderColor: theme.colors.primary,
     backgroundColor: '#1A1A1A',
+    borderColor: theme.colors.primary,
   },
   dropoffDot: {
-    borderColor: theme.colors.success,
     backgroundColor: theme.colors.success,
+    borderColor: theme.colors.success,
   },
   line: {
     width: 2,
     flex: 1,
     backgroundColor: '#333',
     marginVertical: 4,
+    borderRadius: 1,
   },
-  addressesContainer: {
+  routeInfo: {
     flex: 1,
+    justifyContent: 'space-between',
   },
-  addressRow: {
-    minHeight: 40,
+  locationItem: {
+    minHeight: 32,
     justifyContent: 'center',
   },
-  addressSpacer: {
-    height: 16,
+  locationSpacer: {
+    height: 12,
   },
-  addressLabel: {
-    color: '#666',
-    fontSize: 10,
+  locationLabel: {
+    color: '#555',
+    fontSize: 9,
+    fontWeight: 'bold',
     marginBottom: 2,
   },
-  addressText: {
-    color: '#EEE',
-    fontSize: 15,
+  locationText: {
+    color: '#DDD',
+    fontSize: 14,
     fontWeight: '500',
   },
-  grid: {
+  metaContainer: {
     flexDirection: 'row',
-    gap: 12,
-    marginBottom: 24,
+    justifyContent: 'center',
+    marginBottom: 20,
   },
-  gridItem: {
+  metaBadge: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#2A2A2A',
-    padding: 8,
-    borderRadius: 8,
+    backgroundColor: 'rgba(255,255,255,0.08)',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 20,
     gap: 6,
   },
-  gridText: {
+  metaText: {
     color: '#CCC',
     fontSize: 13,
+    fontWeight: '600',
   },
-  actions: {
+  actionContainer: {
     flexDirection: 'row',
-    gap: 12,
+    alignItems: 'center',
+    gap: 16,
   },
   declineButton: {
-    width: 64,
-    height: 64,
-    borderRadius: 32,
+    width: 60,
+    height: 60,
+    borderRadius: 30,
     backgroundColor: '#2A1010',
-    alignItems: 'center',
     justifyContent: 'center',
+    alignItems: 'center',
     borderWidth: 1,
-    borderColor: '#FF4444',
+    borderColor: 'rgba(239, 68, 68, 0.3)',
+  },
+  acceptButtonWrapper: {
+    flex: 1,
+    height: 60,
+    borderRadius: 30,
+    shadowColor: theme.colors.primary,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 10,
+    elevation: 8,
   },
   acceptButton: {
     flex: 1,
-    height: 64,
-    backgroundColor: theme.colors.primary,
-    borderRadius: 32,
+    borderRadius: 30,
     flexDirection: 'row',
+    justifyContent: 'center',
     alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 8,
-    paddingLeft: 24,
+    gap: 10,
   },
   acceptText: {
-    color: '#000',
+    color: '#1A1A1A',
     fontSize: 18,
-    fontWeight: 'bold',
-  },
-  acceptIconBg: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
-    backgroundColor: 'rgba(255,255,255,0.3)',
-    alignItems: 'center',
-    justifyContent: 'center',
+    fontWeight: '900',
+    letterSpacing: 1,
   },
 });
-

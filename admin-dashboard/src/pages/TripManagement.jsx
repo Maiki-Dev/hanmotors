@@ -26,7 +26,7 @@ L.Marker.prototype.options.icon = DefaultIcon;
 
 // Define Car Icon for Live Map
 const carIcon = L.icon({
-  iconUrl: '/car_icon.png',
+  iconUrl: '/tow-truck.png',
   iconSize: [40, 40],
   iconAnchor: [20, 20],
   popupAnchor: [0, -20]
