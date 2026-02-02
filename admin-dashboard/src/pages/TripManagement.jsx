@@ -38,15 +38,30 @@ import {
 import api, { socket } from '../services/api';
 import { cn } from "../lib/utils";
 
-const LocationPicker = ({ position, onLocationSelect }) => {
-  const map = useMapEvents({
-    click(e) {
-      onLocationSelect(e.latlng);
-    },
-  });
+const fetchAddress = async (lat, lng) => {
+    try {
+      const response = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}&zoom=18&addressdetails=1`, {
+        headers: {
+          'Accept-Language': 'mn'
+        }
+      });
+      const data = await response.json();
+      return data.display_name || `Map (${lat.toFixed(4)}, ${lng.toFixed(4)})`;
+    } catch (error) {
+      console.error('Error fetching address:', error);
+      return `Map (${lat.toFixed(4)}, ${lng.toFixed(4)})`;
+    }
+  };
 
-  return position && position.lat ? <Marker position={position} /> : null;
-};
+  const LocationPicker = ({ position, onLocationSelect }) => {
+    const map = useMapEvents({
+      click(e) {
+        onLocationSelect(e.latlng);
+      },
+    });
+
+    return position && position.lat ? <Marker position={position} /> : null;
+  };
 
 const TripManagement = () => {
   const [activeTab, setActiveTab] = useState("pending");
@@ -111,6 +126,9 @@ const TripManagement = () => {
   const [selectedTrip, setSelectedTrip] = useState(null);
   const [selectedDriverId, setSelectedDriverId] = useState('');
 
+  const [routeOptions, setRouteOptions] = useState([]);
+  const [selectedRouteIndex, setSelectedRouteIndex] = useState(0);
+
   const getDistanceFromLatLonInKm = (lat1, lon1, lat2, lon2) => {
     const R = 6371; // Radius of the earth in km
     const dLat = (lat2 - lat1) * (Math.PI / 180);
@@ -123,15 +141,47 @@ const TripManagement = () => {
     return R * c;
   };
 
+  const fetchRoutes = async (start, end) => {
+    try {
+      // Using OSRM for routing (Open Source Routing Machine) - Free and accurate for driving
+      const response = await fetch(`https://router.project-osrm.org/route/v1/driving/${start.lng},${start.lat};${end.lng},${end.lat}?overview=false&alternatives=true`);
+      const data = await response.json();
+      
+      if (data.code === 'Ok' && data.routes) {
+        const routes = data.routes.map(r => ({
+          distance: (r.distance / 1000).toFixed(1), // meters to km
+          duration: (r.duration / 60).toFixed(0), // seconds to minutes
+          name: r.legs[0]?.summary || 'Route'
+        }));
+        
+        setRouteOptions(routes);
+        setSelectedRouteIndex(0);
+        
+        // Auto select first route's distance
+        if (routes.length > 0) {
+          setNewTrip(prev => ({ ...prev, distance: routes[0].distance }));
+        }
+      } else {
+        // Fallback to Haversine
+        const dist = getDistanceFromLatLonInKm(start.lat, start.lng, end.lat, end.lng);
+        setRouteOptions([]);
+        setNewTrip(prev => ({ ...prev, distance: dist.toFixed(1) }));
+      }
+    } catch (error) {
+      console.error("Error fetching routes:", error);
+      // Fallback to Haversine
+      const dist = getDistanceFromLatLonInKm(start.lat, start.lng, end.lat, end.lng);
+      setRouteOptions([]);
+      setNewTrip(prev => ({ ...prev, distance: dist.toFixed(1) }));
+    }
+  };
+
   // Auto-calculate distance when map locations change
   useEffect(() => {
     if (newTrip.pickupMode === 'map' && newTrip.dropoffMode === 'map' &&
         newTrip.pickupLocation.lat && newTrip.dropoffLocation.lat) {
-      const dist = getDistanceFromLatLonInKm(
-        newTrip.pickupLocation.lat, newTrip.pickupLocation.lng,
-        newTrip.dropoffLocation.lat, newTrip.dropoffLocation.lng
-      );
-      setNewTrip(prev => ({ ...prev, distance: dist.toFixed(1) }));
+      
+      fetchRoutes(newTrip.pickupLocation, newTrip.dropoffLocation);
     }
   }, [newTrip.pickupLocation, newTrip.dropoffLocation, newTrip.pickupMode, newTrip.dropoffMode]);
 
@@ -473,24 +523,35 @@ const TripManagement = () => {
                   <MapContainer 
                     center={[newTrip.pickupLocation.lat || 47.9188, newTrip.pickupLocation.lng || 106.9176]} 
                     zoom={13} 
+                    scrollWheelZoom={false}
                     style={{ height: '100%', width: '100%' }}
                   >
                     <TileLayer
-                      attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
-                      url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+                      attribution='&copy; <a href="https://www.google.com/intl/mn/help/terms_maps.html">Google Maps</a>'
+                      url="http://mt0.google.com/vt/lyrs=m&hl=mn&x={x}&y={y}&z={z}"
                     />
                     <LocationPicker 
                       position={newTrip.pickupLocation} 
-                      onLocationSelect={(latlng) => {
-                        setNewTrip({
-                          ...newTrip, 
+                      onLocationSelect={async (latlng) => {
+                        setNewTrip(prev => ({
+                          ...prev, 
                           pickupLocation: {
-                            ...newTrip.pickupLocation,
+                            ...prev.pickupLocation,
                             lat: latlng.lat,
                             lng: latlng.lng,
-                            address: `Map (${latlng.lat.toFixed(4)}, ${latlng.lng.toFixed(4)})`
+                            address: "Хаяг уншиж байна..."
                           }
-                        });
+                        }));
+                        const address = await fetchAddress(latlng.lat, latlng.lng);
+                        setNewTrip(prev => ({
+                          ...prev, 
+                          pickupLocation: {
+                            ...prev.pickupLocation,
+                            lat: latlng.lat,
+                            lng: latlng.lng,
+                            address: address
+                          }
+                        }));
                       }} 
                     />
                   </MapContainer>
@@ -538,24 +599,35 @@ const TripManagement = () => {
                   <MapContainer 
                     center={[newTrip.dropoffLocation.lat || 47.90, newTrip.dropoffLocation.lng || 106.90]} 
                     zoom={13} 
+                    scrollWheelZoom={false}
                     style={{ height: '100%', width: '100%' }}
                   >
                     <TileLayer
-                      attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
-                      url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+                      attribution='&copy; <a href="https://www.google.com/intl/mn/help/terms_maps.html">Google Maps</a>'
+                      url="http://mt0.google.com/vt/lyrs=m&hl=mn&x={x}&y={y}&z={z}"
                     />
                     <LocationPicker 
                       position={newTrip.dropoffLocation} 
-                      onLocationSelect={(latlng) => {
-                        setNewTrip({
-                          ...newTrip, 
+                      onLocationSelect={async (latlng) => {
+                        setNewTrip(prev => ({
+                          ...prev, 
                           dropoffLocation: {
-                            ...newTrip.dropoffLocation,
+                            ...prev.dropoffLocation,
                             lat: latlng.lat,
                             lng: latlng.lng,
-                            address: `Map (${latlng.lat.toFixed(4)}, ${latlng.lng.toFixed(4)})`
+                            address: "Хаяг уншиж байна..."
                           }
-                        });
+                        }));
+                        const address = await fetchAddress(latlng.lat, latlng.lng);
+                        setNewTrip(prev => ({
+                          ...prev, 
+                          dropoffLocation: {
+                            ...prev.dropoffLocation,
+                            lat: latlng.lat,
+                            lng: latlng.lng,
+                            address: address
+                          }
+                        }));
                       }} 
                     />
                   </MapContainer>
@@ -564,6 +636,31 @@ const TripManagement = () => {
             </div>
 
             <div className="grid grid-cols-2 gap-4">
+              {routeOptions.length > 0 && (
+                <div className="col-span-2 mb-2">
+                  <Label className="mb-2 block">Зам сонгох (Driving Route)</Label>
+                  <div className="flex gap-2 flex-wrap">
+                    {routeOptions.map((route, index) => (
+                      <div 
+                        key={index}
+                        className={cn(
+                          "border rounded-lg p-3 cursor-pointer transition-all flex flex-col items-center min-w-[100px]",
+                          selectedRouteIndex === index ? "border-primary bg-primary/10 ring-2 ring-primary ring-offset-2" : "hover:bg-muted"
+                        )}
+                        onClick={() => {
+                          setSelectedRouteIndex(index);
+                          setNewTrip(prev => ({...prev, distance: route.distance}));
+                        }}
+                      >
+                        <span className="font-bold text-lg">{route.distance} км</span>
+                        <span className="text-xs text-muted-foreground">{route.duration} мин</span>
+                        {route.name && <span className="text-[10px] text-muted-foreground mt-1 max-w-[100px] truncate">{route.name}</span>}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
               <div className="grid gap-2">
                 <Label htmlFor="distance">Зай (км)</Label>
                 <Input 

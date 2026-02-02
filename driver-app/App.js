@@ -3,13 +3,14 @@ import { NavigationContainer } from '@react-navigation/native';
 import { createStackNavigator } from '@react-navigation/stack';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { StatusBar } from 'expo-status-bar';
-import { Home, DollarSign, User, HelpCircle } from 'lucide-react-native';
+import { Home, DollarSign, User, HelpCircle, LayoutGrid } from 'lucide-react-native';
 import { theme } from './src/constants/theme';
 import { API_URL } from './src/config';
 
 import LoginScreen from './src/screens/LoginScreen';
 import RegisterScreen from './src/screens/RegisterScreen';
 import HomeScreen from './src/screens/HomeScreen';
+import ServicesScreen from './src/screens/ServicesScreen';
 import EarningsScreen from './src/screens/EarningsScreen';
 import ActiveJobScreen from './src/screens/ActiveJobScreen';
 import ProfileSettingsScreen from './src/screens/ProfileSettingsScreen';
@@ -94,6 +95,13 @@ function MainTabs({ route }) {
         initialParams={{ driverId, driverName }}
         options={{
           tabBarIcon: ({ focused, size }) => <TabIcon icon={Home} focused={focused} size={size} />,
+        }}
+      />
+      <Tab.Screen 
+        name="Services" 
+        component={ServicesScreen} 
+        options={{
+          tabBarIcon: ({ focused, size }) => <TabIcon icon={LayoutGrid} focused={focused} size={size} />,
         }}
       />
       <Tab.Screen 

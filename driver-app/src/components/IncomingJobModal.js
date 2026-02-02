@@ -11,8 +11,15 @@ export const IncomingJobModal = ({ visible, job, onAccept, onDecline, userLocati
   const slideAnim = useState(new Animated.Value(100))[0];
 
   useEffect(() => {
-    if (visible) {
-      setTimeLeft(30);
+    if (visible && job) {
+      // Calculate remaining time based on creation time (5 mins = 300s)
+      const created = job.createdAt ? new Date(job.createdAt).getTime() : Date.now();
+      const now = Date.now();
+      const elapsedSeconds = Math.floor((now - created) / 1000);
+      const initialTimeLeft = Math.max(0, 300 - elapsedSeconds);
+
+      setTimeLeft(initialTimeLeft);
+      
       Animated.parallel([
         Animated.timing(fadeAnim, {
           toValue: 1,
@@ -41,7 +48,7 @@ export const IncomingJobModal = ({ visible, job, onAccept, onDecline, userLocati
       fadeAnim.setValue(0);
       slideAnim.setValue(100);
     }
-  }, [visible]);
+  }, [visible, job]);
 
   if (!job) return null;
 

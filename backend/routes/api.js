@@ -231,6 +231,19 @@ router.post('/driver/:id/status', async (req, res) => {
     const io = req.app.get('io');
     io.emit('driverStatusUpdated', { driverId: req.params.id, isOnline });
     
+    // Sync pending trips if going online
+    if (isOnline) {
+      const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000);
+      const pendingTrips = await Trip.find({ 
+        status: 'pending', 
+        createdAt: { $gt: fiveMinutesAgo } 
+      });
+      
+      pendingTrips.forEach(trip => {
+         io.to(`driver_${req.params.id}`).emit('newJobRequest', trip);
+      });
+    }
+
     res.json(driver);
   } catch (err) {
     res.status(500).json({ error: err.message });
