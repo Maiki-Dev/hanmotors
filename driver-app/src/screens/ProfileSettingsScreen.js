@@ -86,8 +86,12 @@ export default function ProfileSettingsScreen({ navigation, route }) {
                 </Text>
               </View>
             )}
-            <TouchableOpacity style={styles.cameraButton}>
-              <Camera size={20} color={theme.colors.black} />
+            <TouchableOpacity style={styles.cameraButton} onPress={handleImagePick} disabled={uploading}>
+              {uploading ? (
+                <ActivityIndicator size="small" color={theme.colors.black} />
+              ) : (
+                <Camera size={20} color={theme.colors.black} />
+              )}
             </TouchableOpacity>
           </View>
         </View>

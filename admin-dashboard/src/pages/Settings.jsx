@@ -8,9 +8,17 @@ import { Avatar, AvatarFallback, AvatarImage } from "../components/ui/avatar";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "../components/ui/tabs";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "../components/ui/table";
 import { Badge } from "../components/ui/badge";
-import { Bell, Lock, User, Mail, Save, ShieldCheck, CheckCircle, XCircle } from 'lucide-react';
+import { Bell, Lock, User, Mail, Save, ShieldCheck, CheckCircle, XCircle, Edit, Camera } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { supabase } from '../lib/supabase';
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogFooter,
+} from "../components/ui/dialog";
 
 const Settings = () => {
   const { user, profile: authProfile, refreshProfile } = useAuth();
@@ -20,8 +28,12 @@ const Settings = () => {
   const [profile, setProfile] = useState({
     name: '',
     email: '',
-    role: ''
+    role: '',
+    avatar_url: ''
   });
+  
+  const [uploading, setUploading] = useState(false);
+  const fileInputRef = React.useRef(null);
   
   // Password State
   const [password, setPassword] = useState({
@@ -32,6 +44,14 @@ const Settings = () => {
   // Admin Users State
   const [adminUsers, setAdminUsers] = useState([]);
   const [loadingUsers, setLoadingUsers] = useState(false);
+
+  // Edit User Modal State
+  const [isEditOpen, setIsEditOpen] = useState(false);
+  const [editingUser, setEditingUser] = useState(null);
+  const [editForm, setEditForm] = useState({
+    role: 'editor',
+    status: 'pending'
+  });
 
   useEffect(() => {
     if (authProfile) {
@@ -63,6 +83,42 @@ const Settings = () => {
       console.error("Error fetching users:", error);
     } finally {
       setLoadingUsers(false);
+    }
+  };
+
+  const handleAvatarClick = () => {
+    fileInputRef.current?.click();
+  };
+
+  const handleAvatarUpload = async (event) => {
+    try {
+      setUploading(true);
+      if (!event.target.files || event.target.files.length === 0) {
+        throw new Error('You must select an image to upload.');
+      }
+
+      const file = event.target.files[0];
+      
+      // Upload to Cloudinary
+      const publicUrl = await uploadToCloudinary(file);
+
+      // Update profile in DB
+      const { error: updateError } = await supabase
+        .from('admin_users')
+        .update({ avatar_url: publicUrl })
+        .eq('id', user.id);
+
+      if (updateError) throw updateError;
+      
+      // Update local state and context
+      setProfile({ ...profile, avatar_url: publicUrl });
+      refreshProfile();
+      alert('Зураг амжилттай шинэчлэгдлээ!');
+      
+    } catch (error) {
+      alert('Error uploading avatar: ' + error.message);
+    } finally {
+      setUploading(false);
     }
   };
 
@@ -128,6 +184,43 @@ const Settings = () => {
     }
   };
 
+  const openEditModal = (user) => {
+    setEditingUser(user);
+    setEditForm({
+      role: user.role || 'editor',
+      status: user.status || 'pending'
+    });
+    setIsEditOpen(true);
+  };
+
+  const handleEditFormChange = (e) => {
+    setEditForm({ ...editForm, [e.target.name]: e.target.value });
+  };
+
+  const handleSaveUserChanges = async () => {
+    if (!editingUser) return;
+    
+    try {
+      const { error } = await supabase
+        .from('admin_users')
+        .update({ 
+          role: editForm.role,
+          status: editForm.status
+        })
+        .eq('id', editingUser.id);
+
+      if (error) throw error;
+      
+      alert('Хэрэглэгчийн мэдээлэл шинэчлэгдлээ!');
+      setIsEditOpen(false);
+      fetchAdminUsers();
+    } catch (error) {
+      alert('Алдаа: ' + error.message);
+    }
+  };
+
+  const isSuperAdmin = profile.role === 'super_admin';
+
   return (
     <div className="space-y-6">
       <div>
@@ -137,7 +230,7 @@ const Settings = () => {
         </p>
       </div>
 
-      <Tabs defaultValue="profile" className="w-full">
+      <Tabs className="w-full">
         <TabsList>
           <TabsTrigger isActive={activeTab === 'profile'} onClick={() => setActiveTab('profile')}>
             <User className="w-4 h-4 mr-2" /> Хувийн мэдээлэл
@@ -151,17 +244,33 @@ const Settings = () => {
           <Card>
             <CardHeader>
               <div className="flex items-center gap-4">
-                  <Avatar className="h-16 w-16 border-2 border-primary/20">
-                      <AvatarImage src="/placeholder-user.jpg" />
-                      <AvatarFallback className="bg-primary text-primary-foreground text-xl">
-                        {profile.name?.substring(0,2).toUpperCase() || 'AD'}
-                      </AvatarFallback>
-                  </Avatar>
+                  <div className="relative group cursor-pointer" onClick={handleAvatarClick}>
+                    <Avatar className="h-16 w-16 border-2 border-primary/20 group-hover:opacity-75 transition-opacity">
+                        <AvatarImage src={profile.avatar_url || "/placeholder-user.jpg"} />
+                        <AvatarFallback className="bg-primary text-primary-foreground text-xl">
+                          {profile.name?.substring(0,2).toUpperCase() || 'AD'}
+                        </AvatarFallback>
+                    </Avatar>
+                    <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity rounded-full bg-black/20">
+                        <Camera className="h-6 w-6 text-white drop-shadow-md" />
+                    </div>
+                    <input
+                        type="file"
+                        ref={fileInputRef}
+                        onChange={handleAvatarUpload}
+                        className="hidden"
+                        accept="image/*"
+                        disabled={uploading}
+                    />
+                  </div>
                   <div>
                       <CardTitle>Хувийн мэдээлэл</CardTitle>
                       <CardDescription>
                           Таны нэр болон и-мэйл хаяг
                       </CardDescription>
+                      <Badge variant="outline" className="mt-2 capitalize">
+                        {profile?.role === 'super_admin' ? 'Super Admin' : 'Admin / Editor'}
+                      </Badge>
                   </div>
               </div>
             </CardHeader>
@@ -266,7 +375,7 @@ const Settings = () => {
                       <TableHead>Үүрэг</TableHead>
                       <TableHead>Төлөв</TableHead>
                       <TableHead>Огноо</TableHead>
-                      <TableHead className="text-right">Үйлдэл</TableHead>
+                      {isSuperAdmin && <TableHead className="text-right">Үйлдэл</TableHead>}
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -274,40 +383,53 @@ const Settings = () => {
                       <TableRow key={u.id}>
                         <TableCell className="font-medium">{u.full_name || '-'}</TableCell>
                         <TableCell>{u.email}</TableCell>
-                        <TableCell>{u.role}</TableCell>
+                        <TableCell>
+                          <Badge variant="secondary" className="capitalize">
+                            {u.role === 'super_admin' ? 'Super Admin' : 'Admin'}
+                          </Badge>
+                        </TableCell>
                         <TableCell>{getStatusBadge(u.status)}</TableCell>
                         <TableCell>{new Date(u.created_at).toLocaleDateString()}</TableCell>
-                        <TableCell className="text-right">
-                          <div className="flex justify-end gap-2">
-                            {u.status === 'pending' && (
-                              <Button 
-                                size="sm" 
-                                className="bg-green-600 hover:bg-green-700"
-                                onClick={() => updateUserStatus(u.id, 'approved')}
-                              >
-                                <CheckCircle className="h-4 w-4 mr-1" /> Зөвшөөрөх
-                              </Button>
-                            )}
-                            {u.status === 'approved' && u.id !== user.id && (
-                              <Button 
-                                size="sm" 
-                                variant="destructive"
-                                onClick={() => updateUserStatus(u.id, 'suspended')}
-                              >
-                                <XCircle className="h-4 w-4 mr-1" /> Цуцлах
-                              </Button>
-                            )}
-                            {u.status === 'suspended' && (
+                        {isSuperAdmin && (
+                          <TableCell className="text-right">
+                            <div className="flex justify-end gap-2">
                               <Button 
                                 size="sm" 
                                 variant="outline"
-                                onClick={() => updateUserStatus(u.id, 'approved')}
+                                onClick={() => openEditModal(u)}
                               >
-                                Сэргээх
+                                <Edit className="h-4 w-4 mr-1" /> Засах
                               </Button>
-                            )}
-                          </div>
-                        </TableCell>
+                              {u.status === 'pending' && (
+                                <Button 
+                                  size="sm" 
+                                  className="bg-green-600 hover:bg-green-700"
+                                  onClick={() => updateUserStatus(u.id, 'approved')}
+                                >
+                                  <CheckCircle className="h-4 w-4 mr-1" /> Зөвшөөрөх
+                                </Button>
+                              )}
+                              {u.status === 'approved' && u.role !== 'super_admin' && (
+                                <Button 
+                                  size="sm" 
+                                  variant="destructive"
+                                  onClick={() => updateUserStatus(u.id, 'suspended')}
+                                >
+                                  <XCircle className="h-4 w-4 mr-1" /> Түдгэлзүүлэх
+                                </Button>
+                              )}
+                               {u.status === 'suspended' && (
+                                <Button 
+                                  size="sm" 
+                                  className="bg-green-600 hover:bg-green-700"
+                                  onClick={() => updateUserStatus(u.id, 'approved')}
+                                >
+                                  <CheckCircle className="h-4 w-4 mr-1" /> Сэргээх
+                                </Button>
+                              )}
+                            </div>
+                          </TableCell>
+                        )}
                       </TableRow>
                     ))}
                   </TableBody>
@@ -317,6 +439,60 @@ const Settings = () => {
           </Card>
         </TabsContent>
       </Tabs>
+
+      {/* Edit User Dialog */}
+      <Dialog open={isEditOpen} onOpenChange={setIsEditOpen}>
+        <DialogContent className="sm:max-w-[425px]">
+          <DialogHeader>
+            <DialogTitle>Хэрэглэгчийн мэдээлэл засах</DialogTitle>
+            <DialogDescription>
+              Хэрэглэгчийн эрх болон төлөвийг өөрчлөх.
+            </DialogDescription>
+          </DialogHeader>
+          {editingUser && (
+            <div className="grid gap-4 py-4">
+              <div className="grid gap-2">
+                <Label>Нэр</Label>
+                <Input value={editingUser.full_name || ''} disabled className="bg-muted" />
+              </div>
+              <div className="grid gap-2">
+                <Label>Имэйл</Label>
+                <Input value={editingUser.email || ''} disabled className="bg-muted" />
+              </div>
+              <div className="grid gap-2">
+                <Label htmlFor="role">Эрх (Role)</Label>
+                <select
+                  id="role"
+                  name="role"
+                  value={editForm.role}
+                  onChange={handleEditFormChange}
+                  className="flex h-10 w-full items-center justify-between rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  <option value="editor">Admin (Editor)</option>
+                  <option value="super_admin">Super Admin</option>
+                </select>
+              </div>
+              <div className="grid gap-2">
+                <Label htmlFor="status">Төлөв (Status)</Label>
+                <select
+                  id="status"
+                  name="status"
+                  value={editForm.status}
+                  onChange={handleEditFormChange}
+                  className="flex h-10 w-full items-center justify-between rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  <option value="pending">Хүлээгдэж буй (Pending)</option>
+                  <option value="approved">Баталгаажсан (Approved)</option>
+                  <option value="suspended">Түдгэлзүүлсэн (Suspended)</option>
+                </select>
+              </div>
+            </div>
+          )}
+          <DialogFooter>
+            <Button type="submit" onClick={handleSaveUserChanges}>Хадгалах</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };
