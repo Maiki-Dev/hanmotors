@@ -71,6 +71,7 @@ export default function HomeScreen({ navigation, route }) {
   };
 
   const [incomingRequest, setIncomingRequest] = useState(null);
+  const [otherDrivers, setOtherDrivers] = useState({}); // Stores locations of other drivers
   const socketRef = useRef(null);
   const isOnlineRef = useRef(isOnline);
   const mapRef = useRef(null);
@@ -247,6 +248,19 @@ export default function HomeScreen({ navigation, route }) {
       socketRef.current.emit('driverJoin', driverId);
     }
 
+    // Listen for other drivers
+    socketRef.current.on('allDriverLocations', (locations) => {
+      setOtherDrivers(locations);
+    });
+
+    socketRef.current.on('driverLocationUpdated', ({ driverId: updatedDriverId, location }) => {
+      if (updatedDriverId === driverId) return; // Ignore self
+      setOtherDrivers(prev => ({
+        ...prev,
+        [updatedDriverId]: location
+      }));
+    });
+
     socketRef.current.on('walletUpdated', ({ balance }) => {
       setWalletBalance(balance);
     });
@@ -417,6 +431,32 @@ export default function HomeScreen({ navigation, route }) {
              style={styles.carMarker}
            />
         </Marker>
+
+        {/* Other Drivers Markers */}
+        {Object.entries(otherDrivers).map(([id, loc]) => {
+          if (!loc || !loc.lat || !loc.lng) return null;
+          return (
+            <Marker
+              key={id}
+              coordinate={{ latitude: loc.lat, longitude: loc.lng }}
+              title="Жолооч"
+              description="Идэвхтэй"
+            >
+              <View style={{
+                backgroundColor: '#22c55e',
+                width: 24,
+                height: 24,
+                borderRadius: 12,
+                borderWidth: 2,
+                borderColor: 'white',
+                alignItems: 'center',
+                justifyContent: 'center'
+              }}>
+                <Car size={14} color="white" />
+              </View>
+            </Marker>
+          );
+        })}
       </MapView>
 
       {/* Top Status Bar */}

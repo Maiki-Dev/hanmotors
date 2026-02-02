@@ -24,6 +24,16 @@ let DefaultIcon = L.icon({
 });
 L.Marker.prototype.options.icon = DefaultIcon;
 
+// Define Car Icon for Live Map
+const carIcon = L.divIcon({
+  html: `<div style="background-color: #22c55e; width: 30px; height: 30px; border-radius: 50%; display: flex; align-items: center; justify-content: center; border: 2px solid white; box-shadow: 0 2px 4px rgba(0,0,0,0.3);">
+           <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 17h2c.6 0 1-.4 1-1v-3c0-.9-.7-1.7-1.5-1.9C18.7 10.6 16 10 16 10s-1.3-1.4-2.2-2.3c-.5-.4-1.1-.7-1.8-.7H5c-.6 0-1.1.4-1.4.9l-1.4 2.9A3.7 3.7 0 0 0 2 12v4c0 .6.4 1 1 1h2"/><circle cx="7" cy="17" r="2"/><path d="M9 17h6"/><circle cx="17" cy="17" r="2"/></svg>
+         </div>`,
+  className: '',
+  iconSize: [30, 30],
+  iconAnchor: [15, 15]
+});
+
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -80,11 +90,25 @@ const TripManagement = () => {
   const [activeTab, setActiveTab] = useState("pending");
   const [trips, setTrips] = useState([]);
   const [drivers, setDrivers] = useState([]);
+  const [activeDrivers, setActiveDrivers] = useState({});
   const [vehicleTypes, setVehicleTypes] = useState([]);
   const [loading, setLoading] = useState(true);
   
   // Socket Listeners
   useEffect(() => {
+    socket.emit('adminJoin'); // Ensure we join admin room
+
+    socket.on('allDriverLocations', (locations) => {
+      setActiveDrivers(locations);
+    });
+
+    socket.on('driverLocationUpdated', ({ driverId, location }) => {
+      setActiveDrivers(prev => ({
+        ...prev,
+        [driverId]: location
+      }));
+    });
+
     socket.on('newJobRequest', (newTrip) => {
       setTrips(prev => {
         if (prev.find(t => t._id === newTrip._id)) return prev;
@@ -260,8 +284,8 @@ const TripManagement = () => {
         serviceType: newTrip.serviceType,
         vehicleModel: newTrip.vehicleModel,
         hasDamage: newTrip.hasDamage === 'true' || newTrip.hasDamage === true,
-        // You might want to add customer info to Trip model if needed, 
-        // currently using simplified model
+        customerName: newTrip.customerName,
+        customerPhone: newTrip.customerPhone,
       };
       
       await api.post('/trip/request', payload);
@@ -392,10 +416,41 @@ const TripManagement = () => {
           <TabsTrigger isActive={activeTab === 'active'} onClick={() => setActiveTab('active')}>Идэвхтэй</TabsTrigger>
           <TabsTrigger isActive={activeTab === 'completed'} onClick={() => setActiveTab('completed')}>Дууссан</TabsTrigger>
           <TabsTrigger isActive={activeTab === 'cancelled'} onClick={() => setActiveTab('cancelled')}>Цуцлагдсан</TabsTrigger>
+          <TabsTrigger isActive={activeTab === 'live_map'} onClick={() => setActiveTab('live_map')}>Газрын зураг (Live)</TabsTrigger>
         </TabsList>
 
-        <TabsContent isActive={true} className="mt-4">
-          <Card>
+        {activeTab === 'live_map' ? (
+          <div className="mt-4 h-[600px] w-full rounded-md border overflow-hidden relative z-0 shadow-sm bg-white">
+            <MapContainer 
+              center={[47.9188, 106.9176]} 
+              zoom={12} 
+              style={{ height: '100%', width: '100%' }}
+            >
+              <TileLayer
+                attribution='&copy; <a href="https://www.google.com/intl/mn/help/terms_maps.html">Google Maps</a>'
+                url="http://mt0.google.com/vt/lyrs=m&hl=mn&x={x}&y={y}&z={z}"
+              />
+              {Object.entries(activeDrivers).map(([driverId, location]) => (
+                location && location.lat && (
+                  <Marker 
+                    key={driverId} 
+                    position={[location.lat, location.lng]} 
+                    icon={carIcon}
+                  />
+                )
+              ))}
+            </MapContainer>
+            <div className="absolute top-4 right-4 z-[1000] bg-white p-2 rounded shadow-md border text-xs">
+              <div className="font-semibold mb-1">Тайлбар</div>
+              <div className="flex items-center gap-2">
+                <div className="w-3 h-3 rounded-full bg-green-500 border border-white shadow-sm"></div>
+                <span>Жолооч ({Object.keys(activeDrivers).length})</span>
+              </div>
+            </div>
+          </div>
+        ) : (
+          <TabsContent isActive={true} className="mt-4">
+            <Card>
             <CardHeader>
               <CardTitle>Дуудлагын жагсаалт</CardTitle>
             </CardHeader>
@@ -488,6 +543,7 @@ const TripManagement = () => {
             </CardContent>
           </Card>
         </TabsContent>
+        )}
       </Tabs>
 
       {/* Create Trip Dialog */}
@@ -497,81 +553,111 @@ const TripManagement = () => {
             <DialogTitle>Шинэ дуудлага бүртгэх</DialogTitle>
           </DialogHeader>
           <div className="grid gap-4 py-4">
-            <div className="grid gap-2">
-              <div className="flex items-center justify-between">
-                <Label htmlFor="pickup">Авах хаяг</Label>
-                <div className="flex items-center rounded-lg border bg-muted p-1 h-8">
-                  <button 
-                    className={cn(
-                      "flex items-center gap-2 rounded-md px-2 py-1 text-xs font-medium ring-offset-background transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
-                      newTrip.pickupMode === 'text' ? "bg-background text-foreground shadow-sm" : "text-muted-foreground hover:bg-background/50 hover:text-foreground"
-                    )}
-                    onClick={() => setNewTrip({...newTrip, pickupMode: 'text'})}
-                  >
-                    <Type className="h-3 w-3" /> Бичих
-                  </button>
-                  <button 
-                    className={cn(
-                      "flex items-center gap-2 rounded-md px-2 py-1 text-xs font-medium ring-offset-background transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
-                      newTrip.pickupMode === 'map' ? "bg-background text-foreground shadow-sm" : "text-muted-foreground hover:bg-background/50 hover:text-foreground"
-                    )}
-                    onClick={() => setNewTrip({...newTrip, pickupMode: 'map'})}
-                  >
-                    <MapIcon className="h-3 w-3" /> Газрын зураг
-                  </button>
-                </div>
+            {/* Customer & Pickup Section */}
+            <div className="rounded-lg border p-4 bg-muted/20 space-y-4">
+              <h3 className="font-semibold text-sm flex items-center gap-2 text-primary">
+                <MapPin className="h-4 w-4" /> Үйлчлүүлэгчийн авах цэг
+              </h3>
+              
+              <div className="grid grid-cols-2 gap-4">
+                 <div className="grid gap-2">
+                   <Label htmlFor="customerName" className="text-xs">Нэр</Label>
+                   <Input 
+                      id="customerName" 
+                      placeholder="Нэр" 
+                      value={newTrip.customerName}
+                      onChange={(e) => setNewTrip({...newTrip, customerName: e.target.value})}
+                      className="h-8"
+                   />
+                 </div>
+                 <div className="grid gap-2">
+                   <Label htmlFor="customerPhone" className="text-xs">Утас</Label>
+                   <Input 
+                      id="customerPhone" 
+                      placeholder="Утас" 
+                      value={newTrip.customerPhone}
+                      onChange={(e) => setNewTrip({...newTrip, customerPhone: e.target.value})}
+                      className="h-8"
+                   />
+                 </div>
               </div>
-              {newTrip.pickupMode === 'text' ? (
-                <div className="relative">
-                  <MapPin className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-                  <Input 
-                    id="pickup"
-                    value={newTrip.pickupLocation.address}
-                    onChange={(e) => setNewTrip({...newTrip, pickupLocation: {...newTrip.pickupLocation, address: e.target.value}})}
-                    placeholder="Сүхбаатар талбай"
-                    className="pl-9"
-                  />
+
+              <div className="grid gap-2">
+                <div className="flex items-center justify-between">
+                  <Label htmlFor="pickup" className="text-xs">Хаяг байршил</Label>
+                  <div className="flex items-center rounded-lg border bg-muted p-1 h-7">
+                    <button 
+                      className={cn(
+                        "flex items-center gap-2 rounded-md px-2 py-0.5 text-[10px] font-medium ring-offset-background transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
+                        newTrip.pickupMode === 'text' ? "bg-background text-foreground shadow-sm" : "text-muted-foreground hover:bg-background/50 hover:text-foreground"
+                      )}
+                      onClick={() => setNewTrip({...newTrip, pickupMode: 'text'})}
+                    >
+                      <Type className="h-3 w-3" /> Бичих
+                    </button>
+                    <button 
+                      className={cn(
+                        "flex items-center gap-2 rounded-md px-2 py-0.5 text-[10px] font-medium ring-offset-background transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
+                        newTrip.pickupMode === 'map' ? "bg-background text-foreground shadow-sm" : "text-muted-foreground hover:bg-background/50 hover:text-foreground"
+                      )}
+                      onClick={() => setNewTrip({...newTrip, pickupMode: 'map'})}
+                    >
+                      <MapIcon className="h-3 w-3" /> Газрын зураг
+                    </button>
+                  </div>
                 </div>
-              ) : (
-                <div className="h-64 w-full rounded-md border overflow-hidden relative z-0">
-                  <MapContainer 
-                    center={[newTrip.pickupLocation.lat || 47.9188, newTrip.pickupLocation.lng || 106.9176]} 
-                    zoom={13} 
-                    scrollWheelZoom={false}
-                    style={{ height: '100%', width: '100%' }}
-                  >
-                    <TileLayer
-                      attribution='&copy; <a href="https://www.google.com/intl/mn/help/terms_maps.html">Google Maps</a>'
-                      url="http://mt0.google.com/vt/lyrs=m&hl=mn&x={x}&y={y}&z={z}"
+                {newTrip.pickupMode === 'text' ? (
+                  <div className="relative">
+                    <MapPin className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+                    <Input 
+                      id="pickup"
+                      value={newTrip.pickupLocation.address}
+                      onChange={(e) => setNewTrip({...newTrip, pickupLocation: {...newTrip.pickupLocation, address: e.target.value}})}
+                      placeholder="Сүхбаатар талбай"
+                      className="pl-9"
                     />
-                    <RouteVisualizer coordinates={routeOptions[selectedRouteIndex]?.coordinates} />
-                    <LocationPicker 
-                      position={newTrip.pickupLocation} 
-                      onLocationSelect={async (latlng) => {
-                        setNewTrip(prev => ({
-                          ...prev, 
-                          pickupLocation: {
-                            ...prev.pickupLocation,
-                            lat: latlng.lat,
-                            lng: latlng.lng,
-                            address: "Хаяг уншиж байна..."
-                          }
-                        }));
-                        const address = await fetchAddress(latlng.lat, latlng.lng);
-                        setNewTrip(prev => ({
-                          ...prev, 
-                          pickupLocation: {
-                            ...prev.pickupLocation,
-                            lat: latlng.lat,
-                            lng: latlng.lng,
-                            address: address
-                          }
-                        }));
-                      }} 
-                    />
-                  </MapContainer>
-                </div>
-              )}
+                  </div>
+                ) : (
+                  <div className="h-64 w-full rounded-md border overflow-hidden relative z-0">
+                    <MapContainer 
+                      center={[newTrip.pickupLocation.lat || 47.9188, newTrip.pickupLocation.lng || 106.9176]} 
+                      zoom={13} 
+                      scrollWheelZoom={false}
+                      style={{ height: '100%', width: '100%' }}
+                    >
+                      <TileLayer
+                        attribution='&copy; <a href="https://www.google.com/intl/mn/help/terms_maps.html">Google Maps</a>'
+                        url="http://mt0.google.com/vt/lyrs=m&hl=mn&x={x}&y={y}&z={z}"
+                      />
+                      <RouteVisualizer coordinates={routeOptions[selectedRouteIndex]?.coordinates} />
+                      <LocationPicker 
+                        position={newTrip.pickupLocation} 
+                        onLocationSelect={async (latlng) => {
+                          setNewTrip(prev => ({
+                            ...prev, 
+                            pickupLocation: {
+                              ...prev.pickupLocation,
+                              lat: latlng.lat,
+                              lng: latlng.lng,
+                              address: "Хаяг уншиж байна..."
+                            }
+                          }));
+                          const address = await fetchAddress(latlng.lat, latlng.lng);
+                          setNewTrip(prev => ({
+                            ...prev, 
+                            pickupLocation: {
+                              ...prev.pickupLocation,
+                              lat: latlng.lat,
+                              lng: latlng.lng,
+                              address: address
+                            }
+                          }));
+                        }} 
+                      />
+                    </MapContainer>
+                  </div>
+                )}
+              </div>
             </div>
 
             <div className="grid gap-2">

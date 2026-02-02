@@ -1,11 +1,11 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Alert, ActivityIndicator, Linking, Platform } from 'react-native';
-import MapView, { Marker, PROVIDER_GOOGLE } from 'react-native-maps';
-import MapViewDirections from 'react-native-maps-directions';
+import MapView, { Marker, Polyline, PROVIDER_GOOGLE } from 'react-native-maps';
+// import MapViewDirections from 'react-native-maps-directions';
 import { io } from 'socket.io-client';
 import { Navigation, Phone, MessageCircle } from 'lucide-react-native';
 import * as Location from 'expo-location';
-import { API_URL, GOOGLE_MAPS_APIKEY } from '../config';
+import { API_URL } from '../config';
 import { theme } from '../constants/theme';
 import { GoldButton } from '../components/GoldButton';
 import { PremiumCard } from '../components/PremiumCard';
@@ -42,6 +42,7 @@ export default function ActiveJobScreen({ route, navigation }) {
   const [loading, setLoading] = useState(false);
   const [userLocation, setUserLocation] = useState(null);
   const [tripStats, setTripStats] = useState({ duration: 0, distance: 0 });
+  const [routeCoordinates, setRouteCoordinates] = useState([]);
   const mapRef = useRef(null);
   const statusRef = useRef(status);
   const lastLocRef = useRef(null);
@@ -89,11 +90,41 @@ export default function ActiveJobScreen({ route, navigation }) {
     return R * c;
   };
 
+  const fetchRoute = async (start, end) => {
+    if (!start || !end) return;
+    try {
+      // Using OSRM for routing (Open Source Routing Machine) - Free
+      const response = await fetch(`https://router.project-osrm.org/route/v1/driving/${start.longitude},${start.latitude};${end.longitude},${end.latitude}?overview=full&geometries=geojson`);
+      const data = await response.json();
+      
+      if (data.code === 'Ok' && data.routes && data.routes.length > 0) {
+        const coords = data.routes[0].geometry.coordinates.map(c => ({
+          latitude: c[1],
+          longitude: c[0]
+        }));
+        setRouteCoordinates(coords);
+      }
+    } catch (error) {
+      console.error("Error fetching route:", error);
+    }
+  };
+
   // Target location (Pickup or Dropoff)
   const targetLocation = {
     latitude: status === 'pickup' ? (job?.pickupLocation?.lat || 47.9188) : (job?.dropoffLocation?.lat || 47.9188),
     longitude: status === 'pickup' ? (job?.pickupLocation?.lng || 106.9176) : (job?.dropoffLocation?.lng || 106.9176),
   };
+
+  // Fetch route when locations change
+  useEffect(() => {
+    if (userLocation && targetLocation) {
+      // Simple throttle: only fetch if significant change or first time? 
+      // For now, let's just fetch. OSRM is fast.
+      // But to avoid too many requests during driving, maybe check distance?
+      // Or rely on the fact that userLocation updates every 2s.
+      fetchRoute(userLocation, targetLocation);
+    }
+  }, [userLocation?.latitude, userLocation?.longitude, targetLocation.latitude, targetLocation.longitude]);
 
   useEffect(() => {
     (async () => {
@@ -260,21 +291,11 @@ export default function ActiveJobScreen({ route, navigation }) {
           description={status === 'pickup' ? job?.pickupLocation?.address : job?.dropoffLocation?.address}
         />
         
-        {userLocation && (
-          <MapViewDirections
-            origin={{ latitude: userLocation.latitude, longitude: userLocation.longitude }}
-            destination={targetLocation}
-            apikey={GOOGLE_MAPS_APIKEY}
+        {userLocation && routeCoordinates.length > 0 && (
+          <Polyline
+            coordinates={routeCoordinates}
             strokeWidth={4}
             strokeColor={theme.colors.primary}
-            optimizeWaypoints={true}
-            onReady={result => {
-              console.log(`Route found: ${result.distance} km, ${result.duration} min`);
-            }}
-            onError={(errorMessage) => {
-              // Fail silently or log
-              console.log('Directions Error:', errorMessage);
-            }}
           />
         )}
       </MapView>

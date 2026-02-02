@@ -12,11 +12,11 @@ export const IncomingJobModal = ({ visible, job, onAccept, onDecline, userLocati
 
   useEffect(() => {
     if (visible && job) {
-      // Calculate remaining time based on creation time (5 mins = 300s)
+      // Calculate remaining time based on creation time (2 mins = 120s)
       const created = job.createdAt ? new Date(job.createdAt).getTime() : Date.now();
       const now = Date.now();
       const elapsedSeconds = Math.floor((now - created) / 1000);
-      const initialTimeLeft = Math.max(0, 300 - elapsedSeconds);
+      const initialTimeLeft = Math.max(0, 120 - elapsedSeconds);
 
       setTimeLeft(initialTimeLeft);
       

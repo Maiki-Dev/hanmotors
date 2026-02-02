@@ -22,6 +22,8 @@ const TripSchema = new mongoose.Schema({
   vehicleModel: String,
   distance: Number,
   hasDamage: { type: Boolean, default: false },
+  customerName: String,
+  customerPhone: String,
   startTime: Date,
   endTime: Date,
   createdAt: { type: Date, default: Date.now }

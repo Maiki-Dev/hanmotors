@@ -233,10 +233,10 @@ router.post('/driver/:id/status', async (req, res) => {
     
     // Sync pending trips if going online
     if (isOnline) {
-      const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000);
+      const twoMinutesAgo = new Date(Date.now() - 2 * 60 * 1000);
       const pendingTrips = await Trip.find({ 
         status: 'pending', 
-        createdAt: { $gt: fiveMinutesAgo } 
+        createdAt: { $gt: twoMinutesAgo } 
       });
       
       pendingTrips.forEach(trip => {

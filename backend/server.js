@@ -44,21 +44,45 @@ connectDB();
 const apiRoutes = require('./routes/api');
 app.use('/api', apiRoutes);
 
+// In-memory driver locations store
+const driverLocations = {};
+
 io.on('connection', (socket) => {
   console.log('🔌 New client connected:', socket.id);
   
   socket.on('driverJoin', (driverId) => {
     socket.join(`driver_${driverId}`);
+    socket.join('drivers_room');
     console.log(`Driver ${driverId} joined room`);
+    // Send all current driver locations to the joining driver
+    socket.emit('allDriverLocations', driverLocations);
   });
 
   socket.on('adminJoin', () => {
     socket.join('admin_room');
     console.log('Admin joined room');
+    // Send all current driver locations to the new admin
+    socket.emit('allDriverLocations', driverLocations);
   });
 
   socket.on('driverLocationUpdated', (data) => {
-    io.to('admin_room').emit('driverLocationUpdated', data);
+    // Update store
+    driverLocations[data.driverId] = data.location;
+    // Broadcast to admin and other drivers
+    io.to('admin_room').to('drivers_room').emit('driverLocationUpdated', data);
+  });
+
+  socket.on('driverStatusUpdate', (data) => {
+    // data = { driverId, isOnline }
+    if (!data.isOnline) {
+      // Remove from location store if offline
+      delete driverLocations[data.driverId];
+      // Broadcast location removal (send null)
+      io.to('admin_room').to('drivers_room').emit('driverLocationUpdated', {
+        driverId: data.driverId,
+        location: null
+      });
+    }
   });
 
   socket.on('requestAssigned', (data) => {
