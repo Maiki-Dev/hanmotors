@@ -47,10 +47,31 @@ export default function ActiveJobScreen({ route, navigation }) {
   const statusRef = useRef(status);
   const lastLocRef = useRef(null);
   const socketRef = useRef(null);
+  const [isMapReady, setIsMapReady] = useState(false);
 
   useEffect(() => {
     statusRef.current = status;
+    // Fit map when status changes
+    if (userLocation && targetLocation && mapRef.current) {
+        setTimeout(() => fitMapToRoute(), 500);
+    }
   }, [status]);
+
+  // Fit map to show both user and target
+  const fitMapToRoute = () => {
+    if (!userLocation || !targetLocation || !mapRef.current) return;
+
+    const markers = [
+      { latitude: userLocation.latitude, longitude: userLocation.longitude },
+      { latitude: targetLocation.latitude, longitude: targetLocation.longitude }
+    ];
+
+    mapRef.current.fitToCoordinates(markers, {
+      edgePadding: { top: 100, right: 50, bottom: 350, left: 50 }, // Bottom padding for sheet
+      animated: true,
+    });
+  };
+
 
   // Socket connection
   useEffect(() => {
@@ -282,14 +303,18 @@ export default function ActiveJobScreen({ route, navigation }) {
         provider={PROVIDER_GOOGLE}
         style={styles.map} 
         customMapStyle={darkMapStyle}
-        region={userLocation || {
+        initialRegion={{
           latitude: 47.9188,
           longitude: 106.9176,
           latitudeDelta: 0.01,
           longitudeDelta: 0.01,
         }}
         showsUserLocation={true}
-        followsUserLocation={true}
+        followsUserLocation={false} // Disabled to prevent fighting with fitToCoordinates
+        onMapReady={() => {
+            setIsMapReady(true);
+            fitMapToRoute();
+        }}
       >
         {userLocation && (
           <Marker 

@@ -8,7 +8,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 import { Input } from "../components/ui/input";
 import { Label } from "../components/ui/label";
 import { Eye, MapPin, Plus, Car, Pencil, Trash2, MoreHorizontal, Type, Map as MapIcon } from 'lucide-react';
-import { MapContainer, TileLayer, Marker, useMapEvents, Polyline, useMap } from 'react-leaflet';
+import { MapContainer, TileLayer, Marker, useMapEvents, Polyline, useMap, Popup } from 'react-leaflet';
 import 'leaflet/dist/leaflet.css';
 import L from 'leaflet';
 

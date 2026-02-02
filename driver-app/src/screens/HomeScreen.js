@@ -51,10 +51,7 @@ export default function HomeScreen({ navigation, route }) {
     taxi: false
   });
 
-  const [driverLocation, setDriverLocation] = useState({
-    latitude: 47.9188,
-    longitude: 106.9176,
-  });
+  const [driverLocation, setDriverLocation] = useState(null);
   const [mapRegion, setMapRegion] = useState({
     latitude: 47.9188,
     longitude: 106.9176,
@@ -78,18 +75,31 @@ export default function HomeScreen({ navigation, route }) {
   const mapRef = useRef(null);
   const [mapMode, setMapMode] = useState('dark'); // Default to dark
   const [showsTraffic, setShowsTraffic] = useState(false);
+  const [isMapReady, setIsMapReady] = useState(false);
+
+  // Initial Map Centering Effect
+  useEffect(() => {
+    if (isMapReady && driverLocation && isFollowingRef.current && mapRef.current) {
+        mapRef.current.animateCamera({
+            center: { latitude: driverLocation.latitude, longitude: driverLocation.longitude },
+            zoom: 17,
+            heading: 0,
+            pitch: 0,
+        }, { duration: 1000 });
+    }
+  }, [isMapReady]); // Only trigger when map becomes ready (catches "Location Early, Map Late" case)
 
   const handleCenterLocation = async () => {
     updateFollowing(true);
     
     // 1. Try to use current state location
     if (mapRef.current && driverLocation) {
-      const newRegion = {
-        ...driverLocation,
-        latitudeDelta: 0.005,
-        longitudeDelta: 0.005,
-      };
-      mapRef.current.animateToRegion(newRegion, 1000);
+      mapRef.current.animateCamera({
+        center: { latitude: driverLocation.latitude, longitude: driverLocation.longitude },
+        zoom: 17,
+        heading: 0,
+        pitch: 0,
+      }, { duration: 1000 });
     }
 
     // 2. Double check with actual location (in case state is stale)
@@ -100,12 +110,12 @@ export default function HomeScreen({ navigation, route }) {
         // Update state silently
         setDriverLocation({ latitude, longitude });
         
-        mapRef.current.animateToRegion({
-          latitude,
-          longitude,
-          latitudeDelta: 0.005,
-          longitudeDelta: 0.005,
-        }, 1000);
+        mapRef.current.animateCamera({
+            center: { latitude, longitude },
+            zoom: 17,
+            heading: 0,
+            pitch: 0,
+        }, { duration: 1000 });
       }
     } catch (e) {
       console.log('Center location error:', e);
@@ -179,7 +189,16 @@ export default function HomeScreen({ navigation, route }) {
     let locationSubscription = null;
 
     (async () => {
-      // Remove duplicate permission request here
+      // Check if location services are enabled
+      const enabled = await Location.hasServicesEnabledAsync();
+      if (!enabled) {
+        Alert.alert(
+          'Байршил унтраалттай байна', 
+          'Жолоочийн горимд ажиллахын тулд та утасны байршлаа асаана уу.',
+          [{ text: 'OK' }]
+        );
+      }
+
       // Request Notification Permissions
       const { status: existingStatus } = await Notifications.getPermissionsAsync();
       let finalStatus = existingStatus;
@@ -222,12 +241,12 @@ export default function HomeScreen({ navigation, route }) {
           setDriverLocation({ latitude, longitude });
           
           if (isFollowingRef.current && mapRef.current) {
-            mapRef.current.animateToRegion({
-              latitude,
-              longitude,
-              latitudeDelta: 0.01,
-              longitudeDelta: 0.01,
-            }, 1000);
+            mapRef.current.animateCamera({
+                center: { latitude, longitude },
+                zoom: 17,
+                heading: 0,
+                pitch: 0,
+            }, { duration: 1000 });
           }
         }
       } catch (e) {
@@ -247,12 +266,12 @@ export default function HomeScreen({ navigation, route }) {
         });
         
         if (isFollowingRef.current && mapRef.current) {
-          mapRef.current.animateToRegion({
-            latitude: initLat,
-            longitude: initLng,
-            latitudeDelta: 0.005,
-            longitudeDelta: 0.005,
-          }, 1000);
+            mapRef.current.animateCamera({
+                center: { latitude: initLat, longitude: initLng },
+                zoom: 17,
+                heading: 0,
+                pitch: 0,
+            }, { duration: 1000 });
         }
       } catch (error) {
         console.log('Error getting current position:', error);
@@ -274,7 +293,8 @@ export default function HomeScreen({ navigation, route }) {
           // Smoothly follow user if tracking is enabled
           if (isFollowingRef.current && mapRef.current) {
              mapRef.current.animateCamera({ 
-               center: { latitude, longitude } 
+               center: { latitude, longitude },
+               zoom: 17
              }, { duration: 1000 });
           }
 
@@ -383,6 +403,21 @@ export default function HomeScreen({ navigation, route }) {
         // Emit socket event for immediate update
         if (socketRef.current) {
           socketRef.current.emit('driverStatusUpdate', { driverId, isOnline });
+          
+          // Broadcast location immediately when going online so Admin sees us instantly
+          if (isOnline && driverLocation) {
+            const vehicle = driverInfoRef.current?.vehicle || {};
+            socketRef.current.emit('driverLocationUpdated', {
+              driverId,
+              location: { 
+                lat: driverLocation.latitude, 
+                lng: driverLocation.longitude,
+                plateNumber: vehicle.plateNumber,
+                vehicleModel: vehicle.model,
+                vehicleColor: vehicle.color
+              }
+            });
+          }
         }
       } catch (error) {
         console.error('Failed to update status:', error);
@@ -478,12 +513,13 @@ export default function HomeScreen({ navigation, route }) {
         style={styles.map}
         initialRegion={mapRegion}
         onPanDrag={() => updateFollowing(false)}
+        onMapReady={() => setIsMapReady(true)}
         // onTouchStart={() => updateFollowing(false)} // This might be too sensitive
         // onRegionChangeStart={() => updateFollowing(false)} // Removed to prevent conflict with animateToRegion
         mapType={mapMode === 'hybrid' ? "hybrid" : "standard"}
         customMapStyle={mapMode === 'dark' ? darkMapStyle : []}
         showsUserLocation={true} // Enabled for better UX/Debugging
-        followsUserLocation={isFollowing} // Native following
+        followsUserLocation={false} // Disable native following to avoid conflict with animateCamera
         userInterfaceStyle={mapMode === 'dark' ? "dark" : "light"}
         showsBuildings={true}
         showsPointsOfInterest={true}
@@ -491,12 +527,14 @@ export default function HomeScreen({ navigation, route }) {
         showsTraffic={showsTraffic}
       >
         {/* Custom Car Marker (Showing car icon for driver) */}
-        <Marker coordinate={driverLocation} anchor={{ x: 0.5, y: 0.5 }}>
-           <Image 
-             source={require('../../assets/car_icon.png')} 
-             style={styles.carMarker}
-           />
-        </Marker>
+        {driverLocation && (
+          <Marker coordinate={driverLocation} anchor={{ x: 0.5, y: 0.5 }}>
+             <Image 
+               source={require('../../assets/car_icon.png')} 
+               style={styles.carMarker}
+             />
+          </Marker>
+        )}
 
         {/* Other Drivers Markers */}
         {Object.entries(otherDrivers).map(([id, loc]) => {

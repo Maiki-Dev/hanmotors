@@ -69,13 +69,13 @@ io.on('connection', (socket) => {
   });
 
   socket.on('driverLocationUpdated', (data) => {
-    // STRICT CHECK: Only allow location updates if driver is ONLINE
-    if (driverStatus[data.driverId]) {
-      // Update store
-      driverLocations[data.driverId] = data.location;
-      // Broadcast to admin and other drivers
-      io.to('admin_room').to('drivers_room').emit('driverLocationUpdated', data);
-    }
+    // Update store (Client side handles isOnline check)
+    driverLocations[data.driverId] = data.location;
+    // Mark as online implicitly since they are sending updates
+    driverStatus[data.driverId] = true;
+    
+    // Broadcast to admin and other drivers
+    io.to('admin_room').to('drivers_room').emit('driverLocationUpdated', data);
   });
 
   socket.on('driverStatusUpdate', (data) => {

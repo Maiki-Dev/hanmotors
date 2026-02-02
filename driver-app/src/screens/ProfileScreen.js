@@ -11,6 +11,7 @@ export default function ProfileScreen({ navigation, route }) {
   const [driverName, setDriverName] = useState(route.params?.driverName || 'Partner');
   const [walletBalance, setWalletBalance] = useState(0);
   const [profilePhoto, setProfilePhoto] = useState(null);
+  const [isOnline, setIsOnline] = useState(false);
 
   const fetchDriverInfo = async () => {
     if (!driverId || driverId === 'Unknown') return;
@@ -21,6 +22,7 @@ export default function ProfileScreen({ navigation, route }) {
         const data = await response.json();
         setDriverName(data.name || 'Partner');
         setProfilePhoto(data.profilePhoto);
+        setIsOnline(data.isOnline || false);
         // If wallet data is included in driver object
         if (data.wallet) {
           setWalletBalance(data.wallet.balance || 0);
@@ -223,6 +225,10 @@ const styles = StyleSheet.create({
     backgroundColor: theme.colors.success,
     borderWidth: 3,
     borderColor: theme.colors.background,
+  },
+  onlineBadgeHidden: {
+    backgroundColor: theme.colors.textSecondary, // Or make it invisible: opacity: 0
+    display: 'none',
   },
   driverName: {
     ...theme.typography.h2,
