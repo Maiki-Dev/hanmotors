@@ -46,6 +46,8 @@ app.use('/api', apiRoutes);
 
 // In-memory driver locations store
 const driverLocations = {};
+const socketToDriver = {}; // Map socket.id -> driverId
+const driverStatus = {}; // Map driverId -> isOnline
 
 io.on('connection', (socket) => {
   console.log('🔌 New client connected:', socket.id);
@@ -53,6 +55,7 @@ io.on('connection', (socket) => {
   socket.on('driverJoin', (driverId) => {
     socket.join(`driver_${driverId}`);
     socket.join('drivers_room');
+    socketToDriver[socket.id] = driverId; // Track socket
     console.log(`Driver ${driverId} joined room`);
     // Send all current driver locations to the joining driver
     socket.emit('allDriverLocations', driverLocations);
@@ -66,14 +69,19 @@ io.on('connection', (socket) => {
   });
 
   socket.on('driverLocationUpdated', (data) => {
-    // Update store
-    driverLocations[data.driverId] = data.location;
-    // Broadcast to admin and other drivers
-    io.to('admin_room').to('drivers_room').emit('driverLocationUpdated', data);
+    // STRICT CHECK: Only allow location updates if driver is ONLINE
+    if (driverStatus[data.driverId]) {
+      // Update store
+      driverLocations[data.driverId] = data.location;
+      // Broadcast to admin and other drivers
+      io.to('admin_room').to('drivers_room').emit('driverLocationUpdated', data);
+    }
   });
 
   socket.on('driverStatusUpdate', (data) => {
     // data = { driverId, isOnline }
+    driverStatus[data.driverId] = data.isOnline; // Track status
+    
     if (!data.isOnline) {
       // Remove from location store if offline
       delete driverLocations[data.driverId];
@@ -103,6 +111,26 @@ io.on('connection', (socket) => {
 
   socket.on('disconnect', () => {
     console.log('Client disconnected:', socket.id);
+    const driverId = socketToDriver[socket.id];
+    if (driverId) {
+      console.log(`Driver ${driverId} disconnected (Socket closed)`);
+      // Remove from location store
+      delete driverLocations[driverId];
+      delete socketToDriver[socket.id];
+      delete driverStatus[driverId]; // Clean up status
+      
+      // Broadcast location removal
+      io.to('admin_room').to('drivers_room').emit('driverLocationUpdated', {
+        driverId: driverId,
+        location: null
+      });
+      
+      // Update isOnline status in DB to false (Optional, but good for consistency)
+      // Using require inside to avoid circular deps if any
+      const Driver = require('./models/Driver');
+      Driver.findByIdAndUpdate(driverId, { isOnline: false }).catch(err => console.error(err));
+      io.emit('driverStatusUpdated', { driverId, isOnline: false });
+    }
   });
 });
 

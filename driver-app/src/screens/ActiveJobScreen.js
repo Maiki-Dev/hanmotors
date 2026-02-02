@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Alert, ActivityIndicator, Linking, Platform } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Alert, ActivityIndicator, Linking, Platform, Image } from 'react-native';
 import MapView, { Marker, Polyline, PROVIDER_GOOGLE } from 'react-native-maps';
 // import MapViewDirections from 'react-native-maps-directions';
 import { io } from 'socket.io-client';
@@ -33,7 +33,7 @@ const darkMapStyle = [
 ];
 
 export default function ActiveJobScreen({ route, navigation }) {
-  const { job: paramJob, trip: paramTrip, driverId } = route.params || {};
+  const { job: paramJob, trip: paramTrip, driverId, driverInfo } = route.params || {};
   const job = paramJob || paramTrip;
 
   const [status, setStatus] = useState(
@@ -143,12 +143,12 @@ export default function ActiveJobScreen({ route, navigation }) {
         longitudeDelta: 0.01,
       });
 
-      // Watch location
+      // Watch location with High Accuracy (Uber Standard: 1-2s interval, 5m filter)
       const subscription = await Location.watchPositionAsync(
         {
-          accuracy: Location.Accuracy.High,
-          timeInterval: 2000,
-          distanceInterval: 5,
+          accuracy: Location.Accuracy.BestForNavigation,
+          timeInterval: 1000, // 1 second
+          distanceInterval: 5, // 5 meters
         },
         (loc) => {
            setUserLocation({
@@ -160,9 +160,16 @@ export default function ActiveJobScreen({ route, navigation }) {
 
           // Emit location update
           if (socketRef.current && driverId) {
+            const vehicle = driverInfo?.vehicle || {};
             socketRef.current.emit('driverLocationUpdated', {
               driverId,
-              location: { lat: loc.coords.latitude, lng: loc.coords.longitude }
+              location: { 
+                lat: loc.coords.latitude, 
+                lng: loc.coords.longitude,
+                plateNumber: vehicle.plateNumber,
+                vehicleModel: vehicle.model,
+                vehicleColor: vehicle.color
+              }
             });
           }
 
@@ -284,6 +291,18 @@ export default function ActiveJobScreen({ route, navigation }) {
         showsUserLocation={true}
         followsUserLocation={true}
       >
+        {userLocation && (
+          <Marker 
+            coordinate={userLocation} 
+            anchor={{ x: 0.5, y: 0.5 }}
+          >
+             <Image 
+               source={require('../../assets/car_icon.png')} 
+               style={{ width: 40, height: 40, resizeMode: 'contain' }}
+             />
+          </Marker>
+        )}
+
         <Marker 
           coordinate={targetLocation} 
           pinColor={theme.colors.primary}

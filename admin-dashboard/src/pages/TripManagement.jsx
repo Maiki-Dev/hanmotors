@@ -25,13 +25,11 @@ let DefaultIcon = L.icon({
 L.Marker.prototype.options.icon = DefaultIcon;
 
 // Define Car Icon for Live Map
-const carIcon = L.divIcon({
-  html: `<div style="background-color: #22c55e; width: 30px; height: 30px; border-radius: 50%; display: flex; align-items: center; justify-content: center; border: 2px solid white; box-shadow: 0 2px 4px rgba(0,0,0,0.3);">
-           <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 17h2c.6 0 1-.4 1-1v-3c0-.9-.7-1.7-1.5-1.9C18.7 10.6 16 10 16 10s-1.3-1.4-2.2-2.3c-.5-.4-1.1-.7-1.8-.7H5c-.6 0-1.1.4-1.4.9l-1.4 2.9A3.7 3.7 0 0 0 2 12v4c0 .6.4 1 1 1h2"/><circle cx="7" cy="17" r="2"/><path d="M9 17h6"/><circle cx="17" cy="17" r="2"/></svg>
-         </div>`,
-  className: '',
-  iconSize: [30, 30],
-  iconAnchor: [15, 15]
+const carIcon = L.icon({
+  iconUrl: '/car_icon.png',
+  iconSize: [40, 40],
+  iconAnchor: [20, 20],
+  popupAnchor: [0, -20]
 });
 
 import {
@@ -436,7 +434,23 @@ const TripManagement = () => {
                     key={driverId} 
                     position={[location.lat, location.lng]} 
                     icon={carIcon}
-                  />
+                  >
+                    <Popup>
+                      <div className="text-xs min-w-[120px]">
+                        <div className="font-bold border-b pb-1 mb-1">Машин мэдээлэл</div>
+                        <div className="grid grid-cols-[60px_1fr] gap-1">
+                          <span className="text-gray-500">Дугаар:</span>
+                          <span className="font-medium">{location.plateNumber || '-'}</span>
+                          
+                          <span className="text-gray-500">Загвар:</span>
+                          <span className="font-medium">{location.vehicleModel || '-'}</span>
+                          
+                          <span className="text-gray-500">Өнгө:</span>
+                          <span className="font-medium">{location.vehicleColor || '-'}</span>
+                        </div>
+                      </div>
+                    </Popup>
+                  </Marker>
                 )
               ))}
             </MapContainer>

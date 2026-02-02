@@ -74,20 +74,41 @@ export default function HomeScreen({ navigation, route }) {
   const [otherDrivers, setOtherDrivers] = useState({}); // Stores locations of other drivers
   const socketRef = useRef(null);
   const isOnlineRef = useRef(isOnline);
+  const driverInfoRef = useRef(null); // Store driver info for socket
   const mapRef = useRef(null);
   const [mapMode, setMapMode] = useState('dark'); // Default to dark
   const [showsTraffic, setShowsTraffic] = useState(false);
 
-  const handleCenterLocation = () => {
+  const handleCenterLocation = async () => {
     updateFollowing(true);
+    
+    // 1. Try to use current state location
     if (mapRef.current && driverLocation) {
       const newRegion = {
         ...driverLocation,
-        latitudeDelta: 0.005, // Zoom in closer
+        latitudeDelta: 0.005,
         longitudeDelta: 0.005,
       };
-      // setMapRegion(newRegion); // Removed to prevent state loop
       mapRef.current.animateToRegion(newRegion, 1000);
+    }
+
+    // 2. Double check with actual location (in case state is stale)
+    try {
+      const location = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
+      if (location && mapRef.current) {
+        const { latitude, longitude } = location.coords;
+        // Update state silently
+        setDriverLocation({ latitude, longitude });
+        
+        mapRef.current.animateToRegion({
+          latitude,
+          longitude,
+          latitudeDelta: 0.005,
+          longitudeDelta: 0.005,
+        }, 1000);
+      }
+    } catch (e) {
+      console.log('Center location error:', e);
     }
   };
 
@@ -117,6 +138,7 @@ export default function HomeScreen({ navigation, route }) {
         if (response.ok) {
           const data = await response.json();
           setWalletBalance(data.wallet?.balance || 0);
+          driverInfoRef.current = data; // Store info
         }
       } catch (error) {
         console.error('Failed to fetch driver data:', error);
@@ -157,13 +179,7 @@ export default function HomeScreen({ navigation, route }) {
     let locationSubscription = null;
 
     (async () => {
-      // Request Location Permissions
-      let { status } = await Location.requestForegroundPermissionsAsync();
-      if (status !== 'granted') {
-        Alert.alert('Permission to access location was denied');
-        return;
-      }
-
+      // Remove duplicate permission request here
       // Request Notification Permissions
       const { status: existingStatus } = await Notifications.getPermissionsAsync();
       let finalStatus = existingStatus;
@@ -186,31 +202,69 @@ export default function HomeScreen({ navigation, route }) {
         });
       }
 
-      // Initial location
-      let currentLocation = await Location.getCurrentPositionAsync({});
-      const { latitude: initLat, longitude: initLng } = currentLocation.coords;
-      
-      setDriverLocation({
-        latitude: initLat,
-        longitude: initLng,
-      });
-      
-      // Only center map if we are following (and user hasn't moved away while loading)
-      if (isFollowingRef.current && mapRef.current) {
-        mapRef.current.animateToRegion({
-          latitude: initLat,
-          longitude: initLng,
-          latitudeDelta: 0.0922,
-          longitudeDelta: 0.0421,
-        }, 1000);
+      // Request Location Permissions (Foreground & Background)
+      const { status: fgStatus } = await Location.requestForegroundPermissionsAsync();
+      if (fgStatus !== 'granted') {
+        Alert.alert('Permission denied', 'Location permission is required.');
+        return;
       }
 
-      // Watch location
+      const { status: bgStatus } = await Location.requestBackgroundPermissionsAsync();
+      if (bgStatus !== 'granted') {
+        console.log('Background location permission not granted');
+      }
+
+      // 1. Try to get last known position first (Fastest)
+      try {
+        let lastKnown = await Location.getLastKnownPositionAsync({});
+        if (lastKnown) {
+          const { latitude, longitude } = lastKnown.coords;
+          setDriverLocation({ latitude, longitude });
+          
+          if (isFollowingRef.current && mapRef.current) {
+            mapRef.current.animateToRegion({
+              latitude,
+              longitude,
+              latitudeDelta: 0.01,
+              longitudeDelta: 0.01,
+            }, 1000);
+          }
+        }
+      } catch (e) {
+        console.log('Error getting last known location:', e);
+      }
+
+      // 2. Get current position (More accurate but might be slow)
+      try {
+        let currentLocation = await Location.getCurrentPositionAsync({
+          accuracy: Location.Accuracy.Balanced, // Balanced is faster than High/Best
+        });
+        const { latitude: initLat, longitude: initLng } = currentLocation.coords;
+        
+        setDriverLocation({
+          latitude: initLat,
+          longitude: initLng,
+        });
+        
+        if (isFollowingRef.current && mapRef.current) {
+          mapRef.current.animateToRegion({
+            latitude: initLat,
+            longitude: initLng,
+            latitudeDelta: 0.005,
+            longitudeDelta: 0.005,
+          }, 1000);
+        }
+      } catch (error) {
+        console.log('Error getting current position:', error);
+        // Don't return, continue to watchPosition
+      }
+
+      // 3. Watch location (Uber Standard-ish for idle/cruising)
       locationSubscription = await Location.watchPositionAsync(
         {
-          accuracy: Location.Accuracy.High,
-          timeInterval: 5000,
-          distanceInterval: 10,
+          accuracy: Location.Accuracy.BestForNavigation,
+          timeInterval: 2000, // 2 seconds
+          distanceInterval: 10, // 10 meters
         },
         (newLocation) => {
           const { latitude, longitude } = newLocation.coords;
@@ -225,9 +279,16 @@ export default function HomeScreen({ navigation, route }) {
           }
 
           if (isOnline && socketRef.current && driverId) {
+            const vehicle = driverInfoRef.current?.vehicle || {};
             socketRef.current.emit('driverLocationUpdated', {
               driverId,
-              location: { lat: latitude, lng: longitude }
+              location: { 
+                lat: latitude, 
+                lng: longitude,
+                plateNumber: vehicle.plateNumber,
+                vehicleModel: vehicle.model,
+                vehicleColor: vehicle.color
+              }
             });
           }
         }
@@ -376,7 +437,11 @@ export default function HomeScreen({ navigation, route }) {
       if (response.ok) {
         const updatedTrip = await response.json();
         setIncomingRequest(null);
-        navigation.navigate('ActiveJob', { trip: updatedTrip, driverId });
+        navigation.navigate('ActiveJob', { 
+          trip: updatedTrip, 
+          driverId,
+          driverInfo: driverInfoRef.current 
+        });
       } else {
         const errorData = await response.json();
         Alert.alert('Алдаа', errorData.message || 'Захиалга авахад алдаа гарлаа');
@@ -413,18 +478,19 @@ export default function HomeScreen({ navigation, route }) {
         style={styles.map}
         initialRegion={mapRegion}
         onPanDrag={() => updateFollowing(false)}
-        onTouchStart={() => updateFollowing(false)}
-        onRegionChangeStart={() => updateFollowing(false)}
+        // onTouchStart={() => updateFollowing(false)} // This might be too sensitive
+        // onRegionChangeStart={() => updateFollowing(false)} // Removed to prevent conflict with animateToRegion
         mapType={mapMode === 'hybrid' ? "hybrid" : "standard"}
         customMapStyle={mapMode === 'dark' ? darkMapStyle : []}
-        showsUserLocation={false} // Disable default blue dot to show custom marker
+        showsUserLocation={true} // Enabled for better UX/Debugging
+        followsUserLocation={isFollowing} // Native following
         userInterfaceStyle={mapMode === 'dark' ? "dark" : "light"}
         showsBuildings={true}
         showsPointsOfInterest={true}
         showsIndoors={true}
         showsTraffic={showsTraffic}
       >
-        {/* Custom Car Marker */}
+        {/* Custom Car Marker (Showing car icon for driver) */}
         <Marker coordinate={driverLocation} anchor={{ x: 0.5, y: 0.5 }}>
            <Image 
              source={require('../../assets/car_icon.png')} 
@@ -441,19 +507,12 @@ export default function HomeScreen({ navigation, route }) {
               coordinate={{ latitude: loc.lat, longitude: loc.lng }}
               title="Жолооч"
               description="Идэвхтэй"
+              anchor={{ x: 0.5, y: 0.5 }}
             >
-              <View style={{
-                backgroundColor: '#22c55e',
-                width: 24,
-                height: 24,
-                borderRadius: 12,
-                borderWidth: 2,
-                borderColor: 'white',
-                alignItems: 'center',
-                justifyContent: 'center'
-              }}>
-                <Car size={14} color="white" />
-              </View>
+              <Image 
+                source={require('../../assets/car_icon.png')} 
+                style={styles.carMarker}
+              />
             </Marker>
           );
         })}
