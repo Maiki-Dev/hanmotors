@@ -8,7 +8,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 import { Input } from "../components/ui/input";
 import { Label } from "../components/ui/label";
 import { Eye, MapPin, Plus, Car, Pencil, Trash2, MoreHorizontal, Type, Map as MapIcon } from 'lucide-react';
-import { MapContainer, TileLayer, Marker, useMapEvents } from 'react-leaflet';
+import { MapContainer, TileLayer, Marker, useMapEvents, Polyline, useMap } from 'react-leaflet';
 import 'leaflet/dist/leaflet.css';
 import L from 'leaflet';
 
@@ -61,6 +61,19 @@ const fetchAddress = async (lat, lng) => {
     });
 
     return position && position.lat ? <Marker position={position} /> : null;
+  };
+
+  const RouteVisualizer = ({ coordinates }) => {
+    const map = useMap();
+  
+    useEffect(() => {
+      if (coordinates && coordinates.length > 0) {
+        const bounds = L.latLngBounds(coordinates);
+        map.fitBounds(bounds, { padding: [50, 50] });
+      }
+    }, [coordinates, map]);
+  
+    return coordinates ? <Polyline positions={coordinates} color="#2563eb" weight={5} opacity={0.7} /> : null;
   };
 
 const TripManagement = () => {
@@ -144,14 +157,15 @@ const TripManagement = () => {
   const fetchRoutes = async (start, end) => {
     try {
       // Using OSRM for routing (Open Source Routing Machine) - Free and accurate for driving
-      const response = await fetch(`https://router.project-osrm.org/route/v1/driving/${start.lng},${start.lat};${end.lng},${end.lat}?overview=false&alternatives=true`);
+      const response = await fetch(`https://router.project-osrm.org/route/v1/driving/${start.lng},${start.lat};${end.lng},${end.lat}?overview=full&geometries=geojson&alternatives=true`);
       const data = await response.json();
       
       if (data.code === 'Ok' && data.routes) {
         const routes = data.routes.map(r => ({
           distance: (r.distance / 1000).toFixed(1), // meters to km
           duration: (r.duration / 60).toFixed(0), // seconds to minutes
-          name: r.legs[0]?.summary || 'Route'
+          name: r.legs[0]?.summary || 'Route',
+          coordinates: r.geometry.coordinates.map(coord => [coord[1], coord[0]]) // Swap [lng, lat] to [lat, lng]
         }));
         
         setRouteOptions(routes);
@@ -530,6 +544,7 @@ const TripManagement = () => {
                       attribution='&copy; <a href="https://www.google.com/intl/mn/help/terms_maps.html">Google Maps</a>'
                       url="http://mt0.google.com/vt/lyrs=m&hl=mn&x={x}&y={y}&z={z}"
                     />
+                    <RouteVisualizer coordinates={routeOptions[selectedRouteIndex]?.coordinates} />
                     <LocationPicker 
                       position={newTrip.pickupLocation} 
                       onLocationSelect={async (latlng) => {
@@ -606,6 +621,7 @@ const TripManagement = () => {
                       attribution='&copy; <a href="https://www.google.com/intl/mn/help/terms_maps.html">Google Maps</a>'
                       url="http://mt0.google.com/vt/lyrs=m&hl=mn&x={x}&y={y}&z={z}"
                     />
+                    <RouteVisualizer coordinates={routeOptions[selectedRouteIndex]?.coordinates} />
                     <LocationPicker 
                       position={newTrip.dropoffLocation} 
                       onLocationSelect={async (latlng) => {
