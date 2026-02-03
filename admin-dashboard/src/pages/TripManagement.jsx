@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from "../components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "../components/ui/table";
 import { Badge } from "../components/ui/badge";
+import { Checkbox } from "../components/ui/checkbox";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "../components/ui/tabs";
 import { Button } from "../components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "../components/ui/dialog";
@@ -150,7 +151,9 @@ const TripManagement = () => {
     pickupMode: 'text',
     dropoffMode: 'text',
     customerName: '',
-    customerPhone: ''
+    customerPhone: '',
+    distance: '',
+    additionalServices: []
   });
 
   // Edit Trip State
@@ -429,51 +432,6 @@ const TripManagement = () => {
         </Button>
       </div>
 
-      <div className="h-[400px] w-full rounded-md border overflow-hidden relative z-0 shadow-sm bg-white mb-6">
-        <MapContainer 
-          center={[47.9188, 106.9176]} 
-          zoom={12} 
-          style={{ height: '100%', width: '100%' }}
-        >
-          <TileLayer
-            attribution='&copy; <a href="https://www.google.com/intl/mn/help/terms_maps.html">Google Maps</a>'
-            url="http://mt0.google.com/vt/lyrs=m&hl=mn&x={x}&y={y}&z={z}"
-          />
-          {Object.entries(activeDrivers).map(([driverId, location]) => (
-            location && location.lat && (
-              <Marker 
-                key={driverId} 
-                position={[location.lat, location.lng]} 
-                icon={carIcon}
-              >
-                <Popup>
-                  <div className="text-xs min-w-[120px]">
-                    <div className="font-bold border-b pb-1 mb-1">Машин мэдээлэл</div>
-                    <div className="grid grid-cols-[60px_1fr] gap-1">
-                      <span className="text-gray-500">Дугаар:</span>
-                      <span className="font-medium">{location.plateNumber || '-'}</span>
-                      
-                      <span className="text-gray-500">Загвар:</span>
-                      <span className="font-medium">{location.vehicleModel || '-'}</span>
-                      
-                      <span className="text-gray-500">Өнгө:</span>
-                      <span className="font-medium">{location.vehicleColor || '-'}</span>
-                    </div>
-                  </div>
-                </Popup>
-              </Marker>
-            )
-          ))}
-        </MapContainer>
-        <div className="absolute top-4 right-4 z-[1000] bg-white p-2 rounded shadow-md border text-xs">
-          <div className="font-semibold mb-1">Тайлбар</div>
-          <div className="flex items-center gap-2">
-            <div className="w-3 h-3 rounded-full bg-green-500 border border-white shadow-sm"></div>
-            <span>Жолооч ({Object.keys(activeDrivers).length})</span>
-          </div>
-        </div>
-      </div>
-
       <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
         <TabsList>
           <TabsTrigger value="pending">Хүлээгдэж буй</TabsTrigger>
@@ -577,6 +535,51 @@ const TripManagement = () => {
           </Card>
         </div>
       </Tabs>
+
+      <div className="h-[400px] w-full rounded-md border overflow-hidden relative z-0 shadow-sm bg-white mb-6">
+        <MapContainer 
+          center={[47.9188, 106.9176]} 
+          zoom={12} 
+          style={{ height: '100%', width: '100%' }}
+        >
+          <TileLayer
+            attribution='&copy; <a href="https://www.google.com/intl/mn/help/terms_maps.html">Google Maps</a>'
+            url="http://mt0.google.com/vt/lyrs=m&hl=mn&x={x}&y={y}&z={z}"
+          />
+          {Object.entries(activeDrivers).map(([driverId, location]) => (
+            location && location.lat && (
+              <Marker 
+                key={driverId} 
+                position={[location.lat, location.lng]} 
+                icon={carIcon}
+              >
+                <Popup>
+                  <div className="text-xs min-w-[120px]">
+                    <div className="font-bold border-b pb-1 mb-1">Машин мэдээлэл</div>
+                    <div className="grid grid-cols-[60px_1fr] gap-1">
+                      <span className="text-gray-500">Дугаар:</span>
+                      <span className="font-medium">{location.plateNumber || '-'}</span>
+                      
+                      <span className="text-gray-500">Загвар:</span>
+                      <span className="font-medium">{location.vehicleModel || '-'}</span>
+                      
+                      <span className="text-gray-500">Өнгө:</span>
+                      <span className="font-medium">{location.vehicleColor || '-'}</span>
+                    </div>
+                  </div>
+                </Popup>
+              </Marker>
+            )
+          ))}
+        </MapContainer>
+        <div className="absolute top-4 right-4 z-[1000] bg-white p-2 rounded shadow-md border text-xs">
+          <div className="font-semibold mb-1">Тайлбар</div>
+          <div className="flex items-center gap-2">
+            <div className="w-3 h-3 rounded-full bg-green-500 border border-white shadow-sm"></div>
+            <span>Жолооч ({Object.keys(activeDrivers).length})</span>
+          </div>
+        </div>
+      </div>
 
       {/* Create Trip Dialog */}
       <Dialog open={isCreateOpen} onOpenChange={setIsCreateOpen}>
@@ -834,6 +837,44 @@ const TripManagement = () => {
                   </select>
                 </div>
               </div>
+            </div>
+
+            <div className="grid gap-2">
+               <Label className="mb-2">Нэмэлт үйлчилгээ</Label>
+               <div className="flex gap-4">
+                 <div className="flex items-center space-x-2">
+                   <Checkbox 
+                     id="service-tire" 
+                     checked={newTrip.additionalServices?.some(s => s.code === 'tire_change') || false}
+                     onCheckedChange={(checked) => {
+                        const service = { name: 'Дугуй солих', code: 'tire_change', price: 30000 };
+                        setNewTrip(prev => ({
+                          ...prev,
+                          additionalServices: checked 
+                            ? [...(prev.additionalServices || []), service]
+                            : (prev.additionalServices || []).filter(s => s.code !== 'tire_change')
+                        }));
+                     }}
+                   />
+                   <Label htmlFor="service-tire">Дугуй тавих (30k)</Label>
+                 </div>
+                 <div className="flex items-center space-x-2">
+                   <Checkbox 
+                     id="service-garage" 
+                     checked={newTrip.additionalServices?.some(s => s.code === 'garage_entry') || false}
+                     onCheckedChange={(checked) => {
+                        const service = { name: 'Гараж руу оруулах', code: 'garage_entry', price: 50000 };
+                        setNewTrip(prev => ({
+                          ...prev,
+                          additionalServices: checked 
+                            ? [...(prev.additionalServices || []), service]
+                            : (prev.additionalServices || []).filter(s => s.code !== 'garage_entry')
+                        }));
+                     }}
+                   />
+                   <Label htmlFor="service-garage">Гараж руу оруулах (50k)</Label>
+                 </div>
+               </div>
             </div>
 
             <div className="grid gap-2">

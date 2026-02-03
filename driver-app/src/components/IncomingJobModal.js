@@ -146,6 +146,24 @@ export const IncomingJobModal = ({ visible, job, onAccept, onDecline, userLocati
               </Text>
             </View>
 
+            {/* Additional Services (Bonuses) */}
+            {job.additionalServices && job.additionalServices.length > 0 && (
+              <View style={styles.bonusContainer}>
+                <Text style={styles.bonusLabel}>НЭМЭЛТ БОНУС</Text>
+                <View style={styles.bonusList}>
+                  {job.additionalServices.map((service, index) => (
+                    <View key={index} style={styles.bonusItem}>
+                      <View style={styles.bonusIcon}>
+                        <Check size={12} color="#1A1A1A" />
+                      </View>
+                      <Text style={styles.bonusText}>{service.name}</Text>
+                      <Text style={styles.bonusPrice}>+{service.price?.toLocaleString()}₮</Text>
+                    </View>
+                  ))}
+                </View>
+              </View>
+            )}
+
             {/* Customer Info (Modern Glass-like Box) */}
             {job.customerName && (
               <View style={styles.customerBox}>
@@ -335,6 +353,56 @@ const styles = StyleSheet.create({
   currencySymbol: {
     fontSize: 24,
     color: theme.colors.primary,
+  },
+  bonusContainer: {
+    alignItems: 'center',
+    marginBottom: 16,
+    paddingHorizontal: 16,
+    width: '100%',
+  },
+  bonusLabel: {
+    color: '#10B981', // Green for bonus
+    fontSize: 10,
+    fontWeight: 'bold',
+    letterSpacing: 1,
+    marginBottom: 8,
+    textTransform: 'uppercase',
+  },
+  bonusList: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'center',
+    gap: 8,
+  },
+  bonusItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(16, 185, 129, 0.15)', // Light green bg
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: 'rgba(16, 185, 129, 0.3)',
+  },
+  bonusIcon: {
+    width: 16,
+    height: 16,
+    borderRadius: 8,
+    backgroundColor: '#10B981',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 6,
+  },
+  bonusText: {
+    color: '#E0E0E0',
+    fontSize: 12,
+    fontWeight: '600',
+    marginRight: 6,
+  },
+  bonusPrice: {
+    color: '#10B981',
+    fontSize: 12,
+    fontWeight: 'bold',
   },
   customerBox: {
     backgroundColor: 'rgba(0,0,0,0.3)',

@@ -170,38 +170,7 @@ const DashboardOverview = () => {
         </div>
       </div>
       
-      <Tabs defaultValue="overview" className="space-y-4">
-        <TabsList>
-          <TabsTrigger 
-            isActive={activeTab === 'overview'} 
-            onClick={() => setActiveTab('overview')}
-          >
-            Ерөнхий
-          </TabsTrigger>
-          <TabsTrigger 
-            isActive={activeTab === 'analytics'} 
-            onClick={() => setActiveTab('analytics')}
-            disabled
-          >
-            Аналитик
-          </TabsTrigger>
-          <TabsTrigger 
-            isActive={activeTab === 'reports'} 
-            onClick={() => setActiveTab('reports')}
-            disabled
-          >
-            Тайлан
-          </TabsTrigger>
-          <TabsTrigger 
-            isActive={activeTab === 'notifications'} 
-            onClick={() => setActiveTab('notifications')}
-            disabled
-          >
-            Мэдэгдэл
-          </TabsTrigger>
-        </TabsList>
-
-        <TabsContent isActive={activeTab === 'overview'} className="space-y-4">
+      <div className="space-y-4">
           <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
             {stats.map((stat, index) => (
                <Card key={index}>
@@ -241,8 +210,7 @@ const DashboardOverview = () => {
               </CardContent>
             </Card>
           </div>
-        </TabsContent>
-      </Tabs>
+      </div>
     </div>
   );
 };
