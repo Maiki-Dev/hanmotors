@@ -6,12 +6,14 @@ import { GoldButton } from '../components/GoldButton';
 import { Input } from '../components/Input';
 import { Header } from '../components/Header';
 import { API_URL } from '../config';
+import { uploadToCloudinary } from '../utils/cloudinary';
 
 export default function RegisterScreen({ navigation, route }) {
   const { phone: initialPhone } = route.params || {};
   const [loading, setLoading] = useState(false);
   const [licenseImage, setLicenseImage] = useState(null);
   const [registrationImage, setRegistrationImage] = useState(null);
+  const [insuranceImage, setInsuranceImage] = useState(null);
   
   const [formData, setFormData] = useState({
     lastName: '',
@@ -26,22 +28,26 @@ export default function RegisterScreen({ navigation, route }) {
   });
 
   const pickImage = async (setImage) => {
-    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
-    if (status !== 'granted') {
-      Alert.alert('Эрх шаардлагатай', 'Зураг оруулахын тулд зөвшөөрөл өгнө үү.');
-      return;
-    }
+    try {
+      const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (status !== 'granted') {
+        Alert.alert('Эрх шаардлагатай', 'Зураг оруулахын тулд зөвшөөрөл өгнө үү.');
+        return;
+      }
 
-    let result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ImagePicker.MediaType.Images,
-      allowsEditing: true,
-      aspect: [4, 3],
-      quality: 0.5,
-      base64: true,
-    });
+      let result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        allowsEditing: true,
+        aspect: [4, 3],
+        quality: 0.5,
+      });
 
-    if (!result.canceled) {
-      setImage(`data:image/jpeg;base64,${result.assets[0].base64}`);
+      if (!result.canceled) {
+        setImage(result.assets[0]);
+      }
+    } catch (error) {
+      console.error('ImagePicker Error:', error);
+      Alert.alert('Алдаа', 'Зураг сонгоход алдаа гарлаа. Та дахин оролдоно уу.');
     }
   };
 
@@ -51,13 +57,20 @@ export default function RegisterScreen({ navigation, route }) {
       return;
     }
 
-    if (!licenseImage || !registrationImage) {
-        Alert.alert('Алдаа', 'Бичиг баримтын зургийг оруулна үү');
+    if (!licenseImage || !registrationImage || !insuranceImage) {
+        Alert.alert('Алдаа', 'Бичиг баримтын зургийг бүрэн оруулна үү (Жолооны үнэмлэх, Гэрчилгээ, Даатгал)');
         return;
     }
 
     setLoading(true);
     try {
+      // Upload images first
+      const [licenseUrl, registrationUrl, insuranceUrl] = await Promise.all([
+        uploadToCloudinary(licenseImage),
+        uploadToCloudinary(registrationImage),
+        uploadToCloudinary(insuranceImage)
+      ]);
+
       const response = await fetch(`${API_URL}/api/driver/register`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -71,8 +84,9 @@ export default function RegisterScreen({ navigation, route }) {
             color: formData.color
           },
           documents: {
-            license: { url: licenseImage, status: 'pending' },
-            vehicleRegistration: { url: registrationImage, status: 'pending' }
+            license: { url: licenseUrl, status: 'pending' },
+            vehicleRegistration: { url: registrationUrl, status: 'pending' },
+            insurance: { url: insuranceUrl, status: 'pending' }
           }
         }),
       });
@@ -183,7 +197,7 @@ export default function RegisterScreen({ navigation, route }) {
           <Text style={styles.label}>Жолооны үнэмлэх</Text>
           <TouchableOpacity onPress={() => pickImage(setLicenseImage)} style={styles.imagePicker}>
             {licenseImage ? (
-              <Image source={{ uri: licenseImage }} style={styles.previewImage} />
+              <Image source={{ uri: licenseImage.uri }} style={styles.previewImage} />
             ) : (
               <View style={styles.placeholderContainer}>
                  <Text style={styles.imagePlaceholder}>Зураг оруулах</Text>
@@ -194,7 +208,18 @@ export default function RegisterScreen({ navigation, route }) {
           <Text style={styles.label}>Тээврийн хэрэгслийн гэрчилгээ</Text>
           <TouchableOpacity onPress={() => pickImage(setRegistrationImage)} style={styles.imagePicker}>
             {registrationImage ? (
-              <Image source={{ uri: registrationImage }} style={styles.previewImage} />
+              <Image source={{ uri: registrationImage.uri }} style={styles.previewImage} />
+            ) : (
+              <View style={styles.placeholderContainer}>
+                 <Text style={styles.imagePlaceholder}>Зураг оруулах</Text>
+              </View>
+            )}
+          </TouchableOpacity>
+
+          <Text style={styles.label}>Жолоочийн хариуцлагын даатгал</Text>
+          <TouchableOpacity onPress={() => pickImage(setInsuranceImage)} style={styles.imagePicker}>
+            {insuranceImage ? (
+              <Image source={{ uri: insuranceImage.uri }} style={styles.previewImage} />
             ) : (
               <View style={styles.placeholderContainer}>
                  <Text style={styles.imagePlaceholder}>Зураг оруулах</Text>

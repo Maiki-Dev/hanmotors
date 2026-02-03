@@ -71,6 +71,16 @@ export default function ActiveJobScreen({ route, navigation }) {
   const toggleFollow = () => {
     setIsFollowing(true);
     if (recenterTimeoutRef.current) clearTimeout(recenterTimeoutRef.current);
+    
+    // Animate immediately if we have location
+    if (userLocation && mapRef.current) {
+      mapRef.current.animateCamera({
+        center: { latitude: userLocation.latitude, longitude: userLocation.longitude },
+        heading: userLocation.heading || 0,
+        pitch: 45,
+        zoom: 17
+      }, { duration: 500 });
+    }
   };
 
   const startRecenterTimer = (delayMs) => {
@@ -94,34 +104,53 @@ export default function ActiveJobScreen({ route, navigation }) {
   };
 
   const statusRef = useRef(status);
+  const isFollowingRef = useRef(isFollowing);
   const lastLocRef = useRef(null);
   const lastRouteFetchRef = useRef(null);
   const socketRef = useRef(null);
   const [isMapReady, setIsMapReady] = useState(false);
+  const hasPerformedInitialFit = useRef(false);
+
+  useEffect(() => {
+    isFollowingRef.current = isFollowing;
+  }, [isFollowing]);
 
   useEffect(() => {
     statusRef.current = status;
-    if (!mapRef.current || !userLocation) return;
-    
-    // Always fit map to route when status changes (pickup or in_progress)
-    // This ensures the driver sees the destination/route clearly
-    if ((status === 'pickup' || status === 'in_progress') && targetLocation) {
-      
-      // Data validation for dropoff
-      if (status === 'in_progress' && (!job?.dropoffLocation || !job.dropoffLocation.lat)) {
-        Alert.alert("Анхаар", "Хүргэх хаягийн байршил тодорхойгүй байна.");
-      }
-
-      // Temporarily disable auto-follow to show the full route
-      setIsFollowing(false); 
-      setTimeout(() => fitMapToRoute(), 300);
-      
-      // Resume auto-follow after 4 seconds so the driver sees real-time movement
-      setTimeout(() => {
-        setIsFollowing(true);
-      }, 4000);
-    }
+    // Reset initial fit flag when status changes so we can re-fit to new route
+    hasPerformedInitialFit.current = false;
   }, [status]);
+
+  // Handle Initial Map Fitting when Location/Map becomes ready
+  useEffect(() => {
+    if (isMapReady && userLocation && mapRef.current && !hasPerformedInitialFit.current) {
+      if ((status === 'pickup' || status === 'in_progress') && targetLocation) {
+        
+        // Data validation for dropoff
+        if (status === 'in_progress' && (!job?.dropoffLocation || !job.dropoffLocation.lat)) {
+          Alert.alert("Анхаар", "Хүргэх хаягийн байршил тодорхойгүй байна.");
+        }
+
+        // Temporarily disable auto-follow to show the full route
+        setIsFollowing(false); 
+        fitMapToRoute();
+        
+        // Resume auto-follow after 4 seconds
+        setTimeout(() => {
+          setIsFollowing(true);
+        }, 4000);
+      } else {
+        // Just center on user if no specific route logic
+        mapRef.current.animateCamera({
+          center: { latitude: userLocation.latitude, longitude: userLocation.longitude },
+          heading: userLocation.heading || 0,
+          pitch: 45,
+          zoom: 17
+        }, { duration: 500 });
+      }
+      hasPerformedInitialFit.current = true;
+    }
+  }, [isMapReady, userLocation, status]);
 
   const fitMapToRoute = () => {
     if (!userLocation || !targetLocation || !mapRef.current) return;
@@ -305,84 +334,95 @@ export default function ActiveJobScreen({ route, navigation }) {
   }, [userLocation?.latitude, userLocation?.longitude, targetLocation.latitude, targetLocation.longitude]);
 
   useEffect(() => {
-    (async () => {
+    let subscription;
+
+    const startLocationTracking = async () => {
       let { status } = await Location.requestForegroundPermissionsAsync();
       if (status !== 'granted') return;
 
-      let location = await Location.getCurrentPositionAsync({});
-      setUserLocation({
-        latitude: location.coords.latitude,
-        longitude: location.coords.longitude,
-        latitudeDelta: 0.01,
-        longitudeDelta: 0.01,
-      });
+      const handleLocationUpdate = (loc) => {
+        const lat = loc.coords.latitude;
+        const lng = loc.coords.longitude;
+        let heading = loc.coords.heading;
+        
+        if ((heading === null || typeof heading === 'undefined') && lastLocRef.current) {
+          heading = getBearing(lastLocRef.current.latitude, lastLocRef.current.longitude, lat, lng);
+        }
+        
+        setUserLocation({
+          latitude: lat,
+          longitude: lng,
+          heading,
+          latitudeDelta: 0.01,
+          longitudeDelta: 0.01,
+        });
 
-      const subscription = await Location.watchPositionAsync(
+        if (socketRef.current && driverId) {
+          const vehicle = driverInfo?.vehicle || {};
+          socketRef.current.emit('driverLocationUpdated', {
+            driverId,
+            location: { 
+              lat: loc.coords.latitude, 
+              lng: loc.coords.longitude,
+              heading: loc.coords.heading,
+              plateNumber: vehicle.plateNumber,
+              vehicleModel: vehicle.model,
+              vehicleColor: vehicle.color
+            }
+          });
+        }
+
+        if (statusRef.current === 'in_progress') {
+          if (lastLocRef.current) {
+            const d = getDistanceFromLatLonInKm(
+              lastLocRef.current.latitude,
+              lastLocRef.current.longitude,
+              lat,
+              lng
+            );
+            if (d > 0.003) {
+              setTripStats(prev => ({ ...prev, distance: prev.distance + d }));
+              lastLocRef.current = { latitude: lat, longitude: lng };
+            }
+          } else {
+            lastLocRef.current = { latitude: lat, longitude: lng };
+          }
+        }
+
+        // Auto-follow logic using Ref to avoid stale closure
+        if (isFollowingRef.current && mapRef.current) {
+           mapRef.current.animateCamera({
+              center: { latitude: lat, longitude: lng },
+              heading: heading || 0,
+              pitch: 45,
+              zoom: 17
+           }, { duration: 500 });
+        }
+      };
+
+      // 1. Start Watcher IMMEDIATELY (Parallel)
+      Location.watchPositionAsync(
         {
           accuracy: Location.Accuracy.BestForNavigation,
           timeInterval: 1000,
           distanceInterval: 5,
         },
-        (loc) => {
-          const lat = loc.coords.latitude;
-          const lng = loc.coords.longitude;
-          let heading = loc.coords.heading;
-          if ((heading === null || typeof heading === 'undefined') && lastLocRef.current) {
-            heading = getBearing(lastLocRef.current.latitude, lastLocRef.current.longitude, lat, lng);
-          }
-          setUserLocation({
-            latitude: lat,
-            longitude: lng,
-            heading,
-            latitudeDelta: 0.01,
-            longitudeDelta: 0.01,
-          });
+        handleLocationUpdate
+      ).then(sub => subscription = sub);
 
-          if (socketRef.current && driverId) {
-            const vehicle = driverInfo?.vehicle || {};
-            socketRef.current.emit('driverLocationUpdated', {
-              driverId,
-              location: { 
-                lat: loc.coords.latitude, 
-                lng: loc.coords.longitude,
-                heading: loc.coords.heading,
-                plateNumber: vehicle.plateNumber,
-                vehicleModel: vehicle.model,
-                vehicleColor: vehicle.color
-              }
-            });
-          }
+      // 2. Try to get current position once (Parallel)
+      Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Highest })
+        .then(loc => {
+           handleLocationUpdate(loc);
+        })
+        .catch(e => console.log("Initial location error:", e));
+    };
 
-          if (statusRef.current === 'in_progress') {
-            if (lastLocRef.current) {
-              const d = getDistanceFromLatLonInKm(
-                lastLocRef.current.latitude,
-                lastLocRef.current.longitude,
-                lat,
-                lng
-              );
-              if (d > 0.003) {
-                setTripStats(prev => ({ ...prev, distance: prev.distance + d }));
-                lastLocRef.current = { latitude: lat, longitude: lng };
-              }
-            } else {
-              lastLocRef.current = { latitude: lat, longitude: lng };
-            }
-          }
+    startLocationTracking();
 
-          // Auto-follow logic
-          if (isFollowing && mapRef.current) {
-             mapRef.current.animateCamera({
-                center: { latitude: lat, longitude: lng },
-                heading: heading || 0,
-                pitch: 45,
-                zoom: 17
-             }, { duration: 500 });
-          }
-        }
-      );
-      return () => subscription.remove();
-    })();
+    return () => {
+      if (subscription) subscription.remove();
+    };
   }, []);
 
   const openNavigation = () => {
@@ -517,9 +557,9 @@ export default function ActiveJobScreen({ route, navigation }) {
         )}
       </MapView>
 
-      <SafeAreaView style={styles.overlay}>
+      <SafeAreaView style={styles.overlay} pointerEvents="box-none">
         {/* Top Floating Header */}
-        <View style={styles.topContainer}>
+        <View style={styles.topContainer} pointerEvents="box-none">
            <View style={styles.statusPill}>
              <View style={[styles.statusDot, { backgroundColor: status === 'pickup' ? '#F59E0B' : '#10B981' }]} />
              <Text style={styles.statusText}>
@@ -541,7 +581,7 @@ export default function ActiveJobScreen({ route, navigation }) {
         )}
 
         {/* Floating Cockpit Panel */}
-        <View style={styles.bottomPanelWrapper}>
+        <View style={styles.bottomPanelWrapper} pointerEvents="box-none">
           <LinearGradient
             colors={['rgba(30,30,30,0.95)', 'rgba(10,10,10,1)']}
             style={styles.cockpitPanel}

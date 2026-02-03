@@ -258,79 +258,88 @@ export default function HomeScreen({ navigation, route }) {
         console.log('Error getting last known location:', e);
       }
 
-      // 2. Get current position (More accurate but might be slow)
+      // 2. Start Watching Location IMMEDIATELY (Don't wait for getCurrentPosition)
       try {
-        let currentLocation = await Location.getCurrentPositionAsync({
-          accuracy: Location.Accuracy.Balanced, // Balanced is faster than High/Best
-        });
-        const { latitude: initLat, longitude: initLng } = currentLocation.coords;
-        
-        setDriverLocation({
-          latitude: initLat,
-          longitude: initLng,
-        });
-        
-        if (isFollowingRef.current && mapRef.current) {
-            mapRef.current.animateCamera({
-                center: { latitude: initLat, longitude: initLng },
-                zoom: 17,
-                heading: 0,
-                pitch: 0,
-            }, { duration: 1000 });
-        }
-      } catch (error) {
-        console.log('Error getting current position:', error);
-        // Don't return, continue to watchPosition
+        locationSubscription = await Location.watchPositionAsync(
+          {
+            accuracy: Location.Accuracy.BestForNavigation,
+            timeInterval: 1000,
+            distanceInterval: 1,
+          },
+          (newLocation) => {
+            const { latitude, longitude } = newLocation.coords;
+            let heading = newLocation.coords.heading;
+            
+            // Calculate heading if missing
+            if ((heading === null || typeof heading === 'undefined') && driverLocation) {
+              const toRad = (v) => v * Math.PI / 180;
+              const lat1 = driverLocation.latitude, lon1 = driverLocation.longitude;
+              const lat2 = latitude, lon2 = longitude;
+              const y = Math.sin(toRad(lon2 - lon1)) * Math.cos(toRad(lat2));
+              const x = Math.cos(toRad(lat1)) * Math.sin(toRad(lat2)) - Math.sin(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.cos(toRad(lon2 - lon1));
+              const t = Math.atan2(y, x);
+              heading = (t * 180 / Math.PI + 360) % 360;
+            }
+            
+            setDriverLocation({ latitude, longitude, heading });
+            
+            // Smoothly follow user if tracking is enabled
+            if (mapRef.current) {
+               mapRef.current.animateCamera({ 
+                 center: { latitude, longitude },
+                 heading: heading || 0,
+                 pitch: 45, // Add some pitch for 3D feel
+                 zoom: 17
+               }, { duration: 1000 });
+            }
+
+            if (isOnline && socketRef.current && driverId) {
+              const vehicle = driverInfoRef.current?.vehicle || {};
+              socketRef.current.emit('driverLocationUpdated', {
+                driverId,
+                location: { 
+                  lat: latitude, 
+                  lng: longitude,
+                  heading: heading,
+                  plateNumber: vehicle.plateNumber,
+                  vehicleModel: vehicle.model,
+                  vehicleColor: vehicle.color,
+                  isTowing: services.towing // Broadcast if we are a tow truck
+                }
+              });
+            }
+          }
+        );
+      } catch (e) {
+        console.log('Error starting watchPosition:', e);
       }
 
-      // 3. Watch location (Uber Standard-ish for idle/cruising)
-      locationSubscription = await Location.watchPositionAsync(
-        {
-          accuracy: Location.Accuracy.BestForNavigation,
-          timeInterval: 1000,
-          distanceInterval: 1,
-        },
-        (newLocation) => {
-          const { latitude, longitude } = newLocation.coords;
-          let heading = newLocation.coords.heading;
-          if ((heading === null || typeof heading === 'undefined') && driverLocation) {
-            const toRad = (v) => v * Math.PI / 180;
-            const lat1 = driverLocation.latitude, lon1 = driverLocation.longitude;
-            const lat2 = latitude, lon2 = longitude;
-            const y = Math.sin(toRad(lon2 - lon1)) * Math.cos(toRad(lat2));
-            const x = Math.cos(toRad(lat1)) * Math.sin(toRad(lat2)) - Math.sin(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.cos(toRad(lon2 - lon1));
-            const t = Math.atan2(y, x);
-            heading = (t * 180 / Math.PI + 360) % 360;
-          }
-          setDriverLocation({ latitude, longitude, heading });
-          
-          // Smoothly follow user if tracking is enabled
-          if (mapRef.current) {
-             mapRef.current.animateCamera({ 
-               center: { latitude, longitude },
-               heading: heading || 0,
-               pitch: 45, // Add some pitch for 3D feel
-               zoom: 17
-             }, { duration: 1000 });
-          }
-
-          if (isOnline && socketRef.current && driverId) {
-            const vehicle = driverInfoRef.current?.vehicle || {};
-            socketRef.current.emit('driverLocationUpdated', {
-              driverId,
-              location: { 
-                lat: latitude, 
-                lng: longitude,
-                heading: heading,
-                plateNumber: vehicle.plateNumber,
-                vehicleModel: vehicle.model,
-                vehicleColor: vehicle.color,
-                isTowing: services.towing // Broadcast if we are a tow truck
-              }
-            });
-          }
+      // 3. Try to get current position once (Parallel - just to ensure we have a fix ASAP)
+      // Use Highest accuracy to avoid "wrong" location from cell towers
+      Location.getCurrentPositionAsync({
+        accuracy: Location.Accuracy.Highest,
+      }).then(currentLocation => {
+        if (currentLocation) {
+           const { latitude, longitude } = currentLocation.coords;
+           setDriverLocation(prev => {
+             // Only update if we don't have a location yet
+             if (!prev) {
+                if (mapRef.current) {
+                    mapRef.current.animateCamera({
+                        center: { latitude, longitude },
+                        zoom: 17,
+                        heading: 0,
+                        pitch: 0,
+                    }, { duration: 1000 });
+                }
+                return { latitude, longitude };
+             }
+             return prev;
+           });
         }
-      );
+      }).catch(error => {
+        console.log('Error getting initial current position:', error);
+      });
     })();
 
     return () => {

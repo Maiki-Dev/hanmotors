@@ -1,10 +1,12 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert, RefreshControl, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert, RefreshControl, ActivityIndicator, Image } from 'react-native';
+import * as ImagePicker from 'expo-image-picker';
 import { theme } from '../constants/theme';
 import { Header } from '../components/Header';
 import { GoldButton } from '../components/GoldButton';
 import { Upload, CheckCircle, AlertCircle, XCircle } from 'lucide-react-native';
 import { API_URL } from '../config';
+import { uploadToCloudinary } from '../utils/cloudinary';
 
 const DocumentItem = ({ title, status, onUpload, disabled }) => (
   <View style={[styles.docItem, disabled && styles.docItemDisabled]}>
@@ -58,7 +60,8 @@ export default function DocumentsScreen({ navigation, route }) {
           // Ensure structure matches expectation
           setDocuments({
             license: data.documents.license || { url: null, status: 'pending' },
-            vehicleRegistration: data.documents.vehicleRegistration || { url: null, status: 'pending' }
+            vehicleRegistration: data.documents.vehicleRegistration || { url: null, status: 'pending' },
+            insurance: data.documents.insurance || { url: null, status: 'pending' }
           });
         }
       }
@@ -79,39 +82,57 @@ export default function DocumentsScreen({ navigation, route }) {
     fetchDocuments();
   };
 
-  // In a real app, this would pick an image and upload to S3/Cloudinary
-  // Here we just simulate an upload by setting a dummy URL
   const handleUpload = (type) => {
-    if (loading) return; // Prevent upload while loading
+    if (loading || saving) return; 
     
     Alert.alert(
       'Баримт бичиг оруулах',
-      `Үйлдэл сонгоно уу: ${type === 'license' ? 'Жолооны үнэмлэх' : 'Тээврийн хэрэгслийн гэрчилгээ'}`,
+      `Үйлдэл сонгоно уу: ${type === 'license' ? 'Жолооны үнэмлэх' : type === 'vehicleRegistration' ? 'Тээврийн хэрэгслийн гэрчилгээ' : 'Даатгал'}`,
       [
         { text: 'Болих', style: 'cancel' },
         { 
-          text: 'Зураг авах', 
-          onPress: () => simulateUpload(type) 
-        },
-        { 
           text: 'Зургийн цомгоос сонгох', 
-          onPress: () => simulateUpload(type) 
+          onPress: () => pickAndUpload(type) 
         }
       ]
     );
   };
 
-  const simulateUpload = async (type) => {
-    // Simulating upload
-    const dummyUrl = `https://fake-url.com/${type}.jpg`;
-    
-    // Optimistic update
-    const updatedDoc = { url: dummyUrl, status: 'pending' };
-    const newDocs = { ...documents, [type]: updatedDoc };
-    setDocuments(newDocs);
+  const pickAndUpload = async (type) => {
+    try {
+      const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (status !== 'granted') {
+        Alert.alert('Эрх шаардлагатай', 'Зураг оруулахын тулд зөвшөөрөл өгнө үү.');
+        return;
+      }
 
+      let result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        allowsEditing: true,
+        aspect: [4, 3],
+        quality: 0.5,
+      });
+
+      if (!result.canceled && result.assets && result.assets.length > 0) {
+        await uploadDocument(type, result.assets[0]);
+      }
+    } catch (error) {
+      console.error('ImagePicker Error:', error);
+      Alert.alert('Алдаа', 'Зураг сонгоход алдаа гарлаа');
+    }
+  };
+
+  const uploadDocument = async (type, imageAsset) => {
     try {
       setSaving(true);
+      
+      // 1. Upload to Cloudinary
+      const imageUrl = await uploadToCloudinary(imageAsset);
+      
+      // 2. Update backend
+      const updatedDoc = { url: imageUrl, status: 'pending' };
+      const newDocs = { ...documents, [type]: updatedDoc };
+      
       const response = await fetch(`${API_URL}/api/driver/${driverId}/documents`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
@@ -119,12 +140,15 @@ export default function DocumentsScreen({ navigation, route }) {
       });
       
       if (response.ok) {
-        Alert.alert('Амжилттай', 'Баримт бичиг амжилттай илгээгдлээ');
-        fetchDocuments(); // Refresh to get server state
+        setDocuments(newDocs);
+        Alert.alert('Амжилттай', 'Баримт бичиг амжилттай илгээгдлээ. Шалгахад түр хүлээнэ үү.');
+        fetchDocuments(); 
+      } else {
+        Alert.alert('Алдаа', 'Хадгалахад алдаа гарлаа');
       }
     } catch (error) {
       console.error(error);
-      Alert.alert('Алдаа', 'Илгээхэд алдаа гарлаа');
+      Alert.alert('Алдаа', 'Илгээхэд алдаа гарлаа: ' + error.message);
     } finally {
       setSaving(false);
     }
@@ -166,6 +190,13 @@ export default function DocumentsScreen({ navigation, route }) {
           title="Тээврийн хэрэгслийн гэрчилгээ" 
           status={documents.vehicleRegistration?.status} 
           onUpload={() => handleUpload('vehicleRegistration')}
+          disabled={saving}
+        />
+
+        <DocumentItem 
+          title="Жолоочийн хариуцлагын даатгал" 
+          status={documents.insurance?.status} 
+          onUpload={() => handleUpload('insurance')}
           disabled={saving}
         />
 
