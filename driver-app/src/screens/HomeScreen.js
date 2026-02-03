@@ -79,7 +79,7 @@ export default function HomeScreen({ navigation, route }) {
 
   // Initial Map Centering Effect
   useEffect(() => {
-    if (isMapReady && driverLocation && isFollowingRef.current && mapRef.current) {
+    if (isMapReady && driverLocation && mapRef.current) {
         mapRef.current.animateCamera({
             center: { latitude: driverLocation.latitude, longitude: driverLocation.longitude },
             zoom: 17,
@@ -87,7 +87,7 @@ export default function HomeScreen({ navigation, route }) {
             pitch: 0,
         }, { duration: 1000 });
     }
-  }, [isMapReady, driverLocation]); // Trigger when map is ready OR when location is first found
+  }, [isMapReady, driverLocation]);
 
   const handleCenterLocation = async () => {
     updateFollowing(true);
@@ -189,6 +189,11 @@ export default function HomeScreen({ navigation, route }) {
     let locationSubscription = null;
 
     (async () => {
+      const perm = await Location.requestForegroundPermissionsAsync();
+      if (perm.status !== 'granted') {
+        Alert.alert('Зөвшөөрөл шаардлагатай', 'Байршлын зөвшөөрлийг олгоно уу.');
+        return;
+      }
       // Check if location services are enabled
       const enabled = await Location.hasServicesEnabledAsync();
       if (!enabled) {
@@ -282,16 +287,25 @@ export default function HomeScreen({ navigation, route }) {
       locationSubscription = await Location.watchPositionAsync(
         {
           accuracy: Location.Accuracy.BestForNavigation,
-          timeInterval: 2000, // 2 seconds
-          distanceInterval: 10, // 10 meters
+          timeInterval: 1000,
+          distanceInterval: 1,
         },
         (newLocation) => {
-          const { latitude, longitude, heading } = newLocation.coords;
-          
+          const { latitude, longitude } = newLocation.coords;
+          let heading = newLocation.coords.heading;
+          if ((heading === null || typeof heading === 'undefined') && driverLocation) {
+            const toRad = (v) => v * Math.PI / 180;
+            const lat1 = driverLocation.latitude, lon1 = driverLocation.longitude;
+            const lat2 = latitude, lon2 = longitude;
+            const y = Math.sin(toRad(lon2 - lon1)) * Math.cos(toRad(lat2));
+            const x = Math.cos(toRad(lat1)) * Math.sin(toRad(lat2)) - Math.sin(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.cos(toRad(lon2 - lon1));
+            const t = Math.atan2(y, x);
+            heading = (t * 180 / Math.PI + 360) % 360;
+          }
           setDriverLocation({ latitude, longitude, heading });
           
           // Smoothly follow user if tracking is enabled
-          if (isFollowingRef.current && mapRef.current) {
+          if (mapRef.current) {
              mapRef.current.animateCamera({ 
                center: { latitude, longitude },
                heading: heading || 0,
@@ -324,13 +338,16 @@ export default function HomeScreen({ navigation, route }) {
         locationSubscription.remove();
       }
     };
-  }, [isOnline, driverId]);
+  }, []);
 
   useEffect(() => {
     socketRef.current = io(API_URL, {
-      transports: ['websocket'], // Force websocket for Android reliability
+      transports: ['websocket', 'polling'],
       reconnection: true,
-      reconnectionAttempts: 5,
+      reconnectionAttempts: 10,
+      reconnectionDelay: 1000,
+      timeout: 20000,
+      autoConnect: true,
     });
 
     if (driverId) {
@@ -391,8 +408,78 @@ export default function HomeScreen({ navigation, route }) {
       });
     });
 
+    // Sync trip status updates coming from Admin or Backend
+    socketRef.current.on('jobUpdated', (trip) => {
+      try {
+        const tripDriverId = typeof trip.driver === 'string' ? trip.driver : (trip.driver?._id || trip.driver?.id);
+        if (String(tripDriverId) !== String(driverId)) return;
+        
+        if (trip.status === 'pending') {
+          setIncomingRequest(trip);
+        } else if (trip.status === 'accepted') {
+          setIncomingRequest(null);
+          navigation.navigate('ActiveJob', { 
+            trip, 
+            driverId,
+            driverInfo: driverInfoRef.current,
+            mapMode,
+            showsTraffic
+          });
+        } else if (trip.status === 'in_progress') {
+          setIncomingRequest(null);
+          navigation.navigate('ActiveJob', { 
+            trip, 
+            driverId,
+            driverInfo: driverInfoRef.current,
+            mapMode,
+            showsTraffic
+          });
+        } else if (trip.status === 'completed') {
+          setIncomingRequest(null);
+          Alert.alert('Аялал дууссан', 'Аялал админ талаас дуусгав.', [
+            { text: 'OK' }
+          ]);
+          // Optionally navigate to history or main
+          navigation.navigate('Main');
+        } else if (trip.status === 'cancelled') {
+          setIncomingRequest(null);
+          Alert.alert('Цуцлагдсан', 'Аяллыг админ цуцаллаа.');
+        }
+      } catch (e) {
+        console.log('jobUpdated handling error', e);
+      }
+    });
+
+    // Fallback listeners when only IDs are emitted
+    socketRef.current.on('tripStarted', ({ tripId }) => {
+      // If we currently have an incoming request for this trip, proceed to ActiveJob
+      setIncomingRequest(current => {
+        if (current && String(current._id) === String(tripId)) {
+          navigation.navigate('ActiveJob', { 
+            trip: { ...current, status: 'in_progress' }, 
+            driverId,
+            driverInfo: driverInfoRef.current,
+            mapMode,
+            showsTraffic
+          });
+          return null;
+        }
+        return current;
+      });
+    });
+
+    socketRef.current.on('tripCompleted', ({ tripId }) => {
+      Alert.alert('Аялал дууссан', 'Аялал дууссан статус ирлээ.', [
+        { text: 'OK', onPress: () => navigation.navigate('Main') }
+      ]);
+      setIncomingRequest(null);
+    });
+
     return () => {
       if (socketRef.current) {
+        socketRef.current.off('jobUpdated');
+        socketRef.current.off('tripStarted');
+        socketRef.current.off('tripCompleted');
         socketRef.current.disconnect();
       }
     };
@@ -551,7 +638,7 @@ export default function HomeScreen({ navigation, route }) {
         provider={PROVIDER_GOOGLE}
         style={styles.map}
         initialRegion={mapRegion}
-        onPanDrag={() => updateFollowing(false)}
+        onPanDrag={() => {}}
         onMapReady={() => setIsMapReady(true)}
         // onTouchStart={() => updateFollowing(false)} // This might be too sensitive
         // onRegionChangeStart={() => updateFollowing(false)} // Removed to prevent conflict with animateToRegion

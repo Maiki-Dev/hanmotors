@@ -136,7 +136,23 @@ io.on('connection', (socket) => {
 
 app.set('io', io);
 
-const PORT = process.env.PORT || 5000;
-server.listen(PORT, () => {
-  console.log(`🚀 Server running on port ${PORT}`);
+const BASE_PORT = Number(process.env.PORT) || 5000;
+
+const startServer = (port) => {
+  server.listen(port, () => {
+    console.log(`🚀 Server running on port ${port}`);
+  });
+};
+
+// Handle port-in-use gracefully by retrying on the next port
+server.once('error', (err) => {
+  if (err && err.code === 'EADDRINUSE') {
+    const fallbackPort = BASE_PORT + 1;
+    console.warn(`⚠️ Port ${BASE_PORT} is in use. Retrying on ${fallbackPort}...`);
+    startServer(fallbackPort);
+  } else {
+    throw err;
+  }
 });
+
+startServer(BASE_PORT);

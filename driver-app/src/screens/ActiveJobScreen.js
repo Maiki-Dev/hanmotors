@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Alert, ActivityIndicator, Linking, Platform, Image, Dimensions, SafeAreaView } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Alert, ActivityIndicator, Linking, Platform, Image, Dimensions, BackHandler } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import MapView, { Marker, Polyline, PROVIDER_GOOGLE } from 'react-native-maps';
 import { io } from 'socket.io-client';
 import { Navigation, Phone, MessageCircle, Car, MapPin, User, ChevronRight, ShieldCheck, Clock, CheckCircle, Locate } from 'lucide-react-native';
@@ -36,7 +37,7 @@ const darkMapStyle = [
 ];
 
 export default function ActiveJobScreen({ route, navigation }) {
-  const { job: paramJob, trip: paramTrip, driverId, driverInfo } = route.params || {};
+  const { job: paramJob, trip: paramTrip, driverId, driverInfo, mapMode = 'dark', showsTraffic = false } = route.params || {};
   const job = paramJob || paramTrip;
 
   const [status, setStatus] = useState(
@@ -72,16 +73,24 @@ export default function ActiveJobScreen({ route, navigation }) {
     if (recenterTimeoutRef.current) clearTimeout(recenterTimeoutRef.current);
   };
 
-  const startRecenterTimer = () => {
+  const startRecenterTimer = (delayMs) => {
+    const d = typeof delayMs === 'number' ? delayMs : (statusRef.current === 'in_progress' ? 1500 : 5000);
     if (recenterTimeoutRef.current) clearTimeout(recenterTimeoutRef.current);
     recenterTimeoutRef.current = setTimeout(() => {
       setIsFollowing(true);
-    }, 5000); // 5 seconds delay
+    }, d);
   };
 
   const handlePanDrag = () => {
+      // User is manually moving the map - stop following
       setIsFollowing(false);
       if (recenterTimeoutRef.current) clearTimeout(recenterTimeoutRef.current);
+      // Optional: Auto-recenter after 10 seconds of inactivity if in progress
+      if (statusRef.current === 'in_progress') {
+         startRecenterTimer(10000);
+      } else {
+         startRecenterTimer();
+      }
   };
 
   const statusRef = useRef(status);
@@ -92,8 +101,25 @@ export default function ActiveJobScreen({ route, navigation }) {
 
   useEffect(() => {
     statusRef.current = status;
-    if (userLocation && targetLocation && mapRef.current) {
-        setTimeout(() => fitMapToRoute(), 500);
+    if (!mapRef.current || !userLocation) return;
+    
+    // Always fit map to route when status changes (pickup or in_progress)
+    // This ensures the driver sees the destination/route clearly
+    if ((status === 'pickup' || status === 'in_progress') && targetLocation) {
+      
+      // Data validation for dropoff
+      if (status === 'in_progress' && (!job?.dropoffLocation || !job.dropoffLocation.lat)) {
+        Alert.alert("Анхаар", "Хүргэх хаягийн байршил тодорхойгүй байна.");
+      }
+
+      // Temporarily disable auto-follow to show the full route
+      setIsFollowing(false); 
+      setTimeout(() => fitMapToRoute(), 300);
+      
+      // Resume auto-follow after 4 seconds so the driver sees real-time movement
+      setTimeout(() => {
+        setIsFollowing(true);
+      }, 4000);
     }
   }, [status]);
 
@@ -113,8 +139,12 @@ export default function ActiveJobScreen({ route, navigation }) {
 
   useEffect(() => {
     socketRef.current = io(API_URL, {
-        transports: ['websocket'],
-        reconnection: true,
+      transports: ['websocket', 'polling'],
+      reconnection: true,
+      reconnectionAttempts: 10,
+      reconnectionDelay: 1000,
+      timeout: 20000,
+      autoConnect: true,
     });
     if (driverId) {
       socketRef.current.emit('driverJoin', driverId);
@@ -123,6 +153,80 @@ export default function ActiveJobScreen({ route, navigation }) {
       if (socketRef.current) socketRef.current.disconnect();
     };
   }, [driverId]);
+
+  useEffect(() => {
+    navigation.setOptions({ gestureEnabled: false });
+    const unsubscribe = navigation.addListener('beforeRemove', (e) => {
+      if (statusRef.current === 'pickup' || statusRef.current === 'in_progress') {
+        e.preventDefault();
+        Alert.alert('Анхаар', 'Ажил идэвхтэй байна. Дэлгэцийг солих боломжгүй.');
+      }
+    });
+    const backSub = BackHandler.addEventListener('hardwareBackPress', () => {
+      if (statusRef.current === 'pickup' || statusRef.current === 'in_progress') {
+        return true;
+      }
+      return false;
+    });
+    const parent = navigation.getParent && navigation.getParent();
+    let unsubTab;
+    if (parent && parent.addListener) {
+      unsubTab = parent.addListener('tabPress', (e) => {
+        if (statusRef.current === 'pickup' || statusRef.current === 'in_progress') {
+          e.preventDefault();
+        }
+      });
+    }
+    return () => {
+      unsubscribe && unsubscribe();
+      backSub && backSub.remove();
+      unsubTab && unsubTab();
+    };
+  }, [navigation]);
+
+  // Listen for admin/backend status updates and reflect in UI
+  useEffect(() => {
+    const socket = socketRef.current;
+    if (!socket) return;
+    const jobId = job?._id;
+    const onJobUpdated = (updatedTrip) => {
+      try {
+        if (String(updatedTrip._id) !== String(jobId)) return;
+        const tripDriverId = typeof updatedTrip.driver === 'string' ? updatedTrip.driver : (updatedTrip.driver?._id || updatedTrip.driver?.id);
+        if (driverId && String(tripDriverId) !== String(driverId)) return;
+        if (updatedTrip.status === 'accepted') {
+          setStatus('pickup');
+        } else if (updatedTrip.status === 'in_progress') {
+          setStatus('in_progress');
+        } else if (updatedTrip.status === 'completed') {
+          setStatus('completed');
+          navigation.navigate('Main');
+        } else if (updatedTrip.status === 'cancelled') {
+          setStatus('completed');
+          Alert.alert('Цуцлагдсан', 'Аялал цуцлагдлаа.', [
+            { text: 'OK' }
+          ]);
+        }
+      } catch (e) {}
+    };
+    const onTripStarted = ({ tripId }) => {
+      if (String(tripId) === String(jobId)) setStatus('in_progress');
+    };
+    const onTripCompleted = ({ tripId }) => {
+      if (String(tripId) === String(jobId)) {
+        setStatus('completed');
+        navigation.navigate('Main');
+      }
+    };
+    socket.on('jobUpdated', onJobUpdated);
+    socket.on('tripStarted', onTripStarted);
+    socket.on('tripCompleted', onTripCompleted);
+    return () => {
+      socket.off('jobUpdated', onJobUpdated);
+      socket.off('tripStarted', onTripStarted);
+      socket.off('tripCompleted', onTripCompleted);
+    };
+  }, [job?._id, driverId]);
 
   useEffect(() => {
     let interval;
@@ -148,6 +252,15 @@ export default function ActiveJobScreen({ route, navigation }) {
       Math.sin(dLon / 2) * Math.sin(dLon / 2);
     const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
     return R * c;
+  };
+  const getBearing = (lat1, lon1, lat2, lon2) => {
+    const p1 = lat1 * (Math.PI / 180);
+    const p2 = lat2 * (Math.PI / 180);
+    const dl = (lon2 - lon1) * (Math.PI / 180);
+    const y = Math.sin(dl) * Math.cos(p2);
+    const x = Math.cos(p1) * Math.sin(p2) - Math.sin(p1) * Math.cos(p2) * Math.cos(dl);
+    const t = Math.atan2(y, x);
+    return (t * (180 / Math.PI) + 360) % 360;
   };
 
   const fetchRoute = async (start, end) => {
@@ -211,10 +324,16 @@ export default function ActiveJobScreen({ route, navigation }) {
           distanceInterval: 5,
         },
         (loc) => {
-           setUserLocation({
-            latitude: loc.coords.latitude,
-            longitude: loc.coords.longitude,
-            heading: loc.coords.heading,
+          const lat = loc.coords.latitude;
+          const lng = loc.coords.longitude;
+          let heading = loc.coords.heading;
+          if ((heading === null || typeof heading === 'undefined') && lastLocRef.current) {
+            heading = getBearing(lastLocRef.current.latitude, lastLocRef.current.longitude, lat, lng);
+          }
+          setUserLocation({
+            latitude: lat,
+            longitude: lng,
+            heading,
             latitudeDelta: 0.01,
             longitudeDelta: 0.01,
           });
@@ -239,24 +358,24 @@ export default function ActiveJobScreen({ route, navigation }) {
               const d = getDistanceFromLatLonInKm(
                 lastLocRef.current.latitude,
                 lastLocRef.current.longitude,
-                loc.coords.latitude,
-                loc.coords.longitude
+                lat,
+                lng
               );
-              if (d > 0.005) {
+              if (d > 0.003) {
                 setTripStats(prev => ({ ...prev, distance: prev.distance + d }));
-                lastLocRef.current = { latitude: loc.coords.latitude, longitude: loc.coords.longitude };
+                lastLocRef.current = { latitude: lat, longitude: lng };
               }
             } else {
-              lastLocRef.current = { latitude: loc.coords.latitude, longitude: loc.coords.longitude };
+              lastLocRef.current = { latitude: lat, longitude: lng };
             }
           }
 
           // Auto-follow logic
           if (isFollowing && mapRef.current) {
              mapRef.current.animateCamera({
-                center: { latitude: loc.coords.latitude, longitude: loc.coords.longitude },
-                heading: loc.coords.heading || 0,
-                pitch: 45, // Add some pitch for 3D feel
+                center: { latitude: lat, longitude: lng },
+                heading: heading || 0,
+                pitch: 45,
                 zoom: 17
              }, { duration: 500 });
           }
@@ -305,11 +424,8 @@ export default function ActiveJobScreen({ route, navigation }) {
         const data = await response.json();
         if (response.ok) {
           if (socketRef.current) socketRef.current.emit('tripCompleted', { tripId: job._id });
-          Alert.alert(
-            'Аялал амжилттай', 
-            `Төлбөр: ${data.price?.toLocaleString() || job.price?.toLocaleString()}₮`, 
-            [{ text: 'OK', onPress: () => navigation.navigate('Main') }]
-          );
+          setStatus('completed');
+          navigation.navigate('Main');
         }
       }
     } catch (error) {
@@ -331,7 +447,9 @@ export default function ActiveJobScreen({ route, navigation }) {
         ref={mapRef}
         provider={PROVIDER_GOOGLE}
         style={styles.map} 
-        customMapStyle={darkMapStyle}
+        customMapStyle={mapMode === 'dark' ? darkMapStyle : []}
+        mapType={mapMode === 'hybrid' ? 'hybrid' : 'standard'}
+        showsTraffic={showsTraffic}
         initialRegion={{
           latitude: 47.9188,
           longitude: 106.9176,
@@ -342,8 +460,16 @@ export default function ActiveJobScreen({ route, navigation }) {
         followsUserLocation={false}
         onMapReady={() => {
             setIsMapReady(true);
-            // Initial fit
-            fitMapToRoute();
+            if (status === 'pickup') {
+              fitMapToRoute();
+            } else if (userLocation && mapRef.current) {
+              mapRef.current.animateCamera({
+                center: { latitude: userLocation.latitude, longitude: userLocation.longitude },
+                heading: userLocation.heading || 0,
+                pitch: 45,
+                zoom: 17
+              }, { duration: 500 });
+            }
         }}
         onPanDrag={handlePanDrag}
         onRegionChangeComplete={(region, details) => {

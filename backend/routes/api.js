@@ -45,8 +45,8 @@ let mockDrivers = [
   }
 ];
 
-// Helper to check offline mode
-const isOffline = () => false; // FORCE ONLINE MODE (Disable Mock Data)
+// Helper to check offline mode (controlled by server.js)
+const isOffline = () => global.OFFLINE_MODE === true;
 
 // Register new driver
 router.post('/driver/register', async (req, res) => {
@@ -1248,4 +1248,3 @@ router.get('/driver/:id/stats', async (req, res) => {
 });
 
 module.exports = router;
-
