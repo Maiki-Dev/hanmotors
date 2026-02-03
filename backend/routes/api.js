@@ -4,6 +4,7 @@ const mongoose = require('mongoose');
 const Driver = require('../models/Driver');
 const Trip = require('../models/Trip');
 const Pricing = require('../models/Pricing');
+const AdditionalService = require('../models/AdditionalService');
 
 // --- MOCK DATA STORE (For Offline Mode) ---
 let mockDrivers = [
@@ -675,6 +676,12 @@ router.post('/trip/request', async (req, res) => {
       }
     }
 
+    // Add additional services price if any
+    if (tripData.additionalServices && tripData.additionalServices.length > 0) {
+      const additionalCost = tripData.additionalServices.reduce((sum, service) => sum + (Number(service.price) || 0), 0);
+      tripData.price = (Number(tripData.price) || 0) + additionalCost;
+    }
+
     const trip = new Trip(tripData);
     await trip.save();
     const io = req.app.get('io');
@@ -844,6 +851,12 @@ router.post('/trip/:id/complete', async (req, res) => {
           calculatedPrice += (16 * 10000) + (dist - 20) * 5000;
         }
         newPrice = calculatedPrice;
+      }
+      
+      // Add additional services price
+      if (trip.additionalServices && trip.additionalServices.length > 0) {
+        const additionalCost = trip.additionalServices.reduce((sum, service) => sum + (Number(service.price) || 0), 0);
+        newPrice += additionalCost;
       }
       
       console.log(`[Trip Complete] New Price: ${newPrice} (Old: ${trip.price})`);
@@ -1222,6 +1235,56 @@ router.put('/admin/pricing/:id', async (req, res) => {
   try {
     const rule = await Pricing.findByIdAndUpdate(req.params.id, req.body, { new: true });
     res.json(rule);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// --- ADDITIONAL SERVICES API ---
+
+// Get all additional services (with seeding)
+router.get('/admin/additional-services', async (req, res) => {
+  try {
+    let services = await AdditionalService.find();
+    if (services.length === 0) {
+      const defaultServices = [
+        { name: 'Дугуй тавих', price: 30000 },
+        { name: 'Гараж руу оруулах', price: 50000 }
+      ];
+      services = await AdditionalService.insertMany(defaultServices);
+    }
+    res.json(services);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Add additional service
+router.post('/admin/additional-services', async (req, res) => {
+  try {
+    const service = new AdditionalService(req.body);
+    await service.save();
+    res.json(service);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Update additional service
+router.put('/admin/additional-services/:id', async (req, res) => {
+  try {
+    const service = await AdditionalService.findByIdAndUpdate(req.params.id, req.body, { new: true });
+    res.json(service);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Delete additional service
+router.delete('/admin/additional-services/:id', async (req, res) => {
+  try {
+    await AdditionalService.findByIdAndDelete(req.params.id);
+    res.json({ message: 'Deleted successfully' });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

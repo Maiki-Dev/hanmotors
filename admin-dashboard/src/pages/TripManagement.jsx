@@ -90,6 +90,7 @@ const TripManagement = () => {
   const [drivers, setDrivers] = useState([]);
   const [activeDrivers, setActiveDrivers] = useState({});
   const [vehicleTypes, setVehicleTypes] = useState([]);
+  const [additionalServices, setAdditionalServices] = useState([]);
   const [loading, setLoading] = useState(true);
   
   // Socket Listeners
@@ -243,12 +244,22 @@ const TripManagement = () => {
           calculatedPrice += (16 * 10000) + (dist - 20) * 5000;
         }
       }
+
+      // Add additional services price
+      if (newTrip.selectedServices && newTrip.selectedServices.length > 0) {
+        newTrip.selectedServices.forEach(serviceId => {
+          const service = additionalServices.find(s => s._id === serviceId);
+          if (service) {
+            calculatedPrice += service.price;
+          }
+        });
+      }
       
       if (calculatedPrice > 0) {
         setNewTrip(prev => ({ ...prev, price: calculatedPrice.toString() }));
       }
     }
-  }, [newTrip.distance, newTrip.serviceType, newTrip.vehicleModel, vehicleTypes]);
+  }, [newTrip.distance, newTrip.serviceType, newTrip.vehicleModel, vehicleTypes, newTrip.selectedServices, additionalServices]);
 
   useEffect(() => {
     fetchData();
@@ -257,14 +268,16 @@ const TripManagement = () => {
   const fetchData = async () => {
     try {
       setLoading(true);
-      const [tripsRes, driversRes, pricingRes] = await Promise.all([
+      const [tripsRes, driversRes, pricingRes, servicesRes] = await Promise.all([
         api.get('/admin/trips'),
         api.get('/admin/drivers'),
-        api.get('/admin/pricing')
+        api.get('/admin/pricing'),
+        api.get('/admin/additional-services')
       ]);
       setTrips(tripsRes.data);
       setDrivers(driversRes.data.filter(d => d.status === 'active')); // Only active drivers
       setVehicleTypes(pricingRes.data);
+      setAdditionalServices(servicesRes.data);
     } catch (error) {
       console.error("Error fetching data:", error);
     } finally {
@@ -274,6 +287,12 @@ const TripManagement = () => {
 
   const handleCreateTrip = async () => {
     try {
+      // Prepare additional services
+      const selectedServiceObjects = (newTrip.selectedServices || []).map(id => {
+        const service = additionalServices.find(s => s._id === id);
+        return service ? { name: service.name, price: service.price } : null;
+      }).filter(Boolean);
+
       const payload = {
         pickupLocation: newTrip.pickupLocation,
         dropoffLocation: newTrip.dropoffLocation,
@@ -284,6 +303,7 @@ const TripManagement = () => {
         hasDamage: newTrip.hasDamage === 'true' || newTrip.hasDamage === true,
         customerName: newTrip.customerName,
         customerPhone: newTrip.customerPhone,
+        additionalServices: selectedServiceObjects
       };
       
       await api.post('/trip/request', payload);
@@ -297,6 +317,7 @@ const TripManagement = () => {
         distance: '',
         serviceType: 'Tow',
         vehicleModel: '',
+        selectedServices: [],
         hasDamage: false,
         pickupMode: 'text',
         dropoffMode: 'text',
@@ -408,63 +429,61 @@ const TripManagement = () => {
         </Button>
       </div>
 
-      <Tabs defaultValue="pending" className="w-full">
+      <div className="h-[400px] w-full rounded-md border overflow-hidden relative z-0 shadow-sm bg-white mb-6">
+        <MapContainer 
+          center={[47.9188, 106.9176]} 
+          zoom={12} 
+          style={{ height: '100%', width: '100%' }}
+        >
+          <TileLayer
+            attribution='&copy; <a href="https://www.google.com/intl/mn/help/terms_maps.html">Google Maps</a>'
+            url="http://mt0.google.com/vt/lyrs=m&hl=mn&x={x}&y={y}&z={z}"
+          />
+          {Object.entries(activeDrivers).map(([driverId, location]) => (
+            location && location.lat && (
+              <Marker 
+                key={driverId} 
+                position={[location.lat, location.lng]} 
+                icon={carIcon}
+              >
+                <Popup>
+                  <div className="text-xs min-w-[120px]">
+                    <div className="font-bold border-b pb-1 mb-1">Машин мэдээлэл</div>
+                    <div className="grid grid-cols-[60px_1fr] gap-1">
+                      <span className="text-gray-500">Дугаар:</span>
+                      <span className="font-medium">{location.plateNumber || '-'}</span>
+                      
+                      <span className="text-gray-500">Загвар:</span>
+                      <span className="font-medium">{location.vehicleModel || '-'}</span>
+                      
+                      <span className="text-gray-500">Өнгө:</span>
+                      <span className="font-medium">{location.vehicleColor || '-'}</span>
+                    </div>
+                  </div>
+                </Popup>
+              </Marker>
+            )
+          ))}
+        </MapContainer>
+        <div className="absolute top-4 right-4 z-[1000] bg-white p-2 rounded shadow-md border text-xs">
+          <div className="font-semibold mb-1">Тайлбар</div>
+          <div className="flex items-center gap-2">
+            <div className="w-3 h-3 rounded-full bg-green-500 border border-white shadow-sm"></div>
+            <span>Жолооч ({Object.keys(activeDrivers).length})</span>
+          </div>
+        </div>
+      </div>
+
+      <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
         <TabsList>
-          <TabsTrigger isActive={activeTab === 'pending'} onClick={() => setActiveTab('pending')}>Хүлээгдэж буй</TabsTrigger>
-          <TabsTrigger isActive={activeTab === 'active'} onClick={() => setActiveTab('active')}>Идэвхтэй</TabsTrigger>
-          <TabsTrigger isActive={activeTab === 'completed'} onClick={() => setActiveTab('completed')}>Дууссан</TabsTrigger>
-          <TabsTrigger isActive={activeTab === 'cancelled'} onClick={() => setActiveTab('cancelled')}>Цуцлагдсан</TabsTrigger>
-          <TabsTrigger isActive={activeTab === 'live_map'} onClick={() => setActiveTab('live_map')}>Газрын зураг (Live)</TabsTrigger>
+          <TabsTrigger value="pending">Хүлээгдэж буй</TabsTrigger>
+          <TabsTrigger value="active">Идэвхтэй</TabsTrigger>
+          <TabsTrigger value="completed">Дууссан</TabsTrigger>
+          <TabsTrigger value="cancelled">Цуцлагдсан</TabsTrigger>
         </TabsList>
 
-        {activeTab === 'live_map' ? (
-          <div className="mt-4 h-[600px] w-full rounded-md border overflow-hidden relative z-0 shadow-sm bg-white">
-            <MapContainer 
-              center={[47.9188, 106.9176]} 
-              zoom={12} 
-              style={{ height: '100%', width: '100%' }}
-            >
-              <TileLayer
-                attribution='&copy; <a href="https://www.google.com/intl/mn/help/terms_maps.html">Google Maps</a>'
-                url="http://mt0.google.com/vt/lyrs=m&hl=mn&x={x}&y={y}&z={z}"
-              />
-              {Object.entries(activeDrivers).map(([driverId, location]) => (
-                location && location.lat && (
-                  <Marker 
-                    key={driverId} 
-                    position={[location.lat, location.lng]} 
-                    icon={carIcon}
-                  >
-                    <Popup>
-                      <div className="text-xs min-w-[120px]">
-                        <div className="font-bold border-b pb-1 mb-1">Машин мэдээлэл</div>
-                        <div className="grid grid-cols-[60px_1fr] gap-1">
-                          <span className="text-gray-500">Дугаар:</span>
-                          <span className="font-medium">{location.plateNumber || '-'}</span>
-                          
-                          <span className="text-gray-500">Загвар:</span>
-                          <span className="font-medium">{location.vehicleModel || '-'}</span>
-                          
-                          <span className="text-gray-500">Өнгө:</span>
-                          <span className="font-medium">{location.vehicleColor || '-'}</span>
-                        </div>
-                      </div>
-                    </Popup>
-                  </Marker>
-                )
-              ))}
-            </MapContainer>
-            <div className="absolute top-4 right-4 z-[1000] bg-white p-2 rounded shadow-md border text-xs">
-              <div className="font-semibold mb-1">Тайлбар</div>
-              <div className="flex items-center gap-2">
-                <div className="w-3 h-3 rounded-full bg-green-500 border border-white shadow-sm"></div>
-                <span>Жолооч ({Object.keys(activeDrivers).length})</span>
-              </div>
-            </div>
-          </div>
-        ) : (
-          <TabsContent isActive={true} className="mt-4">
-            <Card>
+        <div className="mt-4">
+          <Card>
             <CardHeader>
               <CardTitle>Дуудлагын жагсаалт</CardTitle>
             </CardHeader>
@@ -556,8 +575,7 @@ const TripManagement = () => {
               </Table>
             </CardContent>
           </Card>
-        </TabsContent>
-        )}
+        </div>
       </Tabs>
 
       {/* Create Trip Dialog */}
