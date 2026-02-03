@@ -1151,7 +1151,8 @@ router.post('/admin/documents/:driverId/:docType/status', async (req, res) => {
     
     // Check if all docs are approved to verify driver
     if (driver.documents.license?.status === 'approved' && 
-        driver.documents.vehicleRegistration?.status === 'approved') {
+        driver.documents.vehicleRegistration?.status === 'approved' &&
+        driver.documents.insurance?.status === 'approved') {
        driver.documents.isVerified = true;
        await driver.save();
     }

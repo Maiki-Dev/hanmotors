@@ -145,6 +145,7 @@ const DriverManagement = () => {
           ...selectedDriver.documents,
           license: { ...selectedDriver.documents?.license, status: 'approved' },
           vehicleRegistration: { ...selectedDriver.documents?.vehicleRegistration, status: 'approved' },
+          insurance: { ...selectedDriver.documents?.insurance, status: 'approved' },
           isVerified: true
         }
       };
@@ -764,6 +765,34 @@ const DriverManagement = () => {
                              className="w-full h-full object-contain bg-black/5" 
                            />
                            <a href={selectedDriver.documents.vehicleRegistration.url} target="_blank" rel="noopener noreferrer" className="absolute inset-0 flex items-center justify-center bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity text-white font-medium cursor-pointer">
+                             Томоор харах
+                           </a>
+                        </div>
+                      ) : (
+                        <div className="h-32 bg-muted/50 rounded-md flex items-center justify-center border border-dashed">
+                          <span className="text-xs text-muted-foreground">Зураг байхгүй</span>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Insurance */}
+                    <div>
+                      <div className="flex justify-between items-center mb-2">
+                        <span className="text-sm font-medium">Жолоочийн хариуцлагын даатгал</span>
+                         {selectedDriver.documents?.insurance?.status && (
+                           <Badge variant={selectedDriver.documents.insurance.status === 'approved' ? 'default' : selectedDriver.documents.insurance.status === 'rejected' ? 'destructive' : 'secondary'}>
+                             {selectedDriver.documents.insurance.status}
+                           </Badge>
+                        )}
+                      </div>
+                      {selectedDriver.documents?.insurance?.url ? (
+                        <div className="h-48 bg-muted rounded-md overflow-hidden border relative group">
+                           <img 
+                             src={selectedDriver.documents.insurance.url} 
+                             alt="Insurance" 
+                             className="w-full h-full object-contain bg-black/5" 
+                           />
+                           <a href={selectedDriver.documents.insurance.url} target="_blank" rel="noopener noreferrer" className="absolute inset-0 flex items-center justify-center bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity text-white font-medium cursor-pointer">
                              Томоор харах
                            </a>
                         </div>

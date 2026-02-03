@@ -42,6 +42,7 @@ const connectDB = async () => {
 connectDB();
 
 const apiRoutes = require('./routes/api');
+
 app.use('/api', apiRoutes);
 
 // In-memory driver locations store

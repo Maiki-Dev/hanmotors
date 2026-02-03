@@ -91,7 +91,7 @@ const DocumentVerification = () => {
                   <TableRow key={doc.id}>
                     <TableCell className="font-medium">{doc.id.substring(0, 8)}...</TableCell>
                     <TableCell>{doc.driver}</TableCell>
-                    <TableCell>{doc.type === 'license' ? 'Жолооны үнэмлэх' : doc.type === 'vehicleRegistration' ? 'Тээврийн гэрчилгээ' : doc.type}</TableCell>
+                    <TableCell>{doc.type === 'license' ? 'Жолооны үнэмлэх' : doc.type === 'vehicleRegistration' ? 'Тээврийн гэрчилгээ' : doc.type === 'insurance' ? 'Жолоочийн хариуцлагын даатгал' : doc.type}</TableCell>
                     <TableCell>{new Date(doc.submittedDate).toLocaleDateString()}</TableCell>
                     <TableCell>{getStatusBadge(doc.status)}</TableCell>
                     <TableCell className="text-right">
@@ -129,7 +129,7 @@ const DocumentVerification = () => {
         {selectedDoc && (
             <DialogContent className="sm:max-w-[600px]">
                 <DialogHeader>
-                    <DialogTitle>Баримт бичиг: {selectedDoc.type === 'license' ? 'Жолооны үнэмлэх' : 'Тээврийн гэрчилгээ'}</DialogTitle>
+                    <DialogTitle>Баримт бичиг: {selectedDoc.type === 'license' ? 'Жолооны үнэмлэх' : selectedDoc.type === 'vehicleRegistration' ? 'Тээврийн гэрчилгээ' : selectedDoc.type === 'insurance' ? 'Жолоочийн хариуцлагын даатгал' : selectedDoc.type}</DialogTitle>
                     <DialogDescription>
                         Жолооч: {selectedDoc.driver}
                     </DialogDescription>
