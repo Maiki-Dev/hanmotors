@@ -284,7 +284,7 @@ export default function HomeScreen({ navigation, route }) {
             setDriverLocation({ latitude, longitude, heading });
             
             // Smoothly follow user if tracking is enabled
-            if (mapRef.current) {
+            if (mapRef.current && isFollowingRef.current) {
                mapRef.current.animateCamera({ 
                  center: { latitude, longitude },
                  heading: heading || 0,
@@ -696,7 +696,7 @@ export default function HomeScreen({ navigation, route }) {
         provider={PROVIDER_GOOGLE}
         style={styles.map}
         initialRegion={mapRegion}
-        onPanDrag={() => {}}
+        onPanDrag={() => updateFollowing(false)}
         onMapReady={() => setIsMapReady(true)}
         // onTouchStart={() => updateFollowing(false)} // This might be too sensitive
         // onRegionChangeStart={() => updateFollowing(false)} // Removed to prevent conflict with animateToRegion

@@ -872,7 +872,7 @@ router.post('/trip/:id/complete', async (req, res) => {
 
     // Update driver earnings and deduct commission
     if (trip.driver) {
-      const commissionRate = 0.10; // 10%
+      const commissionRate = 0.12; // 12%
       const price = Number(trip.price) || 0; // Ensure number
       const commission = price * commissionRate;
       console.log(`[Trip Complete] Calculating commission: ${commission} (Rate: ${commissionRate}, Price: ${price})`);

@@ -188,37 +188,28 @@ const DocumentVerification = () => {
                     </DialogDescription>
                 </DialogHeader>
                 
-                <Tabs className="w-full">
+                <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
                     <TabsList className="grid w-full grid-cols-3">
-                        <TabsTrigger 
-                            isActive={activeTab === 'license'} 
-                            onClick={() => setActiveTab('license')}
-                        >
+                        <TabsTrigger value="license">
                             Жолооны үнэмлэх
                         </TabsTrigger>
-                        <TabsTrigger 
-                            isActive={activeTab === 'registration'} 
-                            onClick={() => setActiveTab('registration')}
-                        >
+                        <TabsTrigger value="registration">
                             Тээврийн гэрчилгээ
                         </TabsTrigger>
-                        <TabsTrigger 
-                            isActive={activeTab === 'insurance'} 
-                            onClick={() => setActiveTab('insurance')}
-                        >
+                        <TabsTrigger value="insurance">
                             Даатгал
                         </TabsTrigger>
                     </TabsList>
                     
-                    <TabsContent isActive={activeTab === 'license'} className="mt-4">
+                    <TabsContent value="license" className="mt-4">
                         {renderDocumentTab('license', 'Жолооны үнэмлэх', <FileText className="h-5 w-5" />)}
                     </TabsContent>
                     
-                    <TabsContent isActive={activeTab === 'registration'} className="mt-4">
+                    <TabsContent value="registration" className="mt-4">
                         {renderDocumentTab('vehicleRegistration', 'Тээврийн гэрчилгээ', <Car className="h-5 w-5" />)}
                     </TabsContent>
                     
-                    <TabsContent isActive={activeTab === 'insurance'} className="mt-4">
+                    <TabsContent value="insurance" className="mt-4">
                         {renderDocumentTab('insurance', 'Даатгал', <Shield className="h-5 w-5" />)}
                     </TabsContent>
                 </Tabs>
