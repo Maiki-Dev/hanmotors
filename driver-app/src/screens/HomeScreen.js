@@ -549,11 +549,43 @@ export default function HomeScreen({ navigation, route }) {
     }
   }, [driverLocation, isOnline, driverId, services]);
 
-  const handleToggleOnline = () => {
+  const handleToggleOnline = async () => {
     if (isOnline) {
       setIsOnline(false);
       setServices(prev => ({ ...prev, all: false }));
     } else {
+      // Fetch latest status to ensure we have up-to-date info
+      try {
+        const response = await fetch(`${API_URL}/api/driver/${driverId}`);
+        if (response.ok) {
+          const data = await response.json();
+          driverInfoRef.current = data;
+          setWalletBalance(data.wallet?.balance || 0);
+        }
+      } catch (error) {
+        console.log('Failed to refresh driver info:', error);
+      }
+
+      // Check for inactive status (e.g. rejected documents)
+      if (driverInfoRef.current?.status === 'inactive') {
+        Alert.alert(
+          'Анхааруулга',
+          'Таны бүртгэл идэвхгүй байна. Админтай холбогдоно уу.',
+          [{ text: 'OK' }]
+        );
+        return;
+      }
+
+      // Check for pending status
+      if (driverInfoRef.current?.status === 'pending') {
+        Alert.alert(
+          'Баталгаажаагүй байна',
+          'Бүртгэлээ баталгаажуулсаны дараа та ажиллах боломжтой тул оператортой холбогдоно уу',
+          [{ text: 'OK' }]
+        );
+        return;
+      }
+
       setIsServiceModalVisible(true);
     }
   };
@@ -578,20 +610,37 @@ export default function HomeScreen({ navigation, route }) {
   };
 
   const confirmGoOnline = async () => {
-      // If we don't have location yet, try to get it immediately
-      if (!driverLocation) {
-        try {
-           const location = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
-           if (location) {
-               const { latitude, longitude } = location.coords;
-               setDriverLocation({ latitude, longitude });
-           }
-        } catch (e) {
-            console.log('Failed to get location before going online', e);
-        }
+    // Check document verification
+    const driverDocs = driverInfoRef.current?.documents || {};
+    const isVerified = driverDocs.isVerified || (
+        driverDocs.license?.status === 'approved' && 
+        driverDocs.vehicleRegistration?.status === 'approved' && 
+        driverDocs.insurance?.status === 'approved'
+    );
+
+    if (!isVerified) {
+        Alert.alert(
+            'Баталгаажаагүй байна', 
+            'Таны бичиг баримт бүрэн баталгаажаагүй байна. Админ шалгахыг хүлээнэ үү.',
+            [{ text: 'OK' }]
+        );
+        return;
+    }
+
+    // If we don't have location yet, try to get it immediately
+    if (!driverLocation) {
+      try {
+         const location = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
+         if (location) {
+             const { latitude, longitude } = location.coords;
+             setDriverLocation({ latitude, longitude });
+         }
+      } catch (e) {
+          console.log('Failed to get location before going online', e);
       }
-      setIsOnline(true);
-      setIsServiceModalVisible(false);
+    }
+    setIsOnline(true);
+    setIsServiceModalVisible(false);
   };
 
   const handleAcceptJob = async () => {

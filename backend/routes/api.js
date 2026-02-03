@@ -226,6 +226,24 @@ router.post('/driver/:id/status', async (req, res) => {
 
   try {
     const { isOnline } = req.body;
+    
+    // Check if verification is required for going online
+    if (isOnline) {
+        const driver = await Driver.findById(req.params.id);
+        if (!driver) return res.status(404).json({ message: 'Driver not found' });
+        
+        const docs = driver.documents || {};
+        const isVerified = docs.isVerified || (
+            docs.license?.status === 'approved' && 
+            docs.vehicleRegistration?.status === 'approved' && 
+            docs.insurance?.status === 'approved'
+        );
+
+        if (!isVerified) {
+            return res.status(403).json({ message: 'Бичиг баримт баталгаажаагүй байна.' });
+        }
+    }
+
     const driver = await Driver.findByIdAndUpdate(req.params.id, { isOnline }, { new: true });
     
     const io = req.app.get('io');
@@ -1101,34 +1119,32 @@ router.get('/admin/documents', async (req, res) => {
   if (isOffline()) return res.json([]);
 
   try {
+    console.log('Fetching admin documents...');
+    // Find drivers who have at least one document with a URL (not null)
     const drivers = await Driver.find({ 
       $or: [
-        { 'documents.license.url': { $exists: true } },
-        { 'documents.vehicleRegistration.url': { $exists: true } },
-        { 'documents.insurance.url': { $exists: true } }
+        { 'documents.license.url': { $ne: null } },
+        { 'documents.vehicleRegistration.url': { $ne: null } },
+        { 'documents.insurance.url': { $ne: null } }
       ]
     });
 
-    const allDocs = [];
-    drivers.forEach(d => {
-      const docTypes = ['license', 'vehicleRegistration', 'insurance'];
-      docTypes.forEach(type => {
-        if (d.documents && d.documents[type] && d.documents[type].url) {
-           allDocs.push({
-             id: `${d._id}_${type}`,
-             driverId: d._id,
-             driver: d.name,
-             type: type,
-             status: d.documents[type].status,
-             submittedDate: d.createdAt, // Ideally track updated time
-             image: d.documents[type].url
-           });
-        }
-      });
-    });
+    console.log(`Found ${drivers.length} drivers with documents`);
 
-    res.json(allDocs);
+    const result = drivers.map(d => ({
+      driverId: d._id,
+      driverName: d.name,
+      submittedDate: d.updatedAt || d.createdAt, // Use update time if available
+      documents: {
+        license: d.documents?.license || { status: 'pending', url: null },
+        vehicleRegistration: d.documents?.vehicleRegistration || { status: 'pending', url: null },
+        insurance: d.documents?.insurance || { status: 'pending', url: null }
+      }
+    }));
+
+    res.json(result);
   } catch (err) {
+    console.error('Error in /admin/documents:', err);
     res.status(500).json({ error: err.message });
   }
 });
@@ -1147,15 +1163,28 @@ router.post('/admin/documents/:driverId/:docType/status', async (req, res) => {
     const updateField = {};
     updateField[`documents.${docType}.status`] = status;
     
+    // If rejected, set status to inactive and offline
+    if (status === 'rejected') {
+      updateField['status'] = 'inactive';
+      updateField['isOnline'] = false;
+    }
+    
     const driver = await Driver.findByIdAndUpdate(driverId, { $set: updateField }, { new: true });
     
     // Check if all docs are approved to verify driver
-    if (driver.documents.license?.status === 'approved' && 
+    const allApproved = 
+        driver.documents.license?.status === 'approved' && 
         driver.documents.vehicleRegistration?.status === 'approved' &&
-        driver.documents.insurance?.status === 'approved') {
-       driver.documents.isVerified = true;
-       await driver.save();
+        driver.documents.insurance?.status === 'approved';
+    
+    driver.documents.isVerified = allApproved;
+    
+    // If all approved, automatically set status to active
+    if (allApproved) {
+      driver.status = 'active';
     }
+    
+    await driver.save();
 
     res.json(driver);
   } catch (err) {
@@ -1194,56 +1223,6 @@ router.put('/admin/pricing/:id', async (req, res) => {
     const rule = await Pricing.findByIdAndUpdate(req.params.id, req.body, { new: true });
     res.json(rule);
   } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});
-
-// Driver Stats Endpoint
-router.get('/driver/:id/stats', async (req, res) => {
-  if (isOffline()) {
-    const driver = mockDrivers.find(d => d._id === req.params.id);
-    if (!driver) return res.status(404).json({ message: 'Driver not found' });
-    return res.json({
-      today: { trips: 5, earnings: 125000 },
-      month: { trips: 45, earnings: 1500000 },
-      total: { trips: 120, earnings: 3500000 }
-    });
-  }
-  try {
-    const driverId = req.params.id;
-    const now = new Date();
-    const startOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-    const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
-
-    const stats = await Trip.aggregate([
-      { $match: { driver: new mongoose.Types.ObjectId(driverId), status: 'completed' } },
-      { $group: {
-          _id: null,
-          totalTrips: { $sum: 1 },
-          totalEarnings: { $sum: '$price' },
-          todayTrips: { $sum: { $cond: [{ $gte: ['$createdAt', startOfDay] }, 1, 0] } },
-          todayEarnings: { $sum: { $cond: [{ $gte: ['$createdAt', startOfDay] }, '$price', 0] } },
-          monthTrips: { $sum: { $cond: [{ $gte: ['$createdAt', startOfMonth] }, 1, 0] } },
-          monthEarnings: { $sum: { $cond: [{ $gte: ['$createdAt', startOfMonth] }, '$price', 0] } }
-        }
-      }
-    ]);
-
-    if (stats.length > 0) {
-      res.json({
-        today: { trips: stats[0].todayTrips, earnings: stats[0].todayEarnings },
-        month: { trips: stats[0].monthTrips, earnings: stats[0].monthEarnings },
-        total: { trips: stats[0].totalTrips, earnings: stats[0].totalEarnings }
-      });
-    } else {
-      res.json({
-        today: { trips: 0, earnings: 0 },
-        month: { trips: 0, earnings: 0 },
-        total: { trips: 0, earnings: 0 }
-      });
-    }
-  } catch (err) {
-    console.error('Stats Error:', err);
     res.status(500).json({ error: err.message });
   }
 });

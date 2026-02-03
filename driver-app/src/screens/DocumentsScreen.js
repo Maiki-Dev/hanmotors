@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert, RefreshControl, ActivityIndicator, Image } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert, RefreshControl, ActivityIndicator, Image, Modal } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
 import { theme } from '../constants/theme';
 import { Header } from '../components/Header';
@@ -8,7 +8,7 @@ import { Upload, CheckCircle, AlertCircle, XCircle } from 'lucide-react-native';
 import { API_URL } from '../config';
 import { uploadToCloudinary } from '../utils/cloudinary';
 
-const DocumentItem = ({ title, status, onUpload, disabled }) => (
+const DocumentItem = ({ title, status, onUpload, onView, disabled, imageUrl }) => (
   <View style={[styles.docItem, disabled && styles.docItemDisabled]}>
     <View style={styles.docInfo}>
       <Text style={styles.docTitle}>{title}</Text>
@@ -31,13 +31,26 @@ const DocumentItem = ({ title, status, onUpload, disabled }) => (
         )}
       </View>
     </View>
-    <TouchableOpacity 
-      style={[styles.uploadButton, disabled && styles.uploadButtonDisabled]} 
-      onPress={onUpload}
-      disabled={disabled}
-    >
-      <Upload size={20} color={disabled ? theme.colors.textSecondary : theme.colors.primary} />
-    </TouchableOpacity>
+    
+    <View style={styles.actions}>
+        {imageUrl && (
+            <TouchableOpacity 
+                style={styles.viewButton} 
+                onPress={onView}
+                disabled={disabled}
+            >
+                <Image source={{ uri: imageUrl }} style={styles.thumbnail} />
+            </TouchableOpacity>
+        )}
+        
+        <TouchableOpacity 
+            style={[styles.uploadButton, disabled && styles.uploadButtonDisabled]} 
+            onPress={onUpload}
+            disabled={disabled}
+        >
+            <Upload size={20} color={disabled ? theme.colors.textSecondary : theme.colors.primary} />
+        </TouchableOpacity>
+    </View>
   </View>
 );
 
@@ -45,11 +58,13 @@ export default function DocumentsScreen({ navigation, route }) {
   const { driverId } = route.params || {};
   const [documents, setDocuments] = useState({
     license: { url: null, status: 'pending' },
-    vehicleRegistration: { url: null, status: 'pending' }
+    vehicleRegistration: { url: null, status: 'pending' },
+    insurance: { url: null, status: 'pending' }
   });
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [viewingImage, setViewingImage] = useState(null);
 
   const fetchDocuments = async () => {
     try {
@@ -165,6 +180,9 @@ export default function DocumentsScreen({ navigation, route }) {
     );
   }
 
+  const [imageLoading, setImageLoading] = useState(false);
+  const [imageError, setImageError] = useState(false);
+
   return (
     <View style={styles.container}>
       <Header title="Баримт бичиг" onBack={() => navigation.goBack()} />
@@ -182,25 +200,67 @@ export default function DocumentsScreen({ navigation, route }) {
         <DocumentItem 
           title="Жолооны үнэмлэх" 
           status={documents.license?.status} 
+          imageUrl={documents.license?.url}
           onUpload={() => handleUpload('license')}
+          onView={() => { setImageError(false); setViewingImage(documents.license?.url); }}
           disabled={saving}
         />
 
         <DocumentItem 
           title="Тээврийн хэрэгслийн гэрчилгээ" 
           status={documents.vehicleRegistration?.status} 
+          imageUrl={documents.vehicleRegistration?.url}
           onUpload={() => handleUpload('vehicleRegistration')}
+          onView={() => { setImageError(false); setViewingImage(documents.vehicleRegistration?.url); }}
           disabled={saving}
         />
 
         <DocumentItem 
           title="Жолоочийн хариуцлагын даатгал" 
           status={documents.insurance?.status} 
+          imageUrl={documents.insurance?.url}
           onUpload={() => handleUpload('insurance')}
+          onView={() => { setImageError(false); setViewingImage(documents.insurance?.url); }}
           disabled={saving}
         />
 
       </ScrollView>
+
+      <Modal 
+        visible={!!viewingImage} 
+        transparent={true} 
+        onRequestClose={() => setViewingImage(null)}
+        animationType="fade"
+      >
+        <View style={styles.modalContainer}>
+            <TouchableOpacity style={styles.closeButton} onPress={() => setViewingImage(null)}>
+                <XCircle size={40} color="white" />
+            </TouchableOpacity>
+            
+            {viewingImage && (
+                <View style={styles.imageWrapper}>
+                    {imageLoading && (
+                        <ActivityIndicator size="large" color="#ffffff" style={styles.loader} />
+                    )}
+                    <Image 
+                        source={{ uri: viewingImage }} 
+                        style={styles.fullImage} 
+                        resizeMode="contain"
+                        onLoadStart={() => setImageLoading(true)}
+                        onLoadEnd={() => setImageLoading(false)}
+                        onError={(e) => {
+                            console.log('Image Load Error:', e.nativeEvent.error);
+                            setImageLoading(false);
+                            setImageError(true);
+                        }}
+                    />
+                    {imageError && (
+                        <Text style={styles.errorText}>Зураг ачааллахад алдаа гарлаа</Text>
+                    )}
+                </View>
+            )}
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -255,10 +315,30 @@ const styles = StyleSheet.create({
     color: theme.colors.error,
     marginLeft: 4,
   },
+  actions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
   uploadButton: {
     padding: theme.spacing.s,
     backgroundColor: theme.colors.surfaceLight,
     borderRadius: theme.borderRadius.s,
+  },
+  viewButton: {
+    width: 40,
+    height: 40,
+    borderRadius: theme.borderRadius.s,
+    overflow: 'hidden',
+    borderWidth: 1,
+    borderColor: theme.colors.surfaceLight,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: '#eee',
+  },
+  thumbnail: {
+    width: '100%',
+    height: '100%',
   },
   docItemDisabled: {
     opacity: 0.6,
@@ -270,5 +350,37 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
+  },
+  modalContainer: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.9)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    zIndex: 9999,
+  },
+  imageWrapper: {
+    width: '100%',
+    height: '80%',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  fullImage: {
+    width: '100%',
+    height: '100%',
+  },
+  loader: {
+    position: 'absolute',
+    zIndex: 1,
+  },
+  errorText: {
+    color: 'white',
+    marginTop: 20,
+    fontSize: 16,
+  },
+  closeButton: {
+    position: 'absolute',
+    top: 50,
+    right: 20,
+    zIndex: 10,
   }
 });

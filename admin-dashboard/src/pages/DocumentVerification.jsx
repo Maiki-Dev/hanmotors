@@ -4,18 +4,20 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from ".
 import { Badge } from "../components/ui/badge";
 import { Button } from "../components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "../components/ui/dialog";
-import { Eye, Check, X } from 'lucide-react';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "../components/ui/tabs";
+import { Eye, Check, X, FileText, Car, Shield } from 'lucide-react';
 import api from '../services/api';
 
 const DocumentVerification = () => {
-  const [documents, setDocuments] = useState([]);
-  const [selectedDoc, setSelectedDoc] = useState(null);
+  const [drivers, setDrivers] = useState([]);
+  const [selectedDriver, setSelectedDriver] = useState(null);
   const [dialogOpen, setDialogOpen] = useState(false);
+  const [activeTab, setActiveTab] = useState('license');
 
   const fetchDocuments = async () => {
     try {
       const response = await api.get('/admin/documents');
-      setDocuments(response.data);
+      setDrivers(response.data);
     } catch (error) {
       console.error('Error fetching documents:', error);
     }
@@ -28,23 +30,36 @@ const DocumentVerification = () => {
     return () => clearInterval(interval);
   }, []);
 
-  const handleView = (doc) => {
-    setSelectedDoc(doc);
+  const handleView = (driver) => {
+    setSelectedDriver(driver);
+    setActiveTab('license'); // Reset to first tab
     setDialogOpen(true);
   };
 
   const handleClose = () => {
     setDialogOpen(false);
-    setSelectedDoc(null);
+    setSelectedDriver(null);
   };
 
-  const handleStatusUpdate = async (doc, status) => {
+  const handleStatusUpdate = async (driverId, docType, status) => {
     try {
-      await api.post(`/admin/documents/${doc.driverId}/${doc.type}/status`, { status });
-      fetchDocuments();
-      if (selectedDoc && selectedDoc.id === doc.id) {
-        handleClose();
+      await api.post(`/admin/documents/${driverId}/${docType}/status`, { status });
+      
+      // Update local state immediately for better UX
+      if (selectedDriver && selectedDriver.driverId === driverId) {
+        setSelectedDriver(prev => ({
+            ...prev,
+            documents: {
+                ...prev.documents,
+                [docType]: {
+                    ...prev.documents[docType],
+                    status: status
+                }
+            }
+        }));
       }
+      
+      fetchDocuments();
     } catch (error) {
       console.error('Error updating status:', error);
     }
@@ -55,8 +70,64 @@ const DocumentVerification = () => {
       case 'approved': return <Badge className="bg-green-600">Баталгаажсан</Badge>;
       case 'pending': return <Badge className="bg-yellow-600">Хүлээгдэж буй</Badge>;
       case 'rejected': return <Badge variant="destructive">Татгалзсан</Badge>;
-      default: return <Badge variant="outline">{status}</Badge>;
+      default: return <Badge variant="outline">{status || 'N/A'}</Badge>;
     }
+  };
+
+  const getOverallStatus = (docs) => {
+    const statuses = [docs.license?.status, docs.vehicleRegistration?.status, docs.insurance?.status];
+    if (statuses.includes('rejected')) return <Badge variant="destructive">Татгалзсан</Badge>;
+    if (statuses.includes('pending')) return <Badge className="bg-yellow-600">Хүлээгдэж буй</Badge>;
+    if (statuses.every(s => s === 'approved')) return <Badge className="bg-green-600">Баталгаажсан</Badge>;
+    return <Badge variant="outline">Дутуу</Badge>;
+  };
+
+  const renderDocumentTab = (type, label, icon) => {
+    const doc = selectedDriver?.documents?.[type];
+    if (!doc || !doc.url) return (
+        <div className="flex flex-col items-center justify-center h-48 text-muted-foreground">
+            {icon}
+            <span className="mt-2">Зураг оруулаагүй байна</span>
+        </div>
+    );
+
+    return (
+        <div className="space-y-4">
+            <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                    {icon}
+                    <h3 className="font-semibold">{label}</h3>
+                </div>
+                {getStatusBadge(doc.status)}
+            </div>
+            
+            <div className="aspect-video w-full overflow-hidden rounded-lg border bg-muted relative flex items-center justify-center bg-black/5">
+                <img 
+                    src={doc.url} 
+                    alt={label} 
+                    className="max-w-full max-h-full object-contain" 
+                />
+            </div>
+
+            <div className="flex justify-end gap-2">
+                <Button 
+                    variant="outline" 
+                    className="text-red-600 hover:text-red-700 hover:bg-red-50 border-red-200"
+                    onClick={() => handleStatusUpdate(selectedDriver.driverId, type, 'rejected')}
+                >
+                    <X className="mr-2 h-4 w-4" />
+                    Татгалзах
+                </Button>
+                <Button 
+                    className="bg-green-600 hover:bg-green-700"
+                    onClick={() => handleStatusUpdate(selectedDriver.driverId, type, 'approved')}
+                >
+                    <Check className="mr-2 h-4 w-4" />
+                    Баталгаажуулах
+                </Button>
+            </div>
+        </div>
+    );
   };
 
   return (
@@ -71,51 +142,33 @@ const DocumentVerification = () => {
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>ID</TableHead>
                 <TableHead>Жолооч</TableHead>
-                <TableHead>Төрөл</TableHead>
-                <TableHead>Огноо</TableHead>
+                <TableHead>Илгээсэн огноо</TableHead>
                 <TableHead>Төлөв</TableHead>
                 <TableHead className="text-right">Үйлдэл</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
-              {documents.length === 0 ? (
+              {drivers.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={6} className="text-center py-4">
+                  <TableCell colSpan={4} className="text-center py-4">
                     Баримт бичиг байхгүй байна
                   </TableCell>
                 </TableRow>
               ) : (
-                documents.map((doc) => (
-                  <TableRow key={doc.id}>
-                    <TableCell className="font-medium">{doc.id.substring(0, 8)}...</TableCell>
-                    <TableCell>{doc.driver}</TableCell>
-                    <TableCell>{doc.type === 'license' ? 'Жолооны үнэмлэх' : doc.type === 'vehicleRegistration' ? 'Тээврийн гэрчилгээ' : doc.type === 'insurance' ? 'Жолоочийн хариуцлагын даатгал' : doc.type}</TableCell>
-                    <TableCell>{new Date(doc.submittedDate).toLocaleDateString()}</TableCell>
-                    <TableCell>{getStatusBadge(doc.status)}</TableCell>
+                drivers.map((driver) => (
+                  <TableRow key={driver.driverId}>
+                    <TableCell className="font-medium">
+                        <div>{driver.driverName}</div>
+                        <div className="text-xs text-muted-foreground">ID: {driver.driverId.substring(0, 8)}...</div>
+                    </TableCell>
+                    <TableCell>{new Date(driver.submittedDate).toLocaleDateString()}</TableCell>
+                    <TableCell>{getOverallStatus(driver.documents)}</TableCell>
                     <TableCell className="text-right">
-                      <div className="flex justify-end gap-2">
-                        <Button variant="outline" size="icon" onClick={() => handleView(doc)}>
-                          <Eye className="h-4 w-4" />
-                        </Button>
-                        <Button 
-                          variant="outline" 
-                          size="icon" 
-                          className="text-green-600 hover:text-green-700"
-                          onClick={() => handleStatusUpdate(doc, 'approved')}
-                        >
-                          <Check className="h-4 w-4" />
-                        </Button>
-                        <Button 
-                          variant="outline" 
-                          size="icon" 
-                          className="text-red-600 hover:text-red-700"
-                          onClick={() => handleStatusUpdate(doc, 'rejected')}
-                        >
-                          <X className="h-4 w-4" />
-                        </Button>
-                      </div>
+                      <Button variant="outline" size="sm" onClick={() => handleView(driver)}>
+                        <Eye className="mr-2 h-4 w-4" />
+                        Харах
+                      </Button>
                     </TableCell>
                   </TableRow>
                 ))
@@ -126,30 +179,52 @@ const DocumentVerification = () => {
       </Card>
 
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-        {selectedDoc && (
-            <DialogContent className="sm:max-w-[600px]">
+        {selectedDriver && (
+            <DialogContent className="sm:max-w-[800px] max-h-[90vh] overflow-y-auto">
                 <DialogHeader>
-                    <DialogTitle>Баримт бичиг: {selectedDoc.type === 'license' ? 'Жолооны үнэмлэх' : selectedDoc.type === 'vehicleRegistration' ? 'Тээврийн гэрчилгээ' : selectedDoc.type === 'insurance' ? 'Жолоочийн хариуцлагын даатгал' : selectedDoc.type}</DialogTitle>
+                    <DialogTitle>Баримт бичиг шалгах: {selectedDriver.driverName}</DialogTitle>
                     <DialogDescription>
-                        Жолооч: {selectedDoc.driver}
+                        Жолоочийн илгээсэн бичиг баримтуудыг шалгаж баталгаажуулна уу.
                     </DialogDescription>
                 </DialogHeader>
-                <div className="grid gap-4 py-4">
-                    <div className="aspect-video w-full overflow-hidden rounded-lg border bg-muted relative flex items-center justify-center">
-                        {selectedDoc.image ? (
-                            <img 
-                              src={selectedDoc.image} 
-                              alt={selectedDoc.type} 
-                              className="max-w-full max-h-full object-contain" 
-                            />
-                        ) : (
-                            <div className="text-muted-foreground">Зураг алга</div>
-                        )}
-                    </div>
-                </div>
+                
+                <Tabs className="w-full">
+                    <TabsList className="grid w-full grid-cols-3">
+                        <TabsTrigger 
+                            isActive={activeTab === 'license'} 
+                            onClick={() => setActiveTab('license')}
+                        >
+                            Жолооны үнэмлэх
+                        </TabsTrigger>
+                        <TabsTrigger 
+                            isActive={activeTab === 'registration'} 
+                            onClick={() => setActiveTab('registration')}
+                        >
+                            Тээврийн гэрчилгээ
+                        </TabsTrigger>
+                        <TabsTrigger 
+                            isActive={activeTab === 'insurance'} 
+                            onClick={() => setActiveTab('insurance')}
+                        >
+                            Даатгал
+                        </TabsTrigger>
+                    </TabsList>
+                    
+                    <TabsContent isActive={activeTab === 'license'} className="mt-4">
+                        {renderDocumentTab('license', 'Жолооны үнэмлэх', <FileText className="h-5 w-5" />)}
+                    </TabsContent>
+                    
+                    <TabsContent isActive={activeTab === 'registration'} className="mt-4">
+                        {renderDocumentTab('vehicleRegistration', 'Тээврийн гэрчилгээ', <Car className="h-5 w-5" />)}
+                    </TabsContent>
+                    
+                    <TabsContent isActive={activeTab === 'insurance'} className="mt-4">
+                        {renderDocumentTab('insurance', 'Даатгал', <Shield className="h-5 w-5" />)}
+                    </TabsContent>
+                </Tabs>
+
                 <DialogFooter>
-                    <Button variant="destructive" onClick={() => handleStatusUpdate(selectedDoc, 'rejected')}>Татгалзах</Button>
-                    <Button onClick={() => handleStatusUpdate(selectedDoc, 'approved')}>Баталгаажуулах</Button>
+                    <Button variant="outline" onClick={handleClose}>Хаах</Button>
                 </DialogFooter>
             </DialogContent>
         )}
