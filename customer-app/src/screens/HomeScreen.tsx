@@ -22,6 +22,7 @@ import { theme } from '../constants/theme';
 import { RootStackParamList } from '../navigation/types';
 import { AnimatedDriverMarker } from '../components/AnimatedDriverMarker';
 import { initSocket } from '../services/socket';
+import { LOCATION_TASK_NAME } from '../services/LocationTask';
 
 const { width, height } = Dimensions.get('window');
 const ASPECT_RATIO = width / height;
@@ -50,6 +51,7 @@ export default function HomeScreen() {
   const [isMapReady, setIsMapReady] = useState(false);
   const [drivers, setDrivers] = useState(INITIAL_DRIVERS);
   const [showsTraffic, setShowsTraffic] = useState(false);
+  const [mapType, setMapType] = useState<'standard' | 'satellite' | 'hybrid'>('standard');
   const [selectedDriverId, setSelectedDriverId] = useState<string | null>(null);
 
   const [isDragging, setIsDragging] = useState(false);
@@ -80,6 +82,25 @@ export default function HomeScreen() {
       if (status !== 'granted') {
         setAddress('Байршлын эрх өгөгдөөгүй байна');
         return;
+      }
+
+      // Request background permissions
+      try {
+        const { status: bgStatus } = await Location.requestBackgroundPermissionsAsync();
+        if (bgStatus === 'granted') {
+          await Location.startLocationUpdatesAsync(LOCATION_TASK_NAME, {
+            accuracy: Location.Accuracy.Balanced,
+            distanceInterval: 10,
+            deferredUpdatesInterval: 5000,
+            foregroundService: {
+              notificationTitle: "HanMotors",
+              notificationBody: "Байршил ашиглаж байна...",
+              notificationColor: "#fbbf24"
+            }
+          });
+        }
+      } catch (err) {
+        console.log("Background location permission denied or error:", err);
       }
 
       // Initial location
@@ -136,9 +157,19 @@ export default function HomeScreen() {
   useEffect(() => {
     // 1. Initialize Socket Connection
     // Passing user info if needed, or just connecting
-    const socket = initSocket();
+    const socket = initSocket(user?.id || user?._id);
 
     // 2. Listen for Real-time Location Updates
+    // Listen for initial bulk drivers data
+    socket.on('allDriverLocations', (locations: Record<string, any>) => {
+       // locations is { driverId: { lat, lng, ... }, ... }
+       const driversList = Object.keys(locations).map(id => ({
+         id,
+         ...locations[id]
+       }));
+       setDrivers(driversList);
+    });
+
     // data structure: { driverId, location: { lat, lng, heading, ... } }
     socket.on('driverLocationUpdated', (data: { driverId: string, location: any }) => {
       // console.log('Driver update received:', data); // Debug
@@ -188,95 +219,6 @@ export default function HomeScreen() {
     }
   };
 
-  const mapStyle = [
-    {
-      "elementType": "geometry",
-      "stylers": [{ "color": "#f5f5f5" }]
-    },
-    {
-      "elementType": "labels.icon",
-      "stylers": [{ "visibility": "off" }]
-    },
-    {
-      "elementType": "labels.text.fill",
-      "stylers": [{ "color": "#616161" }]
-    },
-    {
-      "elementType": "labels.text.stroke",
-      "stylers": [{ "color": "#f5f5f5" }]
-    },
-    {
-      "featureType": "administrative.land_parcel",
-      "elementType": "labels.text.fill",
-      "stylers": [{ "color": "#bdbdbd" }]
-    },
-    {
-      "featureType": "poi",
-      "elementType": "geometry",
-      "stylers": [{ "color": "#eeeeee" }]
-    },
-    {
-      "featureType": "poi",
-      "elementType": "labels.text.fill",
-      "stylers": [{ "color": "#757575" }]
-    },
-    {
-      "featureType": "poi.park",
-      "elementType": "geometry",
-      "stylers": [{ "color": "#e5e5e5" }]
-    },
-    {
-      "featureType": "poi.park",
-      "elementType": "labels.text.fill",
-      "stylers": [{ "color": "#9e9e9e" }]
-    },
-    {
-      "featureType": "road",
-      "elementType": "geometry",
-      "stylers": [{ "color": "#ffffff" }]
-    },
-    {
-      "featureType": "road.arterial",
-      "elementType": "labels.text.fill",
-      "stylers": [{ "color": "#757575" }]
-    },
-    {
-      "featureType": "road.highway",
-      "elementType": "geometry",
-      "stylers": [{ "color": "#dadada" }]
-    },
-    {
-      "featureType": "road.highway",
-      "elementType": "labels.text.fill",
-      "stylers": [{ "color": "#616161" }]
-    },
-    {
-      "featureType": "road.local",
-      "elementType": "labels.text.fill",
-      "stylers": [{ "color": "#9e9e9e" }]
-    },
-    {
-      "featureType": "transit.line",
-      "elementType": "geometry",
-      "stylers": [{ "color": "#e5e5e5" }]
-    },
-    {
-      "featureType": "transit.station",
-      "elementType": "geometry",
-      "stylers": [{ "color": "#eeeeee" }]
-    },
-    {
-      "featureType": "water",
-      "elementType": "geometry",
-      "stylers": [{ "color": "#c9c9c9" }]
-    },
-    {
-      "featureType": "water",
-      "elementType": "labels.text.fill",
-      "stylers": [{ "color": "#9e9e9e" }]
-    }
-  ];
-
   const onRegionChange = () => {
     setIsDragging(true);
     if (selectedDriverId) setSelectedDriverId(null);
@@ -299,6 +241,12 @@ export default function HomeScreen() {
       mapRef.current.animateToRegion(newRegion, 1000);
       setRegion(newRegion);
     }
+  };
+
+  const cycleMapType = () => {
+    if (mapType === 'standard') setMapType('hybrid');
+    else if (mapType === 'hybrid') setMapType('satellite');
+    else setMapType('standard');
   };
 
   const handleServicePress = (serviceId: string) => {
@@ -325,8 +273,9 @@ export default function HomeScreen() {
           <MapView
             ref={mapRef}
             style={styles.map}
-            provider={PROVIDER_GOOGLE}
-            customMapStyle={mapStyle}
+            // provider={PROVIDER_GOOGLE} // Commented out to use native provider (MapKit on iOS, Google on Android)
+            customMapStyle={mapType === 'standard' ? mapStyle : []}
+            mapType={mapType}
             initialRegion={region}
             showsUserLocation={true}
             showsMyLocationButton={false}
@@ -386,6 +335,14 @@ export default function HomeScreen() {
 
         {/* Map Controls */}
         <View style={styles.mapControls}>
+          <TouchableOpacity 
+            style={styles.controlButton} 
+            onPress={cycleMapType}
+            activeOpacity={0.8}
+          >
+            <Ionicons name="layers" size={24} color="#FFFFFF" />
+          </TouchableOpacity>
+
           <TouchableOpacity 
             style={styles.controlButton} 
             onPress={handleMyLocation}

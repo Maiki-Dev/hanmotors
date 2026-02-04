@@ -71,11 +71,15 @@ io.on('connection', (socket) => {
     const customerId = socket.handshake.query.customerId;
     socket.join(`customer_${customerId}`);
     console.log(`Customer ${customerId} joined room`);
+    // Send all current driver locations to the new customer
+    socket.emit('allDriverLocations', driverLocations);
   }
   
   socket.on('customerJoin', (customerId) => {
       socket.join(`customer_${customerId}`);
       console.log(`Customer ${customerId} joined room (manual event)`);
+      // Send all current driver locations to the new customer
+      socket.emit('allDriverLocations', driverLocations);
   });
 
   socket.on('adminJoin', () => {

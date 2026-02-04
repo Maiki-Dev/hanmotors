@@ -4,6 +4,8 @@ import MapView, { Marker, PROVIDER_GOOGLE } from 'react-native-maps';
 import { io } from 'socket.io-client';
 import * as Location from 'expo-location';
 import * as Notifications from 'expo-notifications';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { LOCATION_TASK_NAME } from '../services/LocationTask';
 import { IncomingJobModal } from '../components/IncomingJobModal';
 import { API_URL } from '../config';
 
@@ -18,6 +20,7 @@ Notifications.setNotificationHandler({
 });
 import { theme } from '../constants/theme';
 import { PremiumCard } from '../components/PremiumCard';
+import { AnimatedCarMarker } from '../components/AnimatedCarMarker';
 import { Navigation as NavIcon, Power, Wallet, Car, Truck, Layers, Activity } from 'lucide-react-native';
 
 const { width, height } = Dimensions.get('window');
@@ -546,6 +549,14 @@ export default function HomeScreen({ navigation, route }) {
     if (isOnline) {
       setIsOnline(false);
       setServices(prev => ({ ...prev, all: false }));
+      
+      // Stop background updates
+      try {
+         await Location.stopLocationUpdatesAsync(LOCATION_TASK_NAME);
+         await AsyncStorage.setItem('driver_is_online', 'false');
+      } catch (e) {
+         console.log('Error stopping background location:', e);
+      }
     } else {
       // Fetch latest status to ensure we have up-to-date info
       try {
@@ -634,6 +645,35 @@ export default function HomeScreen({ navigation, route }) {
     }
     setIsOnline(true);
     setIsServiceModalVisible(false);
+    
+    // Start background updates
+    try {
+        await AsyncStorage.setItem('driver_is_online', 'true');
+        await AsyncStorage.setItem('driver_id', driverId);
+        if (driverInfoRef.current) {
+            await AsyncStorage.setItem('driver_info', JSON.stringify(driverInfoRef.current));
+        }
+        await AsyncStorage.setItem('driver_services', JSON.stringify(services));
+
+        const { status } = await Location.requestBackgroundPermissionsAsync();
+        if (status === 'granted') {
+            await Location.startLocationUpdatesAsync(LOCATION_TASK_NAME, {
+                accuracy: Location.Accuracy.BestForNavigation,
+                timeInterval: 2000, // Update every 2 seconds in background
+                distanceInterval: 5, // Update every 5 meters
+                showsBackgroundLocationIndicator: true,
+                foregroundService: {
+                    notificationTitle: "HanMotors Driver",
+                    notificationBody: "Таны байршлыг илгээж байна...",
+                    notificationColor: "#FFD700"
+                }
+            });
+        } else {
+            Alert.alert('Анхааруулга', 'Background location permission not granted. Tracking may stop when app is closed.');
+        }
+    } catch (e) {
+        console.log('Error starting background location:', e);
+    }
   };
 
   const handleAcceptJob = async () => {
@@ -705,44 +745,25 @@ export default function HomeScreen({ navigation, route }) {
       >
         {/* Custom Car Marker (Showing car icon for driver) */}
         {driverLocation && (
-          <Marker 
-            coordinate={driverLocation} 
-            anchor={{ x: 0.5, y: 0.5 }}
-            rotation={(driverLocation.heading || 0) + (Platform.OS === 'ios' ? 0 : -90)} // iOS respects EXIF orientation (Up), Android needs adjustment (Right)
-            flat={true} // Makes the marker rotate with the map
-          >
-             <View style={styles.carMarkerContainer}>
-               <View style={[styles.carMarkerGlow, { width: 40, height: 40, borderRadius: 20, opacity: 0.5 }]} />
-               <Image 
-                  source={require('../../assets/tow-truck.png')}
-                  style={{ width: 60, height: 60, resizeMode: 'contain' }}
-               />
-             </View>
-          </Marker>
+          <AnimatedCarMarker
+            coordinate={driverLocation}
+            heading={driverLocation.heading || 0}
+            isTowing={true} // Default to tow truck as per original hardcoded image
+            duration={1000} // Fast updates for own location
+          />
         )}
 
         {/* Other Drivers Markers - Only show when ONLINE */}
         {isOnline && Object.entries(otherDrivers).map(([id, loc]) => {
           if (!loc || !loc.lat || !loc.lng) return null;
           return (
-            <Marker
+            <AnimatedCarMarker
               key={id}
               coordinate={{ latitude: loc.lat, longitude: loc.lng }}
-              title="Жолооч"
-              description="Идэвхтэй"
-              anchor={{ x: 0.5, y: 0.5 }}
-            >
-             <View style={styles.carMarkerContainer}>
-               <View style={[styles.carMarkerCircle, { backgroundColor: theme.colors.textSecondary }]}>
-                 {loc.isTowing ? (
-                    <Truck size={20} color="#FFF" fill="#FFF" />
-                 ) : (
-                    <Car size={20} color="#FFF" fill="#FFF" />
-                 )}
-               </View>
-               <View style={[styles.carMarkerArrow, { borderTopColor: theme.colors.textSecondary }]} />
-             </View>
-            </Marker>
+              heading={loc.heading || 0}
+              isTowing={loc.isTowing}
+              duration={2000} // Smooth interpolation duration matching socket update interval
+            />
           );
         })}
       </MapView>

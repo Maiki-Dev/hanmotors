@@ -1,102 +1,52 @@
 import axios from 'axios';
 import { GOOGLE_MAPS_APIKEY } from '../config';
 
-const ROUTES_API_URL = 'https://routes.googleapis.com/directions/v2:computeRoutes';
-const DIRECTIONS_API_URL = 'https://maps.googleapis.com/maps/api/directions/json';
+// Using OSRM (Open Source Routing Machine) as a free alternative to Google Directions API
+const OSRM_API_URL = 'http://router.project-osrm.org/route/v1/driving';
 
 export const mapService = {
   getRoute: async (
     origin: { latitude: number; longitude: number },
     destination: { latitude: number; longitude: number }
   ) => {
-    // Debug API Key (show first 5 chars)
-    console.log('Using API Key:', GOOGLE_MAPS_APIKEY ? `${GOOGLE_MAPS_APIKEY.substring(0, 5)}...` : 'MISSING');
-
-    if (!GOOGLE_MAPS_APIKEY) {
-        throw new Error('Google Maps API Key is missing');
-    }
-
     try {
-      const response = await axios.post(
-        ROUTES_API_URL,
-        {
-          origin: {
-            location: {
-              latLng: {
-                latitude: origin.latitude,
-                longitude: origin.longitude,
-              },
-            },
-          },
-          destination: {
-            location: {
-              latLng: {
-                latitude: destination.latitude,
-                longitude: destination.longitude,
-              },
-            },
-          },
-          travelMode: 'DRIVE',
-          routingPreference: 'TRAFFIC_AWARE',
-          computeAlternativeRoutes: false,
-          routeModifiers: {
-            avoidTolls: false,
-            avoidHighways: false,
-            avoidFerries: false,
-          },
-          languageCode: 'mn-MN',
-          units: 'METRIC',
-        },
-        {
-          headers: {
-            'Content-Type': 'application/json',
-            'X-Goog-Api-Key': GOOGLE_MAPS_APIKEY,
-            'X-Goog-FieldMask': 'routes.distanceMeters,routes.duration,routes.polyline.encodedPolyline',
-          },
+      // OSRM format: /driving/longitude,latitude;longitude,latitude
+      // Note: OSRM takes coordinates as "lng,lat"
+      const url = `${OSRM_API_URL}/${origin.longitude},${origin.latitude};${destination.longitude},${destination.latitude}`;
+      
+      const response = await axios.get(url, {
+        params: {
+          overview: 'full',
+          geometries: 'polyline',
+          steps: false
         }
-      );
+      });
 
       if (response.data && response.data.routes && response.data.routes.length > 0) {
-        return response.data.routes[0];
+        const route = response.data.routes[0];
+        
+        // Transform OSRM response to match our expected format
+        return {
+          polyline: {
+            encodedPolyline: route.geometry
+          },
+          distanceMeters: route.distance, // in meters
+          duration: Math.round(route.duration) // in seconds
+        };
       }
       return null;
-    } catch (error: any) {
-      console.log('Routes API failed (likely not enabled). Trying Directions API fallback...');
-      
-      // Fallback to Legacy Directions API
-      try {
-        const response = await axios.get(DIRECTIONS_API_URL, {
-            params: {
-                origin: `${origin.latitude},${origin.longitude}`,
-                destination: `${destination.latitude},${destination.longitude}`,
-                key: GOOGLE_MAPS_APIKEY,
-                mode: 'driving',
-                language: 'mn'
-            }
-        });
-
-        if (response.data.routes && response.data.routes.length > 0) {
-             const route = response.data.routes[0];
-             return {
-                 polyline: {
-                     encodedPolyline: route.overview_polyline.points
-                 },
-                 distanceMeters: route.legs[0].distance.value,
-                 duration: route.legs[0].duration.text // approximate
-             };
-        } else if (response.data.error_message) {
-             console.error('Directions API Error:', response.data.error_message);
-             throw new Error(response.data.error_message);
-        }
-      } catch (legacyError) {
-         console.error('Both Routes API and Directions API failed.');
-         throw error; // Throw the original error (likely 403 or Permission Denied)
-      }
+    } catch (error) {
+      console.error('OSRM Routing failed:', error);
+      // If OSRM fails, we just return null to avoid crashing the app
+      // The map will just show markers without the line
+      return null;
     }
   },
 };
 
 export const decodePolyline = (encoded: string) => {
+  // Polyline decoding logic remains the same as it handles standard encoded polylines
+  // which OSRM also produces (Google Polyline Algorithm Format)
   const poly = [];
   let index = 0,
     len = encoded.length;

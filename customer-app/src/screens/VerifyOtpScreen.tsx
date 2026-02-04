@@ -17,6 +17,8 @@ type RootStackParamList = {
 type VerifyOtpScreenRouteProp = RouteProp<RootStackParamList, 'VerifyOtp'>;
 type VerifyOtpScreenNavigationProp = StackNavigationProp<RootStackParamList, 'VerifyOtp'>;
 
+import AsyncStorage from '@react-native-async-storage/async-storage';
+
 const VerifyOtpScreen = () => {
   const [otp, setOtp] = useState('');
   const [loading, setLoading] = useState(false);
@@ -36,6 +38,7 @@ const VerifyOtpScreen = () => {
       const response = await authService.verifyOtp(phone, otp);
       const { customer, token } = response.data;
       
+      await AsyncStorage.setItem('customer_id', customer._id);
       dispatch(setCredentials({ user: customer, token }));
       
       // Navigation will be handled by the AppNavigator based on auth state
