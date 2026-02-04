@@ -34,6 +34,9 @@ import { useSelector } from 'react-redux';
 import { RootState } from '../store';
 import { GooglePlacesAutocomplete } from 'react-native-google-places-autocomplete';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import * as Location from 'expo-location';
+import { initSocket } from '../services/socket';
+import { AnimatedDriverMarker } from '../components/AnimatedDriverMarker';
 
 type RootStackParamList = {
   RideRequest: { 
@@ -98,6 +101,15 @@ const RideRequestScreen = () => {
   const [selectedService, setSelectedService] = useState(SERVICES[0]);
   const [step, setStep] = useState<'destination_selection' | 'confirm_ride'>('destination_selection');
   const [activeCategory, setActiveCategory] = useState('suggested');
+  const [showMapPicker, setShowMapPicker] = useState(false);
+  const [pickerRegion, setPickerRegion] = useState({
+      latitude: pickup?.latitude || 47.9188,
+      longitude: pickup?.longitude || 106.9176,
+      latitudeDelta: 0.01,
+      longitudeDelta: 0.01,
+  });
+  const [pickerAddress, setPickerAddress] = useState<string>('Байршил сонгоно уу');
+  const [drivers, setDrivers] = useState<any[]>([]);
 
   // Calculate price when distance changes
   useEffect(() => {
@@ -105,6 +117,33 @@ const RideRequestScreen = () => {
       setPrice(calculatePrice(distance, selectedService));
     }
   }, [distance, selectedService]);
+
+  // Real-time Driver Tracking
+  useEffect(() => {
+    const socket = initSocket();
+    const handleDriverUpdate = (data: { driverId: string, location: any }) => {
+      setDrivers(prev => {
+        const driverIndex = prev.findIndex(d => d.id === data.driverId);
+        if (driverIndex >= 0) {
+          const newDrivers = [...prev];
+          newDrivers[driverIndex] = { ...newDrivers[driverIndex], ...data.location };
+          return newDrivers;
+        } else {
+          return [...prev, { id: data.driverId, ...data.location }];
+        }
+      });
+    };
+
+    if (socket) {
+      socket.on('driverLocationUpdated', handleDriverUpdate);
+    }
+
+    return () => {
+      if (socket) {
+        socket.off('driverLocationUpdated', handleDriverUpdate);
+      }
+    };
+  }, []);
 
   // Fit map to coordinates
   useEffect(() => {
@@ -131,6 +170,20 @@ const RideRequestScreen = () => {
 
   const handleDirectionsReady = (result: any) => {
     setDistance(result.distance);
+  };
+
+  const fetchAddress = async (lat: number, long: number) => {
+    try {
+      const result = await Location.reverseGeocodeAsync({ latitude: lat, longitude: long });
+      if (result.length > 0) {
+        const addr = result[0];
+        const addressName = `${addr.street || ''} ${addr.name || ''}`.trim();
+        setPickerAddress(addressName || 'Тодорхойгүй хаяг');
+      }
+    } catch (error) {
+      console.log('Error fetching address:', error);
+      setPickerAddress('Тодорхойгүй байршил');
+    }
   };
 
   const handleSelectPlace = (place: any) => {
@@ -181,6 +234,65 @@ const RideRequestScreen = () => {
     }
   };
 
+  const handleMapPick = () => {
+    setDropoff({
+        address: pickerAddress,
+        latitude: pickerRegion.latitude,
+        longitude: pickerRegion.longitude
+    });
+    setShowMapPicker(false);
+    setStep('confirm_ride');
+  };
+
+  const renderMapPicker = () => (
+    <View style={styles.container}>
+        <MapView
+            style={styles.map}
+            provider={PROVIDER_GOOGLE}
+            initialRegion={pickerRegion}
+            onRegionChangeComplete={(region) => {
+              setPickerRegion(region);
+              fetchAddress(region.latitude, region.longitude);
+            }}
+            customMapStyle={mapStyle}
+        >
+            {drivers.map(driver => (
+              <AnimatedDriverMarker
+                key={driver.id}
+                driver={driver}
+              />
+            ))}
+            {pickup && (
+                <Marker coordinate={{ latitude: pickup.latitude, longitude: pickup.longitude }}>
+                    <View style={[styles.markerContainer, { backgroundColor: theme.colors.textSecondary }]}>
+                        <View style={styles.markerDot} />
+                    </View>
+                </Marker>
+            )}
+        </MapView>
+        
+        <View style={styles.markerFixed}>
+            <View style={styles.tooltipContainer}>
+                <Text style={styles.tooltipText} numberOfLines={2}>{pickerAddress}</Text>
+            </View>
+            <MapPin size={40} color={theme.colors.primary} fill={theme.colors.primary} />
+        </View>
+
+        <TouchableOpacity 
+            style={styles.backButton} 
+            onPress={() => setShowMapPicker(false)}
+        >
+            <ArrowLeft size={24} color={theme.colors.text} />
+        </TouchableOpacity>
+
+        <View style={styles.bottomContainer}>
+            <TouchableOpacity style={styles.mainButton} onPress={handleMapPick}>
+                <Text style={styles.mainButtonText}>Энэ байршлыг сонгох</Text>
+            </TouchableOpacity>
+        </View>
+    </View>
+  );
+
   const renderDestinationSelection = () => (
     <View style={styles.selectionContainer}>
       {/* Header Inputs */}
@@ -204,9 +316,9 @@ const RideRequestScreen = () => {
                  style={styles.textInput}
                  autoFocus={true}
                />
-               <View style={styles.mapIconBox}>
+               <TouchableOpacity style={styles.mapIconBox} onPress={() => setShowMapPicker(true)}>
                  <MapPin size={16} color={theme.colors.white} />
-               </View>
+               </TouchableOpacity>
             </View>
           </View>
         </View>
@@ -287,9 +399,9 @@ const RideRequestScreen = () => {
       </ScrollView>
 
       {/* Bottom Button */}
-      <View style={styles.bottomContainer}>
+      <View style={[styles.bottomContainer, { paddingBottom: Math.max(insets.bottom, 16) + 90 }]}>
         <TouchableOpacity style={styles.mainButton} onPress={() => Alert.alert('Хайх', 'Эхлээд очих газраа сонгоно уу')}>
-          <Text style={styles.mainButtonText}>Унаа дуудах {'->'}</Text>
+          <Text style={styles.mainButtonText}>Дуудлага өгөх {'->'}</Text>
         </TouchableOpacity>
       </View>
     </View>
@@ -373,7 +485,9 @@ const RideRequestScreen = () => {
 
   return (
     <View style={styles.container}>
-      {step === 'destination_selection' ? renderDestinationSelection() : renderConfirmRide()}
+      {showMapPicker ? renderMapPicker() : (
+        step === 'destination_selection' ? renderDestinationSelection() : renderConfirmRide()
+      )}
     </View>
   );
 };
@@ -455,8 +569,8 @@ const styles = StyleSheet.create({
   textInput: {
     fontSize: 16,
     color: theme.colors.text,
-    fontWeight: 'bold',
     flex: 1,
+    paddingRight: 32,
   },
   divider: {
     height: 1,
@@ -472,6 +586,38 @@ const styles = StyleSheet.create({
     backgroundColor: theme.colors.textSecondary, // Should be colorful map icon usually
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  markerFixed: {
+    position: 'absolute',
+    top: '50%',
+    left: '50%',
+    marginLeft: -20,
+    marginTop: -40,
+    zIndex: 10,
+    alignItems: 'center',
+  },
+  tooltipContainer: {
+    position: 'absolute',
+    top: -40,
+    backgroundColor: theme.colors.surface,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: theme.colors.border,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 3.84,
+    elevation: 5,
+    width: 280,
+    alignItems: 'center',
+  },
+  tooltipText: {
+    fontSize: 12,
+    color: theme.colors.text,
+    fontWeight: '500',
+    textAlign: 'center',
   },
   
   // Categories
@@ -558,7 +704,7 @@ const styles = StyleSheet.create({
     borderTopColor: theme.colors.border,
   },
   mainButton: {
-    backgroundColor: '#2e1065', // Dark purple-ish from screenshot
+    backgroundColor: theme.colors.primary,
     height: 50,
     borderRadius: 8,
     alignItems: 'center',
@@ -566,8 +712,8 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
   },
   mainButtonText: {
-    color: theme.colors.white,
-    fontSize: 16,
+    color: theme.colors.black,
+    fontSize: 18,
     fontWeight: 'bold',
   },
 

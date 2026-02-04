@@ -177,30 +177,12 @@ export default function HomeScreen() {
 
   const fetchAddress = async (lat: number, long: number) => {
     try {
-      // Mock Real Address Names for Demo (to avoid "47.9123, 106.9123")
-      const MOCK_STREETS = [
-        'Энхтайваны өргөн чөлөө, Сүхбаатар',
-        'Сөүлийн гудамж, 1-р хороо',
-        'Чингисийн өргөн чөлөө, Хан-Уул',
-        'Нарны зам, Баянгол дүүрэг',
-        'Зайсан толгой, 11-р хороо',
-        'Бага тойруу, Чингэлтэй дүүрэг',
-        'Ард Аюушийн өргөн чөлөө',
-        'Их Монгол Улсын гудамж',
-        'Олимпийн гудамж, 1-р хороо',
-        'Бээжингийн гудамж, 11-р хороо'
-      ];
-      
-      // Deterministic pseudo-random selection based on coordinates
-      // This ensures the same location always gets the same address name
-      const index = Math.abs(Math.floor((lat + long) * 10000)) % MOCK_STREETS.length;
-      setAddress(MOCK_STREETS[index]);
-      
-      // Real implementation would be:
-      // const result = await Location.reverseGeocodeAsync({ latitude: lat, longitude: long });
-      // if (result.length > 0) {
-      //   setAddress(`${result[0].street || ''} ${result[0].name || ''}`);
-      // }
+      const result = await Location.reverseGeocodeAsync({ latitude: lat, longitude: long });
+      if (result.length > 0) {
+        const addr = result[0];
+        const addressName = `${addr.street || ''} ${addr.name || ''}`.trim() || 'Тодорхойгүй хаяг';
+        setAddress(addressName);
+      }
     } catch (error) {
       console.log('Error fetching address:', error);
       setAddress('Тодорхойгүй байршил');
