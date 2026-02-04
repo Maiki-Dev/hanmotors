@@ -841,39 +841,24 @@ const TripManagement = () => {
 
             <div className="grid gap-2">
                <Label className="mb-2">Нэмэлт үйлчилгээ</Label>
-               <div className="flex gap-4">
-                 <div className="flex items-center space-x-2">
-                   <Checkbox 
-                     id="service-tire" 
-                     checked={newTrip.additionalServices?.some(s => s.code === 'tire_change') || false}
-                     onCheckedChange={(checked) => {
-                        const service = { name: 'Дугуй солих', code: 'tire_change', price: 30000 };
-                        setNewTrip(prev => ({
-                          ...prev,
-                          additionalServices: checked 
-                            ? [...(prev.additionalServices || []), service]
-                            : (prev.additionalServices || []).filter(s => s.code !== 'tire_change')
-                        }));
-                     }}
-                   />
-                   <Label htmlFor="service-tire">Дугуй тавих (30k)</Label>
-                 </div>
-                 <div className="flex items-center space-x-2">
-                   <Checkbox 
-                     id="service-garage" 
-                     checked={newTrip.additionalServices?.some(s => s.code === 'garage_entry') || false}
-                     onCheckedChange={(checked) => {
-                        const service = { name: 'Гараж руу оруулах', code: 'garage_entry', price: 50000 };
-                        setNewTrip(prev => ({
-                          ...prev,
-                          additionalServices: checked 
-                            ? [...(prev.additionalServices || []), service]
-                            : (prev.additionalServices || []).filter(s => s.code !== 'garage_entry')
-                        }));
-                     }}
-                   />
-                   <Label htmlFor="service-garage">Гараж руу оруулах (50k)</Label>
-                 </div>
+               <div className="grid grid-cols-2 gap-4">
+                 {additionalServices.map((service) => (
+                   <div key={service._id} className="flex items-center space-x-2">
+                     <Checkbox 
+                       id={`service-${service._id}`}
+                       checked={newTrip.selectedServices?.includes(service._id) || false}
+                       onCheckedChange={(checked) => {
+                          setNewTrip(prev => ({
+                            ...prev,
+                            selectedServices: checked 
+                              ? [...(prev.selectedServices || []), service._id]
+                              : (prev.selectedServices || []).filter(id => id !== service._id)
+                          }));
+                       }}
+                     />
+                     <Label htmlFor={`service-${service._id}`}>{service.name}</Label>
+                   </div>
+                 ))}
                </div>
             </div>
 

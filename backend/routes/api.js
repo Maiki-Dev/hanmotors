@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const mongoose = require('mongoose');
 const Driver = require('../models/Driver');
+const Customer = require('../models/Customer');
 const Trip = require('../models/Trip');
 const Pricing = require('../models/Pricing');
 const AdditionalService = require('../models/AdditionalService');
@@ -1285,6 +1286,151 @@ router.delete('/admin/additional-services/:id', async (req, res) => {
   try {
     await AdditionalService.findByIdAndDelete(req.params.id);
     res.json({ message: 'Deleted successfully' });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// --- CUSTOMER APP ENDPOINTS ---
+
+// Customer Login / OTP Request
+router.post('/auth/login', async (req, res) => {
+  try {
+    const { phone } = req.body;
+    if (!phone) return res.status(400).json({ message: 'Phone number is required' });
+
+    let customer = await Customer.findOne({ phone });
+    if (!customer) {
+      customer = new Customer({ phone });
+      await customer.save();
+    }
+
+    // Generate OTP (Mock: 1234)
+    const otp = '1234'; 
+    const otpExpiry = new Date(Date.now() + 5 * 60000); // 5 mins
+
+    customer.otp = otp;
+    customer.otpExpiry = otpExpiry;
+    await customer.save();
+
+    console.log(`[Customer Auth] OTP for ${phone}: ${otp}`);
+    res.json({ message: 'OTP sent successfully', dev_otp: otp });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Verify OTP
+router.post('/auth/verify-otp', async (req, res) => {
+  try {
+    const { phone, otp } = req.body;
+    const customer = await Customer.findOne({ phone });
+
+    if (!customer) return res.status(404).json({ message: 'Customer not found' });
+    if (customer.otp !== otp || customer.otpExpiry < Date.now()) {
+      return res.status(400).json({ message: 'Invalid or expired OTP' });
+    }
+
+    // Clear OTP
+    customer.otp = undefined;
+    customer.otpExpiry = undefined;
+    await customer.save();
+
+    res.json({ 
+      token: 'mock_jwt_token_' + customer._id, 
+      customer 
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Get Customer Profile
+router.get('/customer/profile', async (req, res) => {
+  try {
+    const { id } = req.query;
+    if (!id) return res.status(400).json({ message: 'Customer ID required' });
+
+    const customer = await Customer.findById(id);
+    if (!customer) return res.status(404).json({ message: 'Customer not found' });
+    
+    res.json(customer);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Request Ride
+router.post('/rides/request', async (req, res) => {
+  try {
+    const { customerId, pickup, dropoff, vehicleType, distance } = req.body;
+    
+    // Calculate Price
+    let price = 0;
+    let pricingRule = await Pricing.findOne({ vehicleType });
+    
+    if (pricingRule && distance) {
+        let dist = Number(distance);
+        price = pricingRule.basePrice;
+        if (dist > 4) {
+             price += (dist - 4) * pricingRule.pricePerKm;
+        }
+    } else {
+        // Fallback
+        price = 80000 + (Number(distance) || 0) * 2000; 
+    }
+    
+    price = Math.ceil(price / 100) * 100;
+
+    const trip = new Trip({
+      customer: customerId,
+      pickupLocation: pickup,
+      dropoffLocation: dropoff,
+      vehicleModel: vehicleType,
+      distance: Number(distance),
+      price,
+      status: 'pending',
+      createdAt: new Date()
+    });
+
+    await trip.save();
+    
+    const io = req.app.get('io');
+    io.emit('newJobRequest', trip);
+
+    res.json(trip);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Ride History
+router.get('/rides/history', async (req, res) => {
+  try {
+    const { customerId } = req.query;
+    if (!customerId) return res.status(400).json({ message: 'Customer ID required' });
+
+    const trips = await Trip.find({ customer: customerId }).sort({ createdAt: -1 });
+    res.json(trips);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Get Active Ride
+router.get('/rides/active', async (req, res) => {
+  try {
+    const { customerId } = req.query;
+    if (!customerId) return res.status(400).json({ message: 'Customer ID required' });
+
+    const trip = await Trip.findOne({ 
+      customer: customerId, 
+      status: { $in: ['pending', 'accepted', 'in_progress'] } 
+    }).populate('driver'); 
+    
+    if (!trip) return res.status(404).json({ message: 'No active trip' });
+    
+    res.json(trip);
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

@@ -2,6 +2,7 @@ const mongoose = require('mongoose');
 
 const TripSchema = new mongoose.Schema({
   driver: { type: mongoose.Schema.Types.ObjectId, ref: 'Driver' },
+  customer: { type: mongoose.Schema.Types.ObjectId, ref: 'Customer' },
   pickupLocation: {
     address: String,
     lat: Number,
