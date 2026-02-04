@@ -24,7 +24,8 @@ import {
   Briefcase, 
   Search, 
   Star, 
-  MoreHorizontal 
+  MoreHorizontal,
+  Locate
 } from 'lucide-react-native';
 import MapView, { Marker, PROVIDER_GOOGLE, Polyline } from 'react-native-maps';
 import { GOOGLE_MAPS_APIKEY } from '../config';
@@ -37,10 +38,12 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as Location from 'expo-location';
 import { initSocket } from '../services/socket';
 import { AnimatedDriverMarker } from '../components/AnimatedDriverMarker';
+import { mapStyle } from '../constants/mapStyle';
 
 type RootStackParamList = {
   RideRequest: { 
     pickup: { address: string; latitude: number; longitude: number };
+    serviceType?: string;
   };
   TripStatus: { trip: any };
 };
@@ -51,8 +54,9 @@ type RideRequestScreenNavigationProp = StackNavigationProp<RootStackParamList, '
 const { width, height } = Dimensions.get('window');
 
 const SERVICES = [
-  { id: 'Ride', label: 'Taxi', icon: Car, basePrice: 1000, pricePerKm: 1500, description: 'Хурдан, тухтай' },
-  { id: 'Delivery', label: 'Delivery', icon: Car, basePrice: 5000, pricePerKm: 2000, description: 'Хүргэлт' },
+  { id: 'taxi', label: 'Taxi', icon: Car, basePrice: 1000, pricePerKm: 1500, description: 'Хурдан, тухтай' },
+  { id: 'delivery', label: 'Delivery', icon: Car, basePrice: 5000, pricePerKm: 2000, description: 'Хүргэлт' },
+  { id: 'sos', label: 'SOS', icon: Car, basePrice: 2000, pricePerKm: 2000, description: 'Тусламж' },
 ];
 
 const RECENT_PLACES = [
@@ -103,9 +107,41 @@ const RideRequestScreen = () => {
   const [savedPlaces, setSavedPlaces] = useState<any[]>([]);
   const [recentPlaces, setRecentPlaces] = useState<any[]>([]);
 
-  const [selectedService, setSelectedService] = useState(SERVICES[0]);
+  const [availableServices, setAvailableServices] = useState(SERVICES);
+  const [selectedService, setSelectedService] = useState(
+    SERVICES.find(s => s.id.toLowerCase() === route.params?.serviceType?.toLowerCase()) || SERVICES[0]
+  );
   const [step, setStep] = useState<'destination_selection' | 'confirm_ride'>('destination_selection');
   const [activeCategory, setActiveCategory] = useState('suggested');
+
+  useEffect(() => {
+    const fetchServices = async () => {
+      if (route.params?.serviceType === 'sos') {
+        try {
+          const response = await rideService.getPricingRules();
+          const rules = response.data;
+          
+          if (rules && rules.length > 0) {
+            const dynamicServices = rules.map((rule: any) => ({
+              id: rule.vehicleType, 
+              label: rule.vehicleType,
+              icon: Car,
+              basePrice: rule.basePrice,
+              pricePerKm: rule.pricePerKm,
+              description: `${rule.basePrice}₮ + ${rule.pricePerKm}₮/км`
+            }));
+            
+            setAvailableServices(dynamicServices);
+            setSelectedService(dynamicServices[0]);
+          }
+        } catch (error) {
+          console.log('Error fetching pricing rules:', error);
+        }
+      }
+    };
+    
+    fetchServices();
+  }, [route.params?.serviceType]);
   const [showMapPicker, setShowMapPicker] = useState(false);
   const [pickerRegion, setPickerRegion] = useState({
       latitude: pickup?.latitude || 47.9188,
@@ -360,17 +396,54 @@ const RideRequestScreen = () => {
     setStep('confirm_ride');
   };
 
+  const handleMyLocation = async () => {
+    try {
+      const { status } = await Location.requestForegroundPermissionsAsync();
+      if (status !== 'granted') {
+        Alert.alert('Анхааруулга', 'Байршлын эрх өгөгдөөгүй байна.');
+        return;
+      }
+
+      const location = await Location.getCurrentPositionAsync({});
+      const region = {
+        latitude: location.coords.latitude,
+        longitude: location.coords.longitude,
+        latitudeDelta: 0.01,
+        longitudeDelta: 0.01,
+      };
+      
+      // mapRef.current might refer to confirm map if not careful, 
+      // but in renderMapPicker we are not passing ref to MapView currently.
+      // Let's add ref={mapRef} to renderMapPicker's MapView as well?
+      // Actually mapRef is used in renderConfirmRide. 
+      // We can use a separate ref or reuse it if screens are exclusive.
+      // They are rendered conditionally, so we can reuse mapRef.
+      mapRef.current?.animateToRegion(region, 500);
+      setPickerRegion(region);
+      // We don't fetch address here because onRegionChangeComplete will trigger?
+      // onRegionChangeComplete might trigger after animation. 
+      // But explicit fetch is safer if onRegionChangeComplete doesn't fire for programmatic updates consistently.
+      // Actually animateToRegion triggers onRegionChangeComplete on completion.
+    } catch (error) {
+      console.log('Error getting location:', error);
+    }
+  };
+
   const renderMapPicker = () => (
     <View style={styles.container}>
         <MapView
+            ref={mapRef}
             style={styles.map}
             provider={PROVIDER_GOOGLE}
+            showsTraffic={false}
             initialRegion={pickerRegion}
             onRegionChangeComplete={(region) => {
               setPickerRegion(region);
               fetchAddress(region.latitude, region.longitude);
             }}
             customMapStyle={mapStyle}
+            showsUserLocation={true}
+            followsUserLocation={true}
         >
             {drivers.map(driver => (
               <AnimatedDriverMarker
@@ -397,6 +470,13 @@ const RideRequestScreen = () => {
                 <Text style={styles.tooltipText} numberOfLines={2}>{pickerAddress}</Text>
             </View>
             <MapPin size={40} color={theme.colors.primary} fill={theme.colors.primary} />
+        </TouchableOpacity>
+
+        <TouchableOpacity 
+            style={styles.myLocationButton} 
+            onPress={handleMyLocation}
+        >
+            <Locate size={24} color={theme.colors.text} />
         </TouchableOpacity>
 
         <TouchableOpacity 
@@ -432,7 +512,7 @@ const RideRequestScreen = () => {
             <View style={styles.divider} />
             <View style={[styles.inputBox, { height: 'auto', minHeight: 40, zIndex: 999 }]}>
                <GooglePlacesAutocomplete
-                 placeholder="Хаашаа явах вэ?"
+                 placeholder="Хаах хаяг"
                  onPress={(data, details = null) => {
                    const name = data.structured_formatting?.main_text || data.description;
                    handleSelectPlace({
@@ -598,6 +678,8 @@ const RideRequestScreen = () => {
         ref={mapRef}
         style={styles.map}
         provider={PROVIDER_GOOGLE}
+        showsTraffic={false}
+        showsUserLocation={true}
         initialRegion={{
           latitude: pickup?.latitude || 47.9188,
           longitude: pickup?.longitude || 106.9176,
@@ -620,8 +702,9 @@ const RideRequestScreen = () => {
         {pickup && dropoff && routeCoordinates.length > 0 && (
           <Polyline
             coordinates={routeCoordinates}
-            strokeWidth={4}
+            strokeWidth={5}
             strokeColor={theme.colors.primary}
+            lineDashPattern={[0]}
           />
         )}
       </MapView>
@@ -636,7 +719,7 @@ const RideRequestScreen = () => {
         <Text style={styles.distanceText}>{distance.toFixed(1)} км • {(distance * 2.5).toFixed(0)} мин</Text>
 
         <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.serviceScroll}>
-          {SERVICES.map(service => (
+          {availableServices.map(service => (
             <TouchableOpacity 
               key={service.id} 
               style={[styles.serviceCard, selectedService.id === service.id && styles.selectedServiceCard]}
@@ -673,17 +756,6 @@ const RideRequestScreen = () => {
     </View>
   );
 };
-
-const mapStyle = [
-  { "elementType": "geometry", "stylers": [{ "color": "#242f3e" }] },
-  { "elementType": "labels.text.fill", "stylers": [{ "color": "#746855" }] },
-  { "elementType": "labels.text.stroke", "stylers": [{ "color": "#242f3e" }] },
-  { "featureType": "administrative.locality", "elementType": "labels.text.fill", "stylers": [{ "color": "#d59563" }] },
-  { "featureType": "road", "elementType": "geometry", "stylers": [{ "color": "#38414e" }] },
-  { "featureType": "road", "elementType": "geometry.stroke", "stylers": [{ "color": "#212a37" }] },
-  { "featureType": "road", "elementType": "labels.text.fill", "stylers": [{ "color": "#9ca5b3" }] },
-  { "featureType": "water", "elementType": "geometry", "stylers": [{ "color": "#17263c" }] }
-];
 
 const styles = StyleSheet.create({
   container: {
@@ -1007,6 +1079,23 @@ const styles = StyleSheet.create({
     height: 8,
     borderRadius: 4,
     backgroundColor: theme.colors.black,
+  },
+  myLocationButton: {
+    position: 'absolute',
+    right: 20,
+    bottom: 100,
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: theme.colors.surface,
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 3.84,
+    elevation: 5,
+    zIndex: 10,
   },
 });
 

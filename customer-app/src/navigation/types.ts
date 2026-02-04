@@ -9,6 +9,7 @@ export type RootStackParamList = {
       latitude: number; 
       longitude: number;
     };
+    serviceType?: string;
   };
   TripStatus: { trip: any };
   RideHistory: undefined;

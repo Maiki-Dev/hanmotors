@@ -10,6 +10,7 @@ import {
   SafeAreaView,
   ScrollView,
   Image,
+  Alert,
 } from 'react-native';
 import MapView, { Marker, PROVIDER_GOOGLE, Region } from 'react-native-maps';
 import * as Location from 'expo-location';
@@ -23,6 +24,7 @@ import { RootStackParamList } from '../navigation/types';
 import { AnimatedDriverMarker } from '../components/AnimatedDriverMarker';
 import { initSocket } from '../services/socket';
 import { LOCATION_TASK_NAME } from '../services/LocationTask';
+import { mapStyle } from '../constants/mapStyle';
 
 const { width, height } = Dimensions.get('window');
 const ASPECT_RATIO = width / height;
@@ -32,11 +34,10 @@ const LONGITUDE_DELTA = LATITUDE_DELTA * ASPECT_RATIO;
 type HomeScreenNavigationProp = StackNavigationProp<RootStackParamList, 'Home'>;
 
 const SERVICES = [
-  { id: 'taxi', name: 'Такси', icon: 'car', family: 'Ionicons', color: '#fbbf24' },
-  { id: 'delivery', name: 'Хүргэлт', icon: 'cube', family: 'Ionicons', color: '#f97316' },
-  { id: 'driver', name: 'Жолооч', icon: 'person', family: 'Ionicons', color: '#3b82f6' },
   { id: 'sos', name: 'SOS', icon: 'build', family: 'Ionicons', color: '#ef4444' },
-  { id: 'food', name: 'Хоол', icon: 'fast-food', family: 'Ionicons', color: '#22c55e' },
+  { id: 'taxi', name: 'Такси', icon: 'car', family: 'Ionicons', color: '#fbbf24', maintenance: true },
+  { id: 'delivery', name: 'Хүргэлт', icon: 'cube', family: 'Ionicons', color: '#f97316', maintenance: true },
+  { id: 'driver', name: 'Асаалт', icon: 'flash', family: 'Ionicons', color: '#3b82f6', maintenance: true },
 ];
 
 // Mock Nearby Drivers
@@ -50,7 +51,7 @@ export default function HomeScreen() {
   const [region, setRegion] = useState<Region | null>(null);
   const [isMapReady, setIsMapReady] = useState(false);
   const [drivers, setDrivers] = useState(INITIAL_DRIVERS);
-  const [showsTraffic, setShowsTraffic] = useState(false);
+  const [showsTraffic, setShowsTraffic] = useState(true);
   const [mapType, setMapType] = useState<'standard' | 'satellite' | 'hybrid'>('standard');
   const [selectedDriverId, setSelectedDriverId] = useState<string | null>(null);
 
@@ -250,13 +251,21 @@ export default function HomeScreen() {
   };
 
   const handleServicePress = (serviceId: string) => {
-    if (serviceId === 'taxi') {
+    const service = SERVICES.find(s => s.id === serviceId);
+    
+    if (service?.maintenance) {
+      Alert.alert('Мэдэгдэл', 'Энэ үйлчилгээ одоогоор засвартай байна.');
+      return;
+    }
+
+    if (serviceId === 'taxi' || serviceId === 'sos') {
       navigation.navigate('RideRequest', { 
         pickup: { 
           latitude: region?.latitude || 0, 
           longitude: region?.longitude || 0,
           address: address 
-        } 
+        },
+        serviceType: serviceId
       });
     } else {
       // Handle other services
@@ -273,8 +282,8 @@ export default function HomeScreen() {
           <MapView
             ref={mapRef}
             style={styles.map}
-            // provider={PROVIDER_GOOGLE} // Commented out to use native provider (MapKit on iOS, Google on Android)
-            customMapStyle={mapType === 'standard' ? mapStyle : []}
+            provider={PROVIDER_GOOGLE}
+            customMapStyle={mapType === 'standard' && !showsTraffic ? mapStyle : []}
             mapType={mapType}
             initialRegion={region}
             showsUserLocation={true}
@@ -392,7 +401,7 @@ export default function HomeScreen() {
              {SERVICES.map((service) => (
                <TouchableOpacity 
                  key={service.id} 
-                 style={styles.serviceItem}
+                 style={[styles.serviceItem, service.maintenance && { opacity: 0.5 }]}
                  onPress={() => handleServicePress(service.id)}
                  activeOpacity={0.7}
                >
@@ -409,107 +418,6 @@ export default function HomeScreen() {
      </View>
    );
  }
-
- // Custom Dark Map Style - Premium, Clean, No Labels
-const mapStyle = [
-  {
-    "elementType": "geometry",
-    "stylers": [{ "color": "#17191C" }] // Deep charcoal base
-  },
-  {
-    "elementType": "labels.text.fill",
-    "stylers": [{ "color": "#8A8F98" }]
-  },
-  {
-    "elementType": "labels.text.stroke",
-    "stylers": [{ "color": "#17191C" }]
-  },
-  {
-    "featureType": "administrative.locality",
-    "elementType": "labels.text.fill",
-    "stylers": [{ "color": "#D1D5DB" }]
-  },
-  {
-    "featureType": "poi",
-    "elementType": "labels.text",
-    "stylers": [{ "visibility": "off" }] // CRITICAL: No brand names
-  },
-  {
-    "featureType": "poi",
-    "elementType": "labels.icon",
-    "stylers": [{ "visibility": "off" }] // CRITICAL: No brand icons
-  },
-  {
-    "featureType": "poi.business",
-    "stylers": [{ "visibility": "off" }]
-  },
-  {
-    "featureType": "poi.park",
-    "elementType": "geometry",
-    "stylers": [{ "color": "#1E2227" }]
-  },
-  {
-    "featureType": "poi.park",
-    "elementType": "labels.text.fill",
-    "stylers": [{ "color": "#6B7280" }]
-  },
-  {
-    "featureType": "road",
-    "elementType": "geometry",
-    "stylers": [{ "color": "#2C3038" }]
-  },
-  {
-    "featureType": "road",
-    "elementType": "geometry.stroke",
-    "stylers": [{ "color": "#21252B" }]
-  },
-  {
-    "featureType": "road",
-    "elementType": "labels.text.fill",
-    "stylers": [{ "color": "#9CA3AF" }]
-  },
-  {
-    "featureType": "road.highway",
-    "elementType": "geometry",
-    "stylers": [{ "color": "#FFC107" }, { "lightness": -60 }] // Subtle yellow hint
-  },
-  {
-    "featureType": "road.highway",
-    "elementType": "geometry.stroke",
-    "stylers": [{ "color": "#17191C" }]
-  },
-  {
-    "featureType": "road.highway",
-    "elementType": "labels.text.fill",
-    "stylers": [{ "color": "#F3F4F6" }]
-  },
-  {
-    "featureType": "transit",
-    "elementType": "geometry",
-    "stylers": [{ "color": "#2C3038" }]
-  },
-  {
-    "featureType": "transit.station",
-    "elementType": "labels.text.fill",
-    "stylers": [{ "color": "#D1D5DB" }]
-  },
-  {
-    "featureType": "water",
-    "elementType": "geometry",
-    "stylers": [{ "color": "#0E1013" }]
-  },
-  {
-    "featureType": "water",
-    "elementType": "labels.text.fill",
-    "stylers": [{ "color": "#4B5563" }]
-  },
-  // Traffic Layer Visibility
-  {
-    "featureType": "road",
-    "elementType": "geometry",
-    "stylers": [{ "visibility": "simplified" }]
-  }
-];
 
 const styles = StyleSheet.create({
   container: {

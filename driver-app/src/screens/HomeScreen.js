@@ -77,7 +77,7 @@ export default function HomeScreen({ navigation, route }) {
   const driverInfoRef = useRef(null); // Store driver info for socket
   const mapRef = useRef(null);
   const [mapMode, setMapMode] = useState('dark'); // Default to dark
-  const [showsTraffic, setShowsTraffic] = useState(false);
+  const [showsTraffic, setShowsTraffic] = useState(true);
   const [isMapReady, setIsMapReady] = useState(false);
 
   // Initial Map Centering Effect
@@ -734,7 +734,7 @@ export default function HomeScreen({ navigation, route }) {
         // onTouchStart={() => updateFollowing(false)} // This might be too sensitive
         // onRegionChangeStart={() => updateFollowing(false)} // Removed to prevent conflict with animateToRegion
         mapType={mapMode === 'hybrid' ? "hybrid" : "standard"}
-        customMapStyle={mapMode === 'dark' ? darkMapStyle : []}
+        customMapStyle={mapMode === 'dark' && !showsTraffic ? darkMapStyle : []}
         showsUserLocation={false} // Disable native blue dot, we use custom marker
         followsUserLocation={false} // Disable native following to avoid conflict with animateCamera
         userInterfaceStyle={mapMode === 'dark' ? "dark" : "light"}

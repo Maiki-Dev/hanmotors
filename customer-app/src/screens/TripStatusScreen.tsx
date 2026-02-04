@@ -11,6 +11,7 @@ import { rideService } from '../services/api';
 import { useSelector } from 'react-redux';
 import { RootState } from '../store';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { mapStyle } from '../constants/mapStyle';
 
 const { width, height } = Dimensions.get('window');
 
@@ -245,6 +246,8 @@ const TripStatusScreen = () => {
             ref={mapRef}
             provider={PROVIDER_GOOGLE}
             style={styles.map}
+            customMapStyle={mapStyle}
+            showsTraffic={true}
             initialRegion={{
                 latitude: trip.pickupLocation.lat,
                 longitude: trip.pickupLocation.lng,
@@ -286,8 +289,9 @@ const TripStatusScreen = () => {
                 origin={{ latitude: trip.pickupLocation.lat, longitude: trip.pickupLocation.lng }}
                 destination={{ latitude: trip.dropoffLocation.lat, longitude: trip.dropoffLocation.lng }}
                 apikey={GOOGLE_MAPS_APIKEY}
-                strokeWidth={4}
+                strokeWidth={5}
                 strokeColor={theme.colors.primary}
+                lineDashPattern={[0]}
             />
         </MapView>
 
@@ -530,5 +534,7 @@ const styles = StyleSheet.create({
     height: 40,
   }
 });
+
+// Local mapStyle definition removed (using import from constants)
 
 export default TripStatusScreen;

@@ -32,6 +32,8 @@ export const rideService = {
   getActiveTrip: (customerId: string) => api.get('/rides/active', { params: { customerId } }),
 
   cancelTrip: (tripId: string) => api.post(`/trip/${tripId}/cancel`),
+
+  getPricingRules: () => api.get('/admin/pricing'),
 };
 
 export default api;

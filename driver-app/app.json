@@ -54,6 +54,14 @@
     "plugins": [
       "expo-notifications",
       [
+        "expo-location",
+        {
+          "locationAlwaysAndWhenInUsePermission": "This app needs access to your location to track your trip and calculate fares even when the app is in the background.",
+          "locationWhenInUsePermission": "This app needs access to your location to show available jobs nearby.",
+          "isAndroidBackgroundLocationEnabled": true
+        }
+      ],
+      [
         "expo-image-picker",
         {
           "photosPermission": "This app needs access to your photos to upload driver documents."

@@ -6,6 +6,7 @@ import { StatusBar } from 'expo-status-bar';
 import { Home, DollarSign, User, HelpCircle, LayoutGrid } from 'lucide-react-native';
 import { theme } from './src/constants/theme';
 import { API_URL } from './src/config';
+import './src/services/LocationTask'; // Register background task
 
 import LoginScreen from './src/screens/LoginScreen';
 import RegisterScreen from './src/screens/RegisterScreen';
