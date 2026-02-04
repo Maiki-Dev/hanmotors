@@ -1,10 +1,10 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, TextInput, ActivityIndicator, Alert, ScrollView } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, ActivityIndicator, Alert, ScrollView } from 'react-native';
 import { theme } from '../constants/theme';
 import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
 import { StackNavigationProp } from '@react-navigation/stack';
-import { ArrowLeft, MapPin, Car, DollarSign } from 'lucide-react-native';
-import MapView, { Marker, Polyline, PROVIDER_GOOGLE } from 'react-native-maps';
+import { ArrowLeft, MapPin, Car, DollarSign, Truck, Package } from 'lucide-react-native';
+import MapView, { Marker, PROVIDER_GOOGLE } from 'react-native-maps';
 import MapViewDirections from 'react-native-maps-directions';
 import { GOOGLE_MAPS_APIKEY } from '../config';
 import { rideService } from '../services/api';
@@ -22,6 +22,12 @@ type RootStackParamList = {
 type RideRequestScreenRouteProp = RouteProp<RootStackParamList, 'RideRequest'>;
 type RideRequestScreenNavigationProp = StackNavigationProp<RootStackParamList, 'RideRequest'>;
 
+const SERVICES = [
+  { id: 'Ride', label: 'Taxi', icon: Car, basePrice: 1000, pricePerKm: 1500 },
+  { id: 'Tow', label: 'Towing', icon: Truck, basePrice: 50000, pricePerKm: 5000 },
+  { id: 'Cargo', label: 'Cargo', icon: Package, basePrice: 5000, pricePerKm: 2000 },
+];
+
 const RideRequestScreen = () => {
   const route = useRoute<RideRequestScreenRouteProp>();
   const navigation = useNavigation<RideRequestScreenNavigationProp>();
@@ -34,19 +40,23 @@ const RideRequestScreen = () => {
   const [duration, setDuration] = useState(0);
   const [price, setPrice] = useState(0);
   const [loading, setLoading] = useState(false);
-  const [selectedVehicle, setSelectedVehicle] = useState('Sedan');
+  const [selectedService, setSelectedService] = useState(SERVICES[0]);
 
-  const calculatePrice = (distKm: number) => {
-    // Simple mock pricing
-    const base = 5000;
-    const perKm = 1500;
-    return Math.ceil((base + distKm * perKm) / 100) * 100;
+  useEffect(() => {
+    if (distance > 0) {
+      setPrice(calculatePrice(distance, selectedService));
+    }
+  }, [distance, selectedService]);
+
+  const calculatePrice = (distKm: number, service = selectedService) => {
+    const calculated = service.basePrice + distKm * service.pricePerKm;
+    return Math.ceil(calculated / 100) * 100;
   };
 
   const handleDirectionsReady = (result: any) => {
     setDistance(result.distance);
     setDuration(result.duration);
-    setPrice(calculatePrice(result.distance));
+    // Price will update via useEffect
   };
 
   const handleRequestRide = async () => {
@@ -58,13 +68,12 @@ const RideRequestScreen = () => {
         customerId: user?._id || 'guest',
         pickup,
         dropoff,
-        vehicleType: selectedVehicle,
-        serviceType: 'Tow',
+        vehicleType: selectedService.id, // Using service ID as vehicle type for now
+        serviceType: selectedService.id,
         distance
       });
       
       Alert.alert('Success', 'Ride requested successfully!');
-      // Navigate to Trip Status or Tracking screen
       navigation.navigate('TripStatus', { trip: response.data }); 
     } catch (error: any) {
       Alert.alert('Error', error.response?.data?.message || 'Failed to request ride');
@@ -142,9 +151,7 @@ const RideRequestScreen = () => {
             fetchDetails={true}
             enablePoweredByContainer={false}
             styles={{
-              container: {
-                flex: 1,
-              },
+              container: { flex: 1 },
               textInputContainer: {
                 backgroundColor: 'transparent',
                 marginLeft: theme.spacing.s,
@@ -164,19 +171,15 @@ const RideRequestScreen = () => {
               listView: {
                 position: 'absolute',
                 top: 44,
-                left: -35, // Adjust to cover the icon space if needed, or keep it aligned
-                width: '120%', // Make it wider to cover
+                left: -35,
+                width: '120%',
                 backgroundColor: theme.colors.surface,
                 borderRadius: 5,
                 elevation: 5,
                 zIndex: 1000,
               },
-              row: {
-                backgroundColor: theme.colors.surface,
-              },
-              description: {
-                color: theme.colors.text,
-              }
+              row: { backgroundColor: theme.colors.surface },
+              description: { color: theme.colors.text }
             }}
           />
         </View>
@@ -184,6 +187,26 @@ const RideRequestScreen = () => {
         {dropoff && (
           <>
             <View style={styles.divider} />
+
+            {/* Service Selection */}
+            <View style={styles.serviceContainer}>
+              <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+                {SERVICES.map((service) => {
+                  const Icon = service.icon;
+                  const isSelected = selectedService.id === service.id;
+                  return (
+                    <TouchableOpacity 
+                      key={service.id} 
+                      style={[styles.serviceCard, isSelected && styles.serviceCardSelected]}
+                      onPress={() => setSelectedService(service)}
+                    >
+                      <Icon size={24} color={isSelected ? theme.colors.primary : theme.colors.textSecondary} />
+                      <Text style={[styles.serviceLabel, isSelected && styles.serviceLabelSelected]}>{service.label}</Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </ScrollView>
+            </View>
             
             <View style={styles.fareContainer}>
               <View>
@@ -208,7 +231,7 @@ const RideRequestScreen = () => {
               {loading ? (
                 <ActivityIndicator color={theme.colors.black} />
               ) : (
-                <Text style={styles.requestButtonText}>Confirm Ride</Text>
+                <Text style={styles.requestButtonText}>Confirm {selectedService.label}</Text>
               )}
             </TouchableOpacity>
           </>
@@ -227,7 +250,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     padding: theme.spacing.m,
-    paddingTop: 50, // Safe area
+    paddingTop: 50,
     backgroundColor: theme.colors.surface,
     zIndex: 1,
   },
@@ -255,7 +278,7 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.25,
     shadowRadius: 3.84,
     elevation: 5,
-    zIndex: 10, // Ensure it's above other elements if needed
+    zIndex: 10,
   },
   inputRow: {
     flexDirection: 'row',
@@ -280,7 +303,7 @@ const styles = StyleSheet.create({
     height: 10,
     borderLeftWidth: 1,
     borderLeftColor: theme.colors.textSecondary,
-    marginLeft: 29, // align with icons
+    marginLeft: 29,
     marginVertical: 4,
   },
   divider: {
@@ -288,11 +311,37 @@ const styles = StyleSheet.create({
     backgroundColor: theme.colors.border,
     marginVertical: theme.spacing.m,
   },
+  serviceContainer: {
+    flexDirection: 'row',
+    marginBottom: theme.spacing.m,
+  },
+  serviceCard: {
+    alignItems: 'center',
+    padding: theme.spacing.m,
+    borderRadius: theme.borderRadius.m,
+    borderWidth: 1,
+    borderColor: theme.colors.border,
+    marginRight: theme.spacing.m,
+    width: 80,
+  },
+  serviceCardSelected: {
+    borderColor: theme.colors.primary,
+    backgroundColor: theme.colors.surfaceLight,
+  },
+  serviceLabel: {
+    ...theme.typography.caption,
+    marginTop: theme.spacing.s,
+    color: theme.colors.textSecondary,
+  },
+  serviceLabelSelected: {
+    color: theme.colors.primary,
+    fontWeight: 'bold',
+  },
   fareContainer: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     marginBottom: theme.spacing.l,
-    zIndex: -1, // Ensure fare container is behind autocomplete list
+    zIndex: -1,
   },
   fareLabel: {
     ...theme.typography.caption,
@@ -300,17 +349,17 @@ const styles = StyleSheet.create({
   },
   fareValue: {
     ...theme.typography.h3,
-    color: theme.colors.primary,
+    color: theme.colors.text,
   },
   requestButton: {
     backgroundColor: theme.colors.primary,
     padding: theme.spacing.m,
-    borderRadius: theme.borderRadius.m,
+    borderRadius: theme.borderRadius.l,
     alignItems: 'center',
-    zIndex: -1,
   },
   requestButtonText: {
     ...theme.typography.button,
+    color: theme.colors.black,
   },
 });
 

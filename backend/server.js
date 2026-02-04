@@ -76,7 +76,8 @@ io.on('connection', (socket) => {
     driverStatus[data.driverId] = true;
     
     // Broadcast to admin and other drivers
-    io.to('admin_room').to('drivers_room').emit('driverLocationUpdated', data);
+    // Also emit globally so customers can track their driver
+    io.emit('driverLocationUpdated', data);
   });
 
   socket.on('driverStatusUpdate', (data) => {

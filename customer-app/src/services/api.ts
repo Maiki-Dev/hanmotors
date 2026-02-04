@@ -30,6 +30,8 @@ export const rideService = {
   getHistory: (customerId: string) => api.get('/rides/history', { params: { customerId } }),
   
   getActiveTrip: (customerId: string) => api.get('/rides/active', { params: { customerId } }),
+
+  cancelTrip: (tripId: string) => api.post(`/trip/${tripId}/cancel`),
 };
 
 export default api;

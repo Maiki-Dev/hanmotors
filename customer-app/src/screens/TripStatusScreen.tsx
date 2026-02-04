@@ -8,6 +8,8 @@ import { Phone, MessageCircle, Star, Shield, ArrowLeft } from 'lucide-react-nati
 import { socket } from '../services/socket';
 import { GOOGLE_MAPS_APIKEY } from '../config';
 import { rideService } from '../services/api';
+import { useSelector } from 'react-redux';
+import { RootState } from '../store';
 
 const { width, height } = Dimensions.get('window');
 
@@ -15,10 +17,23 @@ const TripStatusScreen = () => {
   const route = useRoute<any>();
   const navigation = useNavigation<any>();
   const mapRef = useRef<MapView>(null);
+  const user = useSelector((state: RootState) => state.auth.user);
   
   const [trip, setTrip] = useState(route.params?.trip);
   const [driverLocation, setDriverLocation] = useState<any>(null);
   const [eta, setEta] = useState<string>('');
+
+  const fetchTripDetails = async () => {
+    if (!user?._id) return;
+    try {
+      const response = await rideService.getActiveTrip(user._id);
+      if (response.data && response.data._id === trip._id) {
+         setTrip(response.data);
+      }
+    } catch (error) {
+      console.log('Error fetching trip details', error);
+    }
+  };
 
   useEffect(() => {
     if (!trip?._id) return;
@@ -67,13 +82,7 @@ const TripStatusScreen = () => {
         socket.off('tripCompleted', handleTripCompleted);
       }
     };
-  }, [trip]);
-
-  const fetchTripDetails = async () => {
-      // In a real app, you'd fetch the trip again to get populated driver info
-      // For now we might need an endpoint or just rely on what we have
-      // Assuming we have a getTrip endpoint or similar, otherwise we might rely on socket data
-  };
+  }, [trip, user]);
 
   const getStatusMessage = () => {
     switch (trip.status) {
@@ -86,13 +95,35 @@ const TripStatusScreen = () => {
     }
   };
 
+  const handleCancel = async () => {
+    Alert.alert(
+      'Cancel Ride',
+      'Are you sure you want to cancel this ride request?',
+      [
+        { text: 'No', style: 'cancel' },
+        { 
+          text: 'Yes, Cancel', 
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              await rideService.cancelTrip(trip._id);
+              navigation.navigate('HomeTab');
+            } catch (error) {
+              Alert.alert('Error', 'Failed to cancel trip');
+            }
+          }
+        }
+      ]
+    );
+  };
+
   const renderDriverInfo = () => {
     if (!trip.driver && trip.status === 'pending') {
       return (
         <View style={styles.searchingContainer}>
             <ActivityIndicator size="large" color={theme.colors.primary} />
             <Text style={styles.searchingText}>Finding nearby drivers...</Text>
-            <TouchableOpacity style={styles.cancelButton} onPress={() => navigation.goBack()}>
+            <TouchableOpacity style={styles.cancelButton} onPress={handleCancel}>
                 <Text style={styles.cancelText}>Cancel Request</Text>
             </TouchableOpacity>
         </View>
@@ -163,7 +194,14 @@ const TripStatusScreen = () => {
 
             {driverLocation && (
                  <Marker coordinate={{ latitude: driverLocation.lat, longitude: driverLocation.lng }}>
-                     <Image source={require('../assets/tow-truck.png')} style={{ width: 40, height: 40, resizeMode: 'contain' }} />
+                     <Image 
+                        source={
+                            (trip.serviceType === 'Ride' || trip.serviceType === 'Sedan') 
+                            ? require('../assets/car_icon.png') 
+                            : require('../assets/tow-truck.png')
+                        } 
+                        style={{ width: 40, height: 40, resizeMode: 'contain' }} 
+                     />
                  </Marker>
             )}
 
@@ -198,24 +236,12 @@ const styles = StyleSheet.create({
     top: 50,
     left: 20,
     zIndex: 10,
-    backgroundColor: theme.colors.surface,
-    padding: 8,
-    borderRadius: 20,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.25,
-    shadowRadius: 3.84,
-    elevation: 5,
   },
   bottomSheet: {
-    position: 'absolute',
-    bottom: 0,
-    left: 0,
-    right: 0,
     backgroundColor: theme.colors.surface,
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
-    padding: 20,
+    padding: theme.spacing.l,
+    borderTopLeftRadius: theme.borderRadius.xl,
+    borderTopRightRadius: theme.borderRadius.xl,
     shadowColor: "#000",
     shadowOffset: { width: 0, height: -2 },
     shadowOpacity: 0.25,
@@ -224,103 +250,100 @@ const styles = StyleSheet.create({
     paddingBottom: 40,
   },
   statusTitle: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: theme.colors.text,
+    ...theme.typography.h3,
+    marginBottom: theme.spacing.m,
     textAlign: 'center',
-    marginBottom: 10,
   },
   divider: {
     height: 1,
     backgroundColor: theme.colors.border,
-    marginVertical: 10,
+    marginBottom: theme.spacing.m,
   },
   searchingContainer: {
     alignItems: 'center',
-    paddingVertical: 20,
+    padding: theme.spacing.m,
   },
   searchingText: {
-    marginTop: 10,
-    color: theme.colors.textSecondary,
-    fontSize: 16,
+    ...theme.typography.body,
+    marginTop: theme.spacing.m,
+    marginBottom: theme.spacing.l,
   },
   cancelButton: {
-    marginTop: 20,
-    paddingVertical: 10,
-    paddingHorizontal: 30,
-    borderRadius: 25,
-    backgroundColor: theme.colors.error,
+    paddingVertical: theme.spacing.s,
+    paddingHorizontal: theme.spacing.l,
+    backgroundColor: theme.colors.surfaceLight,
+    borderRadius: theme.borderRadius.m,
   },
   cancelText: {
-    color: 'white',
-    fontWeight: 'bold',
+    color: theme.colors.error,
   },
   driverContainer: {
-    marginTop: 10,
+    
   },
   driverHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 20,
+    marginBottom: theme.spacing.l,
   },
   driverName: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: theme.colors.text,
+    ...theme.typography.h3,
   },
   vehicleInfo: {
+    ...theme.typography.caption,
     color: theme.colors.textSecondary,
-    fontSize: 14,
-    marginTop: 2,
+    marginTop: 4,
   },
   ratingContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginTop: 5,
+    marginTop: 4,
   },
   ratingText: {
-    marginLeft: 5,
-    color: theme.colors.text,
-    fontWeight: 'bold',
+    marginLeft: 4,
+    ...theme.typography.caption,
   },
   plateContainer: {
-    backgroundColor: theme.colors.background,
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-    borderRadius: 5,
+    backgroundColor: theme.colors.surfaceLight,
+    paddingHorizontal: theme.spacing.m,
+    paddingVertical: theme.spacing.s,
+    borderRadius: theme.borderRadius.s,
     borderWidth: 1,
     borderColor: theme.colors.border,
   },
   plateText: {
+    ...theme.typography.body,
     fontWeight: 'bold',
-    color: theme.colors.text,
   },
   actionsContainer: {
     flexDirection: 'row',
     justifyContent: 'space-around',
-    marginTop: 10,
   },
   actionButton: {
     width: 50,
     height: 50,
     borderRadius: 25,
-    backgroundColor: theme.colors.background,
-    justifyContent: 'center',
+    backgroundColor: theme.colors.surfaceLight,
     alignItems: 'center',
-    borderWidth: 1,
-    borderColor: theme.colors.border,
+    justifyContent: 'center',
   },
   markerContainer: {
-    padding: 5,
+    width: 20,
+    height: 20,
+    borderRadius: 10,
     backgroundColor: 'white',
-    borderRadius: 15,
-    elevation: 3,
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 3.84,
+    elevation: 5,
   },
   markerDot: {
-    width: 15,
-    height: 15,
-    borderRadius: 7.5,
+    width: 12,
+    height: 12,
+    borderRadius: 6,
   }
 });
 

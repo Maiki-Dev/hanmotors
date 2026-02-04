@@ -727,6 +727,29 @@ router.delete('/trip/:id', async (req, res) => {
   }
 });
 
+router.post('/trip/:id/cancel', async (req, res) => {
+  try {
+    const trip = await Trip.findByIdAndUpdate(req.params.id, { 
+      status: 'cancelled' 
+    }, { new: true });
+    
+    if (!trip) return res.status(404).json({ message: 'Trip not found' });
+    
+    const io = req.app.get('io');
+    io.emit('tripUpdated', trip);
+    if (trip.driver) {
+      io.to(`driver_${trip.driver}`).emit('jobCancelled', { tripId: req.params.id });
+    } else {
+        // If no driver assigned yet, we should also emit to remove it from available jobs
+        io.emit('jobCancelled', { tripId: req.params.id });
+    }
+
+    res.json(trip);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 router.post('/trip/:id/assign', async (req, res) => {
   try {
     const { driverId } = req.body;
@@ -1376,8 +1399,18 @@ router.post('/rides/request', async (req, res) => {
              price += (dist - 4) * pricingRule.pricePerKm;
         }
     } else {
-        // Fallback
-        price = 80000 + (Number(distance) || 0) * 2000; 
+        // Fallback based on serviceType/vehicleType
+        const dist = Number(distance) || 0;
+        const type = req.body.serviceType || vehicleType || 'Tow';
+        
+        if (type === 'Ride' || type === 'Sedan') {
+            price = 1000 + dist * 1500;
+        } else if (type === 'Cargo') {
+            price = 5000 + dist * 2000;
+        } else {
+            // Towing default
+            price = 80000 + dist * 2000; 
+        }
     }
     
     price = Math.ceil(price / 100) * 100;
@@ -1387,6 +1420,7 @@ router.post('/rides/request', async (req, res) => {
       pickupLocation: pickup,
       dropoffLocation: dropoff,
       vehicleModel: vehicleType,
+      serviceType: req.body.serviceType || 'Tow', // Default to Tow if not specified
       distance: Number(distance),
       price,
       status: 'pending',

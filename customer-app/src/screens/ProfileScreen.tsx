@@ -1,14 +1,35 @@
-import React from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Image, Alert } from 'react-native';
+import React, { useEffect, useState } from 'react';
+import { View, Text, StyleSheet, TouchableOpacity, Image, Alert, ActivityIndicator } from 'react-native';
 import { theme } from '../constants/theme';
 import { useDispatch, useSelector } from 'react-redux';
 import { logout } from '../store/slices/authSlice';
 import { RootState } from '../store';
-import { LogOut, User, Shield, HelpCircle, Settings } from 'lucide-react-native';
+import { customerService } from '../services/api';
+import { LogOut, User, Shield, HelpCircle, Settings, Star } from 'lucide-react-native';
 
 const ProfileScreen = () => {
   const dispatch = useDispatch();
   const user = useSelector((state: RootState) => state.auth.user);
+  const [profile, setProfile] = useState<any>(null);
+  const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    fetchProfile();
+  }, [user]);
+
+  const fetchProfile = async () => {
+    if (!user?._id) return;
+    
+    setLoading(true);
+    try {
+      const response = await customerService.getProfile(user._id);
+      setProfile(response.data);
+    } catch (error) {
+      console.log('Error fetching profile', error);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const handleLogout = () => {
     Alert.alert(
@@ -31,8 +52,16 @@ const ProfileScreen = () => {
         <View style={styles.avatarContainer}>
             <User size={40} color={theme.colors.primary} />
         </View>
-        <Text style={styles.name}>{user?.phone || 'Guest User'}</Text>
+        <Text style={styles.name}>{profile?.name || user?.phone || 'Guest User'}</Text>
         <Text style={styles.phone}>{user?.phone}</Text>
+        {profile?.email && <Text style={styles.email}>{profile.email}</Text>}
+        
+        {profile?.rating && (
+          <View style={styles.ratingContainer}>
+            <Star size={16} color="#FFD700" fill="#FFD700" />
+            <Text style={styles.ratingText}>{profile.rating.toFixed(1)}</Text>
+          </View>
+        )}
       </View>
 
       <View style={styles.menuContainer}>
@@ -98,14 +127,34 @@ const styles = StyleSheet.create({
     borderColor: theme.colors.primary,
   },
   name: {
-    fontSize: 22,
-    fontWeight: 'bold',
+    ...theme.typography.h2,
     color: theme.colors.text,
     marginBottom: 5,
   },
   phone: {
-    fontSize: 16,
+    ...theme.typography.body,
     color: theme.colors.textSecondary,
+    marginBottom: 5,
+  },
+  email: {
+    ...theme.typography.caption,
+    color: theme.colors.textSecondary,
+    marginBottom: 5,
+  },
+  ratingContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: theme.colors.surface,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 12,
+    marginTop: 5,
+  },
+  ratingText: {
+    ...theme.typography.body,
+    fontWeight: 'bold',
+    marginLeft: 5,
+    color: theme.colors.text,
   },
   menuContainer: {
     backgroundColor: theme.colors.surface,
