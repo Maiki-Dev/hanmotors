@@ -1,287 +1,575 @@
-import React, { useEffect, useState, useRef } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Dimensions, Alert, Platform } from 'react-native';
-import MapView, { Marker, PROVIDER_GOOGLE } from 'react-native-maps';
+import React, { useState, useEffect, useRef } from 'react';
+import {
+  View,
+  Text,
+  StyleSheet,
+  TouchableOpacity,
+  Dimensions,
+  Platform,
+  StatusBar,
+  SafeAreaView,
+  ScrollView,
+  Image,
+} from 'react-native';
+import MapView, { Marker, PROVIDER_GOOGLE, Region } from 'react-native-maps';
 import * as Location from 'expo-location';
-import { theme } from '../constants/theme';
-import { MapPin, Navigation } from 'lucide-react-native';
+import { Ionicons, MaterialIcons, MaterialCommunityIcons } from '@expo/vector-icons';
+import { BlurView } from 'expo-blur';
 import { useNavigation } from '@react-navigation/native';
 import { StackNavigationProp } from '@react-navigation/stack';
-import { initSocket } from '../services/socket';
-import { rideService } from '../services/api';
 import { useSelector } from 'react-redux';
-import { RootState } from '../store';
+import { theme } from '../constants/theme';
+import { RootStackParamList } from '../navigation/types';
+import { AnimatedDriverMarker } from '../components/AnimatedDriverMarker';
+import { initSocket } from '../services/socket';
 
 const { width, height } = Dimensions.get('window');
 const ASPECT_RATIO = width / height;
-const LATITUDE_DELTA = 0.0122;
+const LATITUDE_DELTA = 0.005;
 const LONGITUDE_DELTA = LATITUDE_DELTA * ASPECT_RATIO;
 
-const HomeScreen = () => {
-  const [location, setLocation] = useState<Location.LocationObject | null>(null);
-  const [address, setAddress] = useState('Locating...');
+type HomeScreenNavigationProp = StackNavigationProp<RootStackParamList, 'Home'>;
+
+const SERVICES = [
+  { id: 'taxi', name: 'Такси', icon: 'car', family: 'Ionicons', color: '#fbbf24' },
+  { id: 'delivery', name: 'Хүргэлт', icon: 'cube', family: 'Ionicons', color: '#f97316' },
+  { id: 'driver', name: 'Жолооч', icon: 'person', family: 'Ionicons', color: '#3b82f6' },
+  { id: 'sos', name: 'SOS', icon: 'build', family: 'Ionicons', color: '#ef4444' },
+  { id: 'food', name: 'Хоол', icon: 'fast-food', family: 'Ionicons', color: '#22c55e' },
+];
+
+// Mock Nearby Drivers
+const INITIAL_DRIVERS = [
+  { id: 'd1', lat: 47.9190, lng: 106.9170, heading: 45 },
+  { id: 'd2', lat: 47.9200, lng: 106.9200, heading: 90 },
+  { id: 'd3', lat: 47.9150, lng: 106.9100, heading: 180 },
+  { id: 'd4', lat: 47.9170, lng: 106.9250, heading: 270 },
+  { id: 'd5', lat: 47.9220, lng: 106.9150, heading: 0 },
+];
+
+export default function HomeScreen() {
+  const navigation = useNavigation<HomeScreenNavigationProp>();
   const mapRef = useRef<MapView>(null);
-  const navigation = useNavigation<StackNavigationProp<any>>();
-  const user = useSelector((state: RootState) => state.auth.user);
+  const [location, setLocation] = useState<Location.LocationObject | null>(null);
+  const [address, setAddress] = useState<string>('Байршил тодорхойлж байна...');
+  const [region, setRegion] = useState<Region | null>(null);
+  const [isMapReady, setIsMapReady] = useState(false);
+  const [drivers, setDrivers] = useState(INITIAL_DRIVERS);
+  const [showsTraffic, setShowsTraffic] = useState(false);
+  const [selectedDriverId, setSelectedDriverId] = useState<string | null>(null);
+
+  const [isDragging, setIsDragging] = useState(false);
+
+  // User info from Redux (mock if not available)
+  const user = useSelector((state: any) => state.auth.user) || { name: 'Хэрэглэгч', balance: 0 };
+
+  // Simulate Driver Movement (Mock) - DISABLED for Real WebSocket
+  /*
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setDrivers(prevDrivers => prevDrivers.map(d => ({
+        ...d,
+        lat: d.lat + (Math.random() - 0.5) * 0.0002,
+        lng: d.lng + (Math.random() - 0.5) * 0.0002,
+        heading: d.heading + (Math.random() - 0.5) * 10
+      })));
+    }, 2000);
+    return () => clearInterval(interval);
+  }, []);
+  */
 
   useEffect(() => {
+    let subscription: Location.LocationSubscription | null = null;
+
     (async () => {
       let { status } = await Location.requestForegroundPermissionsAsync();
       if (status !== 'granted') {
-        Alert.alert('Permission to access location was denied');
+        setAddress('Байршлын эрх өгөгдөөгүй байна');
         return;
       }
 
+      // Initial location
       let location = await Location.getCurrentPositionAsync({});
       setLocation(location);
       
-      // Initialize socket
-      if (user?._id) {
-        initSocket(user._id);
-        
-        // Check for active trip
-        try {
-          const response = await rideService.getActiveTrip(user._id);
-          if (response.data) {
-            navigation.navigate('TripStatus', { trip: response.data });
-          }
-        } catch (error) {
-          // No active trip, ignore
-        }
-      }
-
-      // Reverse geocoding to get address
-      try {
-        let reverseGeocode = await Location.reverseGeocodeAsync({
-          latitude: location.coords.latitude,
-          longitude: location.coords.longitude
-        });
-        if (reverseGeocode.length > 0) {
-          const addr = reverseGeocode[0];
-          setAddress(`${addr.street || ''} ${addr.name || ''}, ${addr.city || ''}`);
-        }
-      } catch (e) {
-        console.log('Reverse geocoding failed', e);
-        setAddress('Unknown Location');
-      }
-    })();
-  }, [user]);
-
-  const handleRecenter = () => {
-    if (location && mapRef.current) {
-      mapRef.current.animateToRegion({
+      const initialRegion = {
         latitude: location.coords.latitude,
         longitude: location.coords.longitude,
         latitudeDelta: LATITUDE_DELTA,
         longitudeDelta: LONGITUDE_DELTA,
+      };
+      setRegion(initialRegion);
+      
+      // Initial address fetch
+      fetchAddress(location.coords.latitude, location.coords.longitude);
+
+      // Real-time tracking
+      subscription = await Location.watchPositionAsync(
+        {
+          accuracy: Location.Accuracy.High,
+          timeInterval: 2000,
+          distanceInterval: 10,
+        },
+        (newLocation) => {
+          setLocation(newLocation);
+        }
+      );
+    })();
+
+    return () => {
+      if (subscription) {
+        subscription.remove();
+      }
+    };
+  }, []);
+
+  // Camera Follow Mode
+  useEffect(() => {
+    if (selectedDriverId && mapRef.current) {
+      const driver = drivers.find(d => d.id === selectedDriverId);
+      if (driver) {
+        mapRef.current.animateCamera({
+          center: { latitude: driver.lat, longitude: driver.lng },
+          heading: driver.heading,
+          zoom: 17,
+          pitch: 0,
+        }, { duration: 1000 });
+      }
+    }
+  }, [drivers, selectedDriverId]);
+
+  // Real-time Driver Tracking (Socket.io Integration)
+  useEffect(() => {
+    // 1. Initialize Socket Connection
+    // Passing user info if needed, or just connecting
+    const socket = initSocket();
+
+    // 2. Listen for Real-time Location Updates
+    // data structure: { driverId, location: { lat, lng, heading, ... } }
+    socket.on('driverLocationUpdated', (data: { driverId: string, location: any }) => {
+      // console.log('Driver update received:', data); // Debug
+      
+      setDrivers(prev => {
+        const driverIndex = prev.findIndex(d => d.id === data.driverId);
+        
+        if (driverIndex >= 0) {
+          // Update existing driver
+          // AnimatedDriverMarker handles smooth transition via props update
+          const newDrivers = [...prev];
+          newDrivers[driverIndex] = {
+             ...newDrivers[driverIndex],
+             ...data.location
+          };
+          return newDrivers;
+        } else {
+          // Add new driver found in the vicinity
+          // In production, you might want to filter this by distance
+          return [...prev, { id: data.driverId, ...data.location }];
+        }
       });
+    });
+
+    // 3. Cleanup listeners on unmount
+    return () => { 
+      socket.off('driverLocationUpdated'); 
+    };
+  }, []);
+
+  const fetchAddress = async (lat: number, long: number) => {
+    try {
+      // Mock Real Address Names for Demo (to avoid "47.9123, 106.9123")
+      const MOCK_STREETS = [
+        'Энхтайваны өргөн чөлөө, Сүхбаатар',
+        'Сөүлийн гудамж, 1-р хороо',
+        'Чингисийн өргөн чөлөө, Хан-Уул',
+        'Нарны зам, Баянгол дүүрэг',
+        'Зайсан толгой, 11-р хороо',
+        'Бага тойруу, Чингэлтэй дүүрэг',
+        'Ард Аюушийн өргөн чөлөө',
+        'Их Монгол Улсын гудамж',
+        'Олимпийн гудамж, 1-р хороо',
+        'Бээжингийн гудамж, 11-р хороо'
+      ];
+      
+      // Deterministic pseudo-random selection based on coordinates
+      // This ensures the same location always gets the same address name
+      const index = Math.abs(Math.floor((lat + long) * 10000)) % MOCK_STREETS.length;
+      setAddress(MOCK_STREETS[index]);
+      
+      // Real implementation would be:
+      // const result = await Location.reverseGeocodeAsync({ latitude: lat, longitude: long });
+      // if (result.length > 0) {
+      //   setAddress(`${result[0].street || ''} ${result[0].name || ''}`);
+      // }
+    } catch (error) {
+      console.log('Error fetching address:', error);
+      setAddress('Тодорхойгүй байршил');
+    }
+  };
+
+  const mapStyle = [
+    {
+      "elementType": "geometry",
+      "stylers": [{ "color": "#f5f5f5" }]
+    },
+    {
+      "elementType": "labels.icon",
+      "stylers": [{ "visibility": "off" }]
+    },
+    {
+      "elementType": "labels.text.fill",
+      "stylers": [{ "color": "#616161" }]
+    },
+    {
+      "elementType": "labels.text.stroke",
+      "stylers": [{ "color": "#f5f5f5" }]
+    },
+    {
+      "featureType": "administrative.land_parcel",
+      "elementType": "labels.text.fill",
+      "stylers": [{ "color": "#bdbdbd" }]
+    },
+    {
+      "featureType": "poi",
+      "elementType": "geometry",
+      "stylers": [{ "color": "#eeeeee" }]
+    },
+    {
+      "featureType": "poi",
+      "elementType": "labels.text.fill",
+      "stylers": [{ "color": "#757575" }]
+    },
+    {
+      "featureType": "poi.park",
+      "elementType": "geometry",
+      "stylers": [{ "color": "#e5e5e5" }]
+    },
+    {
+      "featureType": "poi.park",
+      "elementType": "labels.text.fill",
+      "stylers": [{ "color": "#9e9e9e" }]
+    },
+    {
+      "featureType": "road",
+      "elementType": "geometry",
+      "stylers": [{ "color": "#ffffff" }]
+    },
+    {
+      "featureType": "road.arterial",
+      "elementType": "labels.text.fill",
+      "stylers": [{ "color": "#757575" }]
+    },
+    {
+      "featureType": "road.highway",
+      "elementType": "geometry",
+      "stylers": [{ "color": "#dadada" }]
+    },
+    {
+      "featureType": "road.highway",
+      "elementType": "labels.text.fill",
+      "stylers": [{ "color": "#616161" }]
+    },
+    {
+      "featureType": "road.local",
+      "elementType": "labels.text.fill",
+      "stylers": [{ "color": "#9e9e9e" }]
+    },
+    {
+      "featureType": "transit.line",
+      "elementType": "geometry",
+      "stylers": [{ "color": "#e5e5e5" }]
+    },
+    {
+      "featureType": "transit.station",
+      "elementType": "geometry",
+      "stylers": [{ "color": "#eeeeee" }]
+    },
+    {
+      "featureType": "water",
+      "elementType": "geometry",
+      "stylers": [{ "color": "#c9c9c9" }]
+    },
+    {
+      "featureType": "water",
+      "elementType": "labels.text.fill",
+      "stylers": [{ "color": "#9e9e9e" }]
+    }
+  ];
+
+  const onRegionChange = () => {
+    setIsDragging(true);
+    if (selectedDriverId) setSelectedDriverId(null);
+  };
+
+  const onRegionChangeComplete = (newRegion: Region) => {
+    setIsDragging(false);
+    setRegion(newRegion);
+    fetchAddress(newRegion.latitude, newRegion.longitude);
+  };
+
+  const handleMyLocation = () => {
+    if (location && mapRef.current) {
+      const newRegion = {
+        latitude: location.coords.latitude,
+        longitude: location.coords.longitude,
+        latitudeDelta: LATITUDE_DELTA,
+        longitudeDelta: LONGITUDE_DELTA,
+      };
+      mapRef.current.animateToRegion(newRegion, 1000);
+      setRegion(newRegion);
+    }
+  };
+
+  const handleServicePress = (serviceId: string) => {
+    if (serviceId === 'taxi') {
+      navigation.navigate('RideRequest', { 
+        pickup: { 
+          latitude: region?.latitude || 0, 
+          longitude: region?.longitude || 0,
+          address: address 
+        } 
+      });
+    } else {
+      // Handle other services
+      console.log('Service selected:', serviceId);
     }
   };
 
   return (
     <View style={styles.container}>
-      {location ? (
-        <MapView
-          ref={mapRef}
-          style={styles.map}
-          provider={PROVIDER_GOOGLE}
-          initialRegion={{
-            latitude: location.coords.latitude,
-            longitude: location.coords.longitude,
-            latitudeDelta: LATITUDE_DELTA,
-            longitudeDelta: LONGITUDE_DELTA,
-          }}
-          showsUserLocation={true}
-          showsMyLocationButton={false}
-          customMapStyle={mapStyle}
-        />
-      ) : (
-        <View style={styles.loadingContainer}>
-          <Text style={styles.loadingText}>Loading Map...</Text>
-        </View>
-      )}
-
-      {/* Header / Location Display */}
-      <View style={styles.header}>
-        <View style={styles.menuButton}>
-          <MapPin color={theme.colors.primary} size={24} />
-        </View>
-        <View style={styles.locationInfo}>
-          <Text style={styles.locationLabel}>Current Location</Text>
-          <Text style={styles.locationText} numberOfLines={1}>{address}</Text>
-        </View>
-      </View>
-
-      {/* Bottom Action Sheet */}
-      <View style={styles.bottomSheet}>
-        <Text style={styles.greeting}>Hello, {user?.name || 'Customer'}</Text>
-        <Text style={styles.question}>Where to?</Text>
-        
-        <TouchableOpacity 
-          style={styles.searchButton}
-          onPress={() => navigation.navigate('RideRequest', { 
-            pickup: {
-              address,
-              lat: location?.coords.latitude,
-              lng: location?.coords.longitude
-            }
-          })}
-        >
-          <View style={styles.searchIcon}>
-             <Navigation color={theme.colors.textSecondary} size={20} />
-          </View>
-          <Text style={styles.searchText}>Search Destination</Text>
-        </TouchableOpacity>
-      </View>
+      <StatusBar barStyle="light-content" backgroundColor="transparent" translucent />
       
-      {/* Recenter Button */}
-      <TouchableOpacity style={styles.recenterButton} onPress={handleRecenter}>
-         <Navigation color={theme.colors.black} size={24} />
-      </TouchableOpacity>
-    </View>
-  );
-};
+      <View style={styles.mapContainer}>
+        {region ? (
+          <MapView
+            ref={mapRef}
+            style={styles.map}
+            provider={PROVIDER_GOOGLE}
+            customMapStyle={mapStyle}
+            initialRegion={region}
+            showsUserLocation={true}
+            showsMyLocationButton={false}
+            onRegionChange={onRegionChange}
+            onRegionChangeComplete={onRegionChangeComplete}
+            showsBuildings={false}
+            showsIndoors={false}
+            onMapReady={() => setIsMapReady(true)}
+            showsTraffic={showsTraffic}
+            rotateEnabled={false}
+            pitchEnabled={false}
+          >
+             {drivers.map(driver => (
+               <AnimatedDriverMarker 
+                 key={driver.id} 
+                 driver={driver} 
+                 onPress={() => setSelectedDriverId(driver.id)}
+               />
+             ))}
+          </MapView>
+        ) : (
+          <View style={[styles.map, styles.loadingContainer]}>
+            <Text style={styles.loadingText}>Ачааллаж байна...</Text>
+          </View>
+        )}
+        
+        {/* Fixed Center Marker - Generic Yellow Pin */}
+        <View style={styles.markerFixed}>
+          <View style={styles.markerContainer}>
+            {!isDragging && (
+              <TouchableOpacity 
+                style={styles.markerBubble}
+                onPress={() => navigation.navigate('RideRequest', { 
+                  pickup: { 
+                    latitude: region?.latitude || 0, 
+                    longitude: region?.longitude || 0,
+                    address: address 
+                  } 
+                })}
+                activeOpacity={0.9}
+              >
+                 <View style={styles.markerDot} />
+                 <Text style={styles.markerText} numberOfLines={1}>
+                  {address}
+                 </Text>
+                 <Ionicons name="chevron-forward" size={14} color="#6B7280" style={{ marginLeft: 4 }} />
+              </TouchableOpacity>
+            )}
+            
+            {/* Generic Yellow Pin */}
+            <View style={styles.pinContainer}>
+               <Ionicons name="location-sharp" size={48} color={theme.colors.primary} />
+               <View style={styles.pinShadow} />
+            </View>
+          </View>
+        </View>
 
+        {/* Map Controls */}
+        <View style={styles.mapControls}>
+          <TouchableOpacity 
+            style={styles.controlButton} 
+            onPress={handleMyLocation}
+            activeOpacity={0.8}
+          >
+            <Ionicons name="locate" size={24} color="#FFFFFF" />
+          </TouchableOpacity>
+
+          <TouchableOpacity 
+            style={[styles.controlButton, showsTraffic && styles.activeControlButton]} 
+            onPress={() => setShowsTraffic(!showsTraffic)}
+            activeOpacity={0.8}
+          >
+            <MaterialIcons name="traffic" size={24} color={showsTraffic ? theme.colors.primary : "#FFFFFF"} />
+          </TouchableOpacity>
+        </View>
+
+        {/* Bottom Sheet - Glassmorphism */}
+        <BlurView intensity={40} tint="dark" style={styles.bottomSheet}>
+           {/* Address Input */}
+           <TouchableOpacity 
+             style={styles.addressInputContainer}
+             onPress={() => navigation.navigate('RideRequest', { 
+               pickup: { 
+                 latitude: region?.latitude || 0, 
+                 longitude: region?.longitude || 0,
+                 address: address 
+               } 
+             })}
+           >
+             <View style={styles.addressIconWrapper}>
+               <View style={styles.greenDot} />
+             </View>
+             <View style={styles.addressTextContainer}>
+               <Text style={styles.addressLabel}>Суух хаяг</Text>
+               <Text style={styles.addressValue} numberOfLines={1}>
+                 {address !== 'Байршил тодорхойлж байна...' ? address : 'Хаанаас авах вэ?'}
+               </Text>
+             </View>
+             <View style={styles.searchIconWrapper}>
+                <Ionicons name="search" size={20} color={theme.colors.textSecondary} />
+             </View>
+           </TouchableOpacity>
+
+           {/* Services Grid */}
+           <View style={styles.servicesGrid}>
+             {SERVICES.map((service) => (
+               <TouchableOpacity 
+                 key={service.id} 
+                 style={styles.serviceItem}
+                 onPress={() => handleServicePress(service.id)}
+                 activeOpacity={0.7}
+               >
+                 <View style={styles.serviceIconContainer}>
+                   <Ionicons name={service.icon as any} size={24} color={theme.colors.primary} />
+                 </View>
+                 <Text style={styles.serviceName}>{service.name}</Text>
+               </TouchableOpacity>
+             ))}
+           </View>
+        </BlurView>
+ 
+       </View>
+     </View>
+   );
+ }
+
+ // Custom Dark Map Style - Premium, Clean, No Labels
 const mapStyle = [
   {
     "elementType": "geometry",
-    "stylers": [
-      {
-        "color": "#242f3e"
-      }
-    ]
+    "stylers": [{ "color": "#17191C" }] // Deep charcoal base
   },
   {
     "elementType": "labels.text.fill",
-    "stylers": [
-      {
-        "color": "#746855"
-      }
-    ]
+    "stylers": [{ "color": "#8A8F98" }]
   },
   {
     "elementType": "labels.text.stroke",
-    "stylers": [
-      {
-        "color": "#242f3e"
-      }
-    ]
+    "stylers": [{ "color": "#17191C" }]
   },
   {
     "featureType": "administrative.locality",
     "elementType": "labels.text.fill",
-    "stylers": [
-      {
-        "color": "#d59563"
-      }
-    ]
+    "stylers": [{ "color": "#D1D5DB" }]
   },
   {
     "featureType": "poi",
-    "elementType": "labels.text.fill",
-    "stylers": [
-      {
-        "color": "#d59563"
-      }
-    ]
+    "elementType": "labels.text",
+    "stylers": [{ "visibility": "off" }] // CRITICAL: No brand names
+  },
+  {
+    "featureType": "poi",
+    "elementType": "labels.icon",
+    "stylers": [{ "visibility": "off" }] // CRITICAL: No brand icons
+  },
+  {
+    "featureType": "poi.business",
+    "stylers": [{ "visibility": "off" }]
   },
   {
     "featureType": "poi.park",
     "elementType": "geometry",
-    "stylers": [
-      {
-        "color": "#263c3f"
-      }
-    ]
+    "stylers": [{ "color": "#1E2227" }]
   },
   {
     "featureType": "poi.park",
     "elementType": "labels.text.fill",
-    "stylers": [
-      {
-        "color": "#6b9a76"
-      }
-    ]
+    "stylers": [{ "color": "#6B7280" }]
   },
   {
     "featureType": "road",
     "elementType": "geometry",
-    "stylers": [
-      {
-        "color": "#38414e"
-      }
-    ]
+    "stylers": [{ "color": "#2C3038" }]
   },
   {
     "featureType": "road",
     "elementType": "geometry.stroke",
-    "stylers": [
-      {
-        "color": "#212a37"
-      }
-    ]
+    "stylers": [{ "color": "#21252B" }]
   },
   {
     "featureType": "road",
     "elementType": "labels.text.fill",
-    "stylers": [
-      {
-        "color": "#9ca5b3"
-      }
-    ]
+    "stylers": [{ "color": "#9CA3AF" }]
   },
   {
     "featureType": "road.highway",
     "elementType": "geometry",
-    "stylers": [
-      {
-        "color": "#746855"
-      }
-    ]
+    "stylers": [{ "color": "#FFC107" }, { "lightness": -60 }] // Subtle yellow hint
   },
   {
     "featureType": "road.highway",
     "elementType": "geometry.stroke",
-    "stylers": [
-      {
-        "color": "#1f2835"
-      }
-    ]
+    "stylers": [{ "color": "#17191C" }]
   },
   {
     "featureType": "road.highway",
     "elementType": "labels.text.fill",
-    "stylers": [
-      {
-        "color": "#f3d19c"
-      }
-    ]
+    "stylers": [{ "color": "#F3F4F6" }]
+  },
+  {
+    "featureType": "transit",
+    "elementType": "geometry",
+    "stylers": [{ "color": "#2C3038" }]
+  },
+  {
+    "featureType": "transit.station",
+    "elementType": "labels.text.fill",
+    "stylers": [{ "color": "#D1D5DB" }]
   },
   {
     "featureType": "water",
     "elementType": "geometry",
-    "stylers": [
-      {
-        "color": "#17263c"
-      }
-    ]
+    "stylers": [{ "color": "#0E1013" }]
   },
   {
     "featureType": "water",
     "elementType": "labels.text.fill",
-    "stylers": [
-      {
-        "color": "#515c6d"
-      }
-    ]
+    "stylers": [{ "color": "#4B5563" }]
   },
+  // Traffic Layer Visibility
   {
-    "featureType": "water",
-    "elementType": "labels.text.stroke",
-    "stylers": [
-      {
-        "color": "#17263c"
-      }
-    ]
+    "featureType": "road",
+    "elementType": "geometry",
+    "stylers": [{ "visibility": "simplified" }]
   }
 ];
 
@@ -290,100 +578,202 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: theme.colors.background,
   },
+  mapContainer: {
+    flex: 1,
+    position: 'relative',
+  },
   map: {
     width: '100%',
     height: '100%',
   },
   loadingContainer: {
-    flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
     backgroundColor: theme.colors.background,
   },
   loadingText: {
-    color: theme.colors.text,
+    color: theme.colors.textSecondary,
     marginTop: 10,
   },
-  header: {
+  
+  // FIXED CENTER MARKER
+  markerFixed: {
     position: 'absolute',
-    top: 50,
-    left: 20,
-    right: 20,
+    top: '50%',
+    left: '50%',
+    zIndex: 10,
+  },
+  markerContainer: {
+    width: 48,
+    height: 48,
+    marginLeft: -24,
+    marginTop: -48, // Anchor bottom to center
+    alignItems: 'center',
+  },
+  markerBubble: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: theme.colors.surface,
-    padding: theme.spacing.m,
-    borderRadius: theme.borderRadius.l,
-    shadowColor: "#000",
+    backgroundColor: '#000000', // Pure black for pill
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderRadius: 24,
+    marginBottom: 12,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 6,
+    position: 'absolute',
+    bottom: 50,
+    alignSelf: 'center',
+    minWidth: 140,
+    justifyContent: 'center',
+    zIndex: 20,
+  },
+  markerDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: theme.colors.primary,
+    marginRight: 10,
+  },
+  markerText: {
+    color: '#FFFFFF',
+    fontSize: 14,
+    fontWeight: '600',
+    maxWidth: 180,
+    marginRight: 4,
+  },
+  pinContainer: {
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  pinShadow: {
+    width: 16,
+    height: 4,
+    backgroundColor: 'rgba(0,0,0,0.3)',
+    borderRadius: 2,
+    marginTop: -4,
+  },
+
+  // MAP CONTROLS
+  mapControls: {
+    position: 'absolute',
+    right: 16,
+    bottom: 300, // Above bottom sheet
+    alignItems: 'center',
+    zIndex: 5,
+  },
+  controlButton: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: '#000000', // Pure black
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 12,
+    shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.25,
-    shadowRadius: 3.84,
+    shadowRadius: 4,
     elevation: 5,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.1)',
   },
-  menuButton: {
-    marginRight: theme.spacing.m,
+  activeControlButton: {
+    backgroundColor: '#121212',
+    borderWidth: 1,
+    borderColor: theme.colors.primary,
   },
-  locationInfo: {
-    flex: 1,
-  },
-  locationLabel: {
-    ...theme.typography.caption,
-    color: theme.colors.primary,
-  },
-  locationText: {
-    ...theme.typography.body,
-    fontWeight: '600',
-  },
+
+  // BOTTOM SHEET
   bottomSheet: {
     position: 'absolute',
-    bottom: 0,
-    left: 0,
-    right: 0,
-    backgroundColor: theme.colors.surface,
-    borderTopLeftRadius: theme.borderRadius.xl,
-    borderTopRightRadius: theme.borderRadius.xl,
-    padding: theme.spacing.l,
-    paddingBottom: theme.spacing.xxl,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: -2 },
-    shadowOpacity: 0.25,
-    shadowRadius: 3.84,
-    elevation: 5,
+    bottom: 120, // Leave space for floating nav (70px + 25px margin + buffer)
+    left: 16,
+    right: 16,
+    borderRadius: theme.borderRadius.xl,
+    padding: 16,
+    overflow: 'hidden',
+    borderWidth: 1,
+    borderColor: theme.colors.glassBorder,
+    backgroundColor: 'rgba(0,0,0,0.85)', // Force black glass look
   },
-  greeting: {
-    ...theme.typography.h3,
-    marginBottom: theme.spacing.xs,
-  },
-  question: {
-    ...theme.typography.h1,
-    marginBottom: theme.spacing.l,
-    color: theme.colors.primary,
-  },
-  searchButton: {
+  
+  // ADDRESS INPUT
+  addressInputContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: theme.colors.surfaceLight,
-    padding: theme.spacing.m,
-    borderRadius: theme.borderRadius.m,
+    backgroundColor: '#121212', // Darker surface
+    borderRadius: theme.borderRadius.l,
+    padding: 12,
+    marginBottom: 20,
     borderWidth: 1,
-    borderColor: theme.colors.border,
+    borderColor: 'rgba(255,255,255,0.05)',
   },
-  searchIcon: {
-    marginRight: theme.spacing.m,
+  addressIconWrapper: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: 'rgba(34, 197, 94, 0.15)', // Green tint
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 12,
   },
-  searchText: {
-    ...theme.typography.body,
+  greenDot: {
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+    backgroundColor: '#22c55e',
+    borderWidth: 2,
+    borderColor: '#FFFFFF',
+  },
+  addressTextContainer: {
+    flex: 1,
+  },
+  addressLabel: {
     color: theme.colors.textSecondary,
+    fontSize: 12,
+    marginBottom: 2,
   },
-  recenterButton: {
-    position: 'absolute',
-    bottom: 250,
-    right: 20,
-    backgroundColor: theme.colors.primary,
-    padding: theme.spacing.m,
-    borderRadius: theme.borderRadius.round,
-    elevation: 5,
-  }
-});
+  addressValue: {
+    color: '#FFFFFF',
+    fontSize: 15,
+    fontWeight: '600',
+  },
+  searchIconWrapper: {
+    width: 36,
+    height: 36,
+    borderRadius: 12,
+    backgroundColor: theme.colors.background,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
 
-export default HomeScreen;
+  // SERVICES GRID
+  servicesGrid: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    paddingHorizontal: 4,
+  },
+  serviceItem: {
+    alignItems: 'center',
+    width: (width - 64) / 5, // 5 items distributed
+  },
+  serviceIconContainer: {
+    width: 48,
+    height: 48,
+    borderRadius: 16,
+    backgroundColor: theme.colors.surfaceLight,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 8,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.05)',
+  },
+  serviceName: {
+    color: '#FFFFFF',
+    fontSize: 11,
+    textAlign: 'center',
+  },
+});

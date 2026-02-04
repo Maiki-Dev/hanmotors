@@ -1,11 +1,12 @@
 import React, { useState } from 'react';
-import { View, Text, TextInput, TouchableOpacity, StyleSheet, Alert, ActivityIndicator } from 'react-native';
+import { View, Text, TextInput, TouchableOpacity, StyleSheet, Alert, ActivityIndicator, KeyboardAvoidingView, Platform } from 'react-native';
 import { theme } from '../constants/theme';
 import { authService } from '../services/api';
 import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
 import { StackNavigationProp } from '@react-navigation/stack';
 import { useDispatch } from 'react-redux';
 import { setCredentials } from '../store/slices/authSlice';
+import { Lock, ArrowLeft } from 'lucide-react-native';
 
 type RootStackParamList = {
   Login: undefined;
@@ -26,7 +27,7 @@ const VerifyOtpScreen = () => {
 
   const handleVerify = async () => {
     if (!otp) {
-      Alert.alert('Error', 'Please enter the OTP');
+      Alert.alert('Алдаа', 'Баталгаажуулах кодыг оруулна уу');
       return;
     }
 
@@ -39,40 +40,64 @@ const VerifyOtpScreen = () => {
       
       // Navigation will be handled by the AppNavigator based on auth state
     } catch (error: any) {
-      Alert.alert('Error', error.response?.data?.message || 'Invalid OTP');
+      Alert.alert('Алдаа', error.response?.data?.message || 'Код буруу байна');
     } finally {
       setLoading(false);
     }
   };
 
+  const handleResend = () => {
+    // Implement resend logic here
+    Alert.alert('Мэдэгдэл', 'Код дахин илгээгдлээ');
+  };
+
   return (
     <View style={styles.container}>
-      <Text style={styles.title}>Verification</Text>
-      <Text style={styles.subtitle}>Enter the code sent to {phone}</Text>
+      <TouchableOpacity style={styles.backButton} onPress={() => navigation.goBack()}>
+        <ArrowLeft size={24} color={theme.colors.text} />
+      </TouchableOpacity>
 
-      <View style={styles.inputContainer}>
-        <TextInput
-          style={styles.input}
-          placeholder="1234"
-          placeholderTextColor={theme.colors.textSecondary}
-          keyboardType="number-pad"
-          maxLength={4}
-          value={otp}
-          onChangeText={setOtp}
-        />
+      <View style={styles.header}>
+        <View style={styles.iconBox}>
+          <Lock size={40} color={theme.colors.black} />
+        </View>
+        <Text style={styles.title}>Баталгаажуулах</Text>
+        <Text style={styles.subtitle}>{phone} дугаарт илгээсэн 4 оронтой кодыг оруулна уу</Text>
       </View>
 
-      <TouchableOpacity 
-        style={styles.button} 
-        onPress={handleVerify}
-        disabled={loading}
+      <KeyboardAvoidingView 
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        style={styles.content}
       >
-        {loading ? (
-          <ActivityIndicator color={theme.colors.black} />
-        ) : (
-          <Text style={styles.buttonText}>Verify</Text>
-        )}
-      </TouchableOpacity>
+        <View style={styles.inputContainer}>
+          <TextInput
+            style={styles.input}
+            placeholder="0000"
+            placeholderTextColor={theme.colors.textSecondary}
+            keyboardType="number-pad"
+            maxLength={4}
+            value={otp}
+            onChangeText={setOtp}
+            autoFocus
+          />
+        </View>
+
+        <TouchableOpacity 
+          style={styles.button} 
+          onPress={handleVerify}
+          disabled={loading}
+        >
+          {loading ? (
+            <ActivityIndicator color={theme.colors.black} />
+          ) : (
+            <Text style={styles.buttonText}>Баталгаажуулах</Text>
+          )}
+        </TouchableOpacity>
+
+        <TouchableOpacity style={styles.resendButton} onPress={handleResend}>
+          <Text style={styles.resendText}>Код дахин илгээх</Text>
+        </TouchableOpacity>
+      </KeyboardAvoidingView>
     </View>
   );
 };
@@ -82,41 +107,90 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: theme.colors.background,
     padding: theme.spacing.l,
+  },
+  backButton: {
+    marginTop: 40,
+    marginBottom: 20,
+    width: 40,
+    height: 40,
     justifyContent: 'center',
+    alignItems: 'flex-start',
+  },
+  header: {
+    alignItems: 'center',
+    marginBottom: 40,
+  },
+  iconBox: {
+    width: 80,
+    height: 80,
+    backgroundColor: theme.colors.primary,
+    borderRadius: 20,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 24,
+    shadowColor: theme.colors.primary,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 4,
   },
   title: {
-    ...theme.typography.h1,
-    color: theme.colors.primary,
-    marginBottom: theme.spacing.s,
+    fontSize: 28,
+    fontWeight: 'bold',
+    color: theme.colors.text,
+    marginBottom: 12,
   },
   subtitle: {
-    ...theme.typography.body,
+    fontSize: 16,
     color: theme.colors.textSecondary,
-    marginBottom: theme.spacing.xl,
+    textAlign: 'center',
+    paddingHorizontal: 20,
+    lineHeight: 24,
+  },
+  content: {
+    flex: 1,
   },
   inputContainer: {
-    backgroundColor: theme.colors.surface,
-    borderRadius: theme.borderRadius.m,
-    padding: theme.spacing.m,
-    marginBottom: theme.spacing.l,
-    borderWidth: 1,
-    borderColor: theme.colors.border,
+    marginBottom: 30,
+    alignItems: 'center',
   },
   input: {
-    ...theme.typography.body,
+    fontSize: 32,
+    fontWeight: 'bold',
     color: theme.colors.text,
+    letterSpacing: 16,
     textAlign: 'center',
-    letterSpacing: 10,
-    fontSize: 24,
+    width: '100%',
+    paddingVertical: 10,
+    borderBottomWidth: 2,
+    borderBottomColor: theme.colors.border,
   },
   button: {
     backgroundColor: theme.colors.primary,
-    padding: theme.spacing.m,
-    borderRadius: theme.borderRadius.m,
+    height: 56,
+    borderRadius: 16,
     alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 24,
+    shadowColor: theme.colors.primary,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 4,
   },
   buttonText: {
-    ...theme.typography.button,
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: theme.colors.black,
+  },
+  resendButton: {
+    alignItems: 'center',
+    padding: 10,
+  },
+  resendText: {
+    fontSize: 16,
+    color: theme.colors.primary,
+    fontWeight: '600',
   },
 });
 

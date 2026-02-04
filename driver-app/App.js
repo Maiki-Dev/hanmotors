@@ -26,6 +26,7 @@ import { View, Text, StyleSheet, TouchableOpacity, ScrollView, LogBox } from 're
 import { Header } from './src/components/Header';
 import { PremiumCard } from './src/components/PremiumCard';
 import { ChevronRight } from 'lucide-react-native';
+import NotificationManager from './src/components/NotificationManager';
 
 // Ignore specific warnings
 LogBox.ignoreLogs([
@@ -62,9 +63,11 @@ function MainTabs({ route }) {
   const { driverId, driverName } = route.params || {};
 
   return (
-    <Tab.Navigator
-      screenOptions={{
-        headerShown: false,
+    <>
+      <NotificationManager driverId={driverId} />
+      <Tab.Navigator
+        screenOptions={{
+          headerShown: false,
         tabBarShowLabel: false,
         tabBarStyle: {
           position: 'absolute',
@@ -121,6 +124,7 @@ function MainTabs({ route }) {
         }}
       />
     </Tab.Navigator>
+    </>
   );
 }
 

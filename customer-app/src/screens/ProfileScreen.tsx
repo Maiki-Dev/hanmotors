@@ -1,11 +1,11 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Image, Alert, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Image, Alert, ActivityIndicator, ScrollView } from 'react-native';
 import { theme } from '../constants/theme';
 import { useDispatch, useSelector } from 'react-redux';
 import { logout } from '../store/slices/authSlice';
 import { RootState } from '../store';
 import { customerService } from '../services/api';
-import { LogOut, User, Shield, HelpCircle, Settings, Star } from 'lucide-react-native';
+import { LogOut, User, Shield, HelpCircle, Settings, Star, ChevronRight, Edit3 } from 'lucide-react-native';
 
 const ProfileScreen = () => {
   const dispatch = useDispatch();
@@ -33,12 +33,12 @@ const ProfileScreen = () => {
 
   const handleLogout = () => {
     Alert.alert(
-      'Logout',
-      'Are you sure you want to logout?',
+      'Гарах',
+      'Та гарахдаа итгэлтэй байна уу?',
       [
-        { text: 'Cancel', style: 'cancel' },
+        { text: 'Болиулах', style: 'cancel' },
         { 
-          text: 'Logout', 
+          text: 'Гарах', 
           style: 'destructive',
           onPress: () => dispatch(logout()) 
         }
@@ -48,58 +48,78 @@ const ProfileScreen = () => {
 
   return (
     <View style={styles.container}>
-      <View style={styles.header}>
-        <View style={styles.avatarContainer}>
-            <User size={40} color={theme.colors.primary} />
+      <ScrollView contentContainerStyle={styles.scrollContent}>
+        <View style={styles.header}>
+            <View style={styles.avatarContainer}>
+                <View style={styles.avatarPlaceholder}>
+                     <User size={40} color={theme.colors.textSecondary} />
+                </View>
+                <TouchableOpacity style={styles.editIcon}>
+                    <Edit3 size={16} color="white" />
+                </TouchableOpacity>
+            </View>
+            <Text style={styles.name}>{profile?.name || user?.phone || 'Зочин'}</Text>
+            <Text style={styles.phone}>{user?.phone}</Text>
+            
+            {profile?.rating && (
+            <View style={styles.ratingContainer}>
+                <Star size={16} color="#FFD700" fill="#FFD700" />
+                <Text style={styles.ratingText}>{profile.rating.toFixed(1)}</Text>
+            </View>
+            )}
         </View>
-        <Text style={styles.name}>{profile?.name || user?.phone || 'Guest User'}</Text>
-        <Text style={styles.phone}>{user?.phone}</Text>
-        {profile?.email && <Text style={styles.email}>{profile.email}</Text>}
-        
-        {profile?.rating && (
-          <View style={styles.ratingContainer}>
-            <Star size={16} color="#FFD700" fill="#FFD700" />
-            <Text style={styles.ratingText}>{profile.rating.toFixed(1)}</Text>
-          </View>
-        )}
-      </View>
 
-      <View style={styles.menuContainer}>
-        <TouchableOpacity style={styles.menuItem}>
-            <View style={styles.menuIcon}>
-                <User size={20} color={theme.colors.text} />
+        <View style={styles.section}>
+            <Text style={styles.sectionTitle}>Хувийн тохиргоо</Text>
+            <View style={styles.menuContainer}>
+                <TouchableOpacity style={styles.menuItem}>
+                    <View style={[styles.menuIconBox, { backgroundColor: '#E3F2FD' }]}>
+                        <User size={20} color="#1565C0" />
+                    </View>
+                    <Text style={styles.menuText}>Хувийн мэдээлэл засах</Text>
+                    <ChevronRight size={20} color={theme.colors.textSecondary} />
+                </TouchableOpacity>
+
+                <TouchableOpacity style={styles.menuItem}>
+                    <View style={[styles.menuIconBox, { backgroundColor: '#E8F5E9' }]}>
+                        <Shield size={20} color="#2E7D32" />
+                    </View>
+                    <Text style={styles.menuText}>Нууцлал ба Аюулгүй байдал</Text>
+                    <ChevronRight size={20} color={theme.colors.textSecondary} />
+                </TouchableOpacity>
+
+                <TouchableOpacity style={styles.menuItem}>
+                    <View style={[styles.menuIconBox, { backgroundColor: '#F3E5F5' }]}>
+                        <Settings size={20} color="#7B1FA2" />
+                    </View>
+                    <Text style={styles.menuText}>Тохиргоо</Text>
+                    <ChevronRight size={20} color={theme.colors.textSecondary} />
+                </TouchableOpacity>
             </View>
-            <Text style={styles.menuText}>Edit Profile</Text>
-        </TouchableOpacity>
+        </View>
 
-        <TouchableOpacity style={styles.menuItem}>
-            <View style={styles.menuIcon}>
-                <Shield size={20} color={theme.colors.text} />
+        <View style={styles.section}>
+            <Text style={styles.sectionTitle}>Бусад</Text>
+            <View style={styles.menuContainer}>
+                <TouchableOpacity style={styles.menuItem}>
+                    <View style={[styles.menuIconBox, { backgroundColor: '#FFF3E0' }]}>
+                        <HelpCircle size={20} color="#EF6C00" />
+                    </View>
+                    <Text style={styles.menuText}>Тусламж & Дэмжлэг</Text>
+                    <ChevronRight size={20} color={theme.colors.textSecondary} />
+                </TouchableOpacity>
+                
+                <TouchableOpacity style={[styles.menuItem, styles.lastMenuItem]} onPress={handleLogout}>
+                    <View style={[styles.menuIconBox, { backgroundColor: '#FFEBEE' }]}>
+                        <LogOut size={20} color="#C62828" />
+                    </View>
+                    <Text style={[styles.menuText, { color: theme.colors.error }]}>Гарах</Text>
+                </TouchableOpacity>
             </View>
-            <Text style={styles.menuText}>Privacy & Security</Text>
-        </TouchableOpacity>
+        </View>
 
-        <TouchableOpacity style={styles.menuItem}>
-            <View style={styles.menuIcon}>
-                <Settings size={20} color={theme.colors.text} />
-            </View>
-            <Text style={styles.menuText}>Settings</Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity style={styles.menuItem}>
-            <View style={styles.menuIcon}>
-                <HelpCircle size={20} color={theme.colors.text} />
-            </View>
-            <Text style={styles.menuText}>Help & Support</Text>
-        </TouchableOpacity>
-      </View>
-
-      <TouchableOpacity style={styles.logoutButton} onPress={handleLogout}>
-        <LogOut size={20} color={theme.colors.error} />
-        <Text style={styles.logoutText}>Logout</Text>
-      </TouchableOpacity>
-
-      <Text style={styles.versionText}>Version 1.0.0</Text>
+        <Text style={styles.versionText}>Хувилбар 1.0.0</Text>
+      </ScrollView>
     </View>
   );
 };
@@ -108,99 +128,120 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: theme.colors.background,
+  },
+  scrollContent: {
     padding: 20,
+    paddingTop: 60,
   },
   header: {
     alignItems: 'center',
-    marginBottom: 40,
-    marginTop: 20,
+    marginBottom: 30,
   },
   avatarContainer: {
-    width: 80,
-    height: 80,
-    borderRadius: 40,
+    marginBottom: 15,
+  },
+  avatarPlaceholder: {
+    width: 100,
+    height: 100,
+    borderRadius: 50,
     backgroundColor: theme.colors.surface,
     justifyContent: 'center',
     alignItems: 'center',
-    marginBottom: 15,
+    borderWidth: 4,
+    borderColor: theme.colors.surfaceLight,
+  },
+  editIcon: {
+    position: 'absolute',
+    bottom: 0,
+    right: 0,
+    backgroundColor: theme.colors.primary,
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    justifyContent: 'center',
+    alignItems: 'center',
     borderWidth: 2,
-    borderColor: theme.colors.primary,
+    borderColor: theme.colors.background,
   },
   name: {
-    ...theme.typography.h2,
+    fontSize: 24,
+    fontWeight: 'bold',
     color: theme.colors.text,
     marginBottom: 5,
   },
   phone: {
-    ...theme.typography.body,
+    fontSize: 16,
     color: theme.colors.textSecondary,
-    marginBottom: 5,
-  },
-  email: {
-    ...theme.typography.caption,
-    color: theme.colors.textSecondary,
-    marginBottom: 5,
+    marginBottom: 10,
   },
   ratingContainer: {
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: theme.colors.surface,
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 12,
-    marginTop: 5,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 20,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 2,
   },
   ratingText: {
-    ...theme.typography.body,
+    fontSize: 14,
     fontWeight: 'bold',
     marginLeft: 5,
     color: theme.colors.text,
   },
+  section: {
+    marginBottom: 25,
+  },
+  sectionTitle: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: theme.colors.text,
+    marginBottom: 15,
+    marginLeft: 5,
+  },
   menuContainer: {
     backgroundColor: theme.colors.surface,
-    borderRadius: 15,
-    padding: 10,
-    marginBottom: 20,
+    borderRadius: 20,
+    overflow: 'hidden',
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    elevation: 3,
   },
   menuItem: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingVertical: 15,
-    paddingHorizontal: 10,
+    padding: 16,
     borderBottomWidth: 1,
-    borderBottomColor: theme.colors.border,
+    borderBottomColor: theme.colors.surfaceLight,
   },
-  menuIcon: {
-    marginRight: 15,
-    width: 30,
+  lastMenuItem: {
+    borderBottomWidth: 0,
+  },
+  menuIconBox: {
+    width: 40,
+    height: 40,
+    borderRadius: 12,
+    justifyContent: 'center',
     alignItems: 'center',
+    marginRight: 15,
   },
   menuText: {
+    flex: 1,
     fontSize: 16,
+    fontWeight: '500',
     color: theme.colors.text,
-  },
-  logoutButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    padding: 15,
-    backgroundColor: theme.colors.surface,
-    borderRadius: 15,
-    marginTop: 10,
-    borderWidth: 1,
-    borderColor: theme.colors.error,
-  },
-  logoutText: {
-    marginLeft: 10,
-    fontSize: 16,
-    fontWeight: 'bold',
-    color: theme.colors.error,
   },
   versionText: {
     textAlign: 'center',
-    marginTop: 30,
     color: theme.colors.textSecondary,
     fontSize: 12,
+    marginBottom: 20,
   },
 });
 

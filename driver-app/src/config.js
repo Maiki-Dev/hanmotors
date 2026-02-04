@@ -4,4 +4,4 @@ export const API_URL = 'http://192.168.1.16:5000'; // Updated by script
 // export const API_URL = 'http://10.0.2.2:5000'; // Android Emulator (Localhost mapping)
 
 // Google Maps API Key - Replace with your valid API key
-export const GOOGLE_MAPS_APIKEY = 'AIzaSyC2nVQ_WgJUpVhU2oEsC00rqipFSV-POrk';
+export const GOOGLE_MAPS_APIKEY = 'AIzaSyDYtKufZG0X6JAS4lpEV8ZtfenGLvBf2Es';

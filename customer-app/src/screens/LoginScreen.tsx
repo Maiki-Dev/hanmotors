@@ -1,9 +1,10 @@
 import React, { useState } from 'react';
-import { View, Text, TextInput, TouchableOpacity, StyleSheet, Alert, ActivityIndicator } from 'react-native';
+import { View, Text, TextInput, TouchableOpacity, StyleSheet, Alert, ActivityIndicator, Image } from 'react-native';
 import { theme } from '../constants/theme';
 import { authService } from '../services/api';
 import { useNavigation } from '@react-navigation/native';
 import { StackNavigationProp } from '@react-navigation/stack';
+import { Phone } from 'lucide-react-native';
 
 type RootStackParamList = {
   Login: undefined;
@@ -20,7 +21,7 @@ const LoginScreen = () => {
 
   const handleLogin = async () => {
     if (!phone) {
-      Alert.alert('Error', 'Please enter your phone number');
+      Alert.alert('Алдаа', 'Утасны дугаараа оруулна уу');
       return;
     }
 
@@ -28,11 +29,11 @@ const LoginScreen = () => {
     try {
       const response = await authService.login(phone);
       if (response.data.dev_otp) {
-        Alert.alert('OTP Sent', `Your OTP is ${response.data.dev_otp}`);
+        Alert.alert('Код илгээгдлээ', `Таны код: ${response.data.dev_otp}`);
       }
       navigation.navigate('VerifyOtp', { phone });
     } catch (error: any) {
-      Alert.alert('Error', error.response?.data?.message || 'Something went wrong');
+      Alert.alert('Алдаа', error.response?.data?.message || 'Алдаа гарлаа');
     } finally {
       setLoading(false);
     }
@@ -40,31 +41,42 @@ const LoginScreen = () => {
 
   return (
     <View style={styles.container}>
-      <Text style={styles.title}>Welcome Back</Text>
-      <Text style={styles.subtitle}>Enter your phone number to continue</Text>
-
-      <View style={styles.inputContainer}>
-        <TextInput
-          style={styles.input}
-          placeholder="Phone Number"
-          placeholderTextColor={theme.colors.textSecondary}
-          keyboardType="phone-pad"
-          value={phone}
-          onChangeText={setPhone}
-        />
+      <View style={styles.logoContainer}>
+         <View style={styles.logoBox}>
+            <Text style={styles.logoText}>X</Text>
+         </View>
+         <Text style={styles.appName}>XAN MOTORS</Text>
+         <Text style={styles.brandSubtitle}>PREMIUM SERVICE</Text>
       </View>
 
-      <TouchableOpacity 
-        style={styles.button} 
-        onPress={handleLogin}
-        disabled={loading}
-      >
-        {loading ? (
-          <ActivityIndicator color={theme.colors.black} />
-        ) : (
-          <Text style={styles.buttonText}>Continue</Text>
-        )}
-      </TouchableOpacity>
+      <View style={styles.content}>
+        <Text style={styles.title}>Тавтай морилно уу</Text>
+        <Text style={styles.instructionText}>Үргэлжлүүлэхийн тулд утасны дугаараа оруулна уу</Text>
+
+        <View style={styles.inputContainer}>
+          <Phone size={20} color={theme.colors.textSecondary} style={styles.inputIcon} />
+          <TextInput
+            style={styles.input}
+            placeholder="Утасны дугаар"
+            placeholderTextColor={theme.colors.textSecondary}
+            keyboardType="phone-pad"
+            value={phone}
+            onChangeText={setPhone}
+          />
+        </View>
+
+        <TouchableOpacity 
+          style={styles.button} 
+          onPress={handleLogin}
+          disabled={loading}
+        >
+          {loading ? (
+            <ActivityIndicator color={theme.colors.black} />
+          ) : (
+            <Text style={styles.buttonText}>Үргэлжлүүлэх</Text>
+          )}
+        </TouchableOpacity>
+      </View>
     </View>
   );
 };
@@ -74,38 +86,93 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: theme.colors.background,
     padding: theme.spacing.l,
-    justifyContent: 'center',
   },
-  title: {
-    ...theme.typography.h1,
-    color: theme.colors.primary,
-    marginBottom: theme.spacing.s,
+  logoContainer: {
+    marginTop: 60,
+    alignItems: 'center',
+    marginBottom: 40,
   },
-  subtitle: {
-    ...theme.typography.body,
-    color: theme.colors.textSecondary,
-    marginBottom: theme.spacing.xl,
-  },
-  inputContainer: {
+  logoBox: {
+    width: 80,
+    height: 80,
     backgroundColor: theme.colors.surface,
-    borderRadius: theme.borderRadius.m,
-    padding: theme.spacing.m,
-    marginBottom: theme.spacing.l,
+    borderRadius: 40,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 15,
     borderWidth: 1,
     borderColor: theme.colors.border,
   },
-  input: {
-    ...theme.typography.body,
+  logoText: {
+    fontSize: 40,
+    fontWeight: 'bold',
+    color: theme.colors.primary,
+  },
+  appName: {
+    fontSize: 24,
+    fontWeight: 'bold',
     color: theme.colors.text,
+    textTransform: 'uppercase',
+    marginBottom: 5,
+  },
+  brandSubtitle: {
+    fontSize: 12,
+    letterSpacing: 2,
+    color: theme.colors.textSecondary,
+    textTransform: 'uppercase',
+  },
+  content: {
+    flex: 1,
+  },
+  title: {
+    fontSize: 28,
+    fontWeight: 'bold',
+    color: theme.colors.text,
+    marginBottom: 10,
+  },
+  instructionText: {
+    fontSize: 16,
+    color: theme.colors.textSecondary,
+    marginBottom: 30,
+    lineHeight: 24,
+  },
+  inputContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: theme.colors.surface,
+    borderRadius: 16,
+    paddingHorizontal: 16,
+    height: 60,
+    marginBottom: 20,
+    borderWidth: 1,
+    borderColor: theme.colors.border,
+  },
+  inputIcon: {
+    marginRight: 12,
+  },
+  input: {
+    flex: 1,
+    fontSize: 18,
+    color: theme.colors.text,
+    height: '100%',
   },
   button: {
     backgroundColor: theme.colors.primary,
-    padding: theme.spacing.m,
-    borderRadius: theme.borderRadius.m,
+    height: 56,
+    borderRadius: 16,
     alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 10,
+    shadowColor: theme.colors.primary,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 4,
   },
   buttonText: {
-    ...theme.typography.button,
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: theme.colors.black,
   },
 });
 

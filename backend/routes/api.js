@@ -7,6 +7,19 @@ const Trip = require('../models/Trip');
 const Pricing = require('../models/Pricing');
 const AdditionalService = require('../models/AdditionalService');
 
+// Helper: Calculate distance between two coordinates in km
+function getDistance(lat1, lon1, lat2, lon2) {
+  const R = 6371; // Radius of the earth in km
+  const dLat = (lat2 - lat1) * (Math.PI / 180);
+  const dLon = (lon2 - lon1) * (Math.PI / 180);
+  const a = 
+    Math.sin(dLat/2) * Math.sin(dLat/2) +
+    Math.cos(lat1 * (Math.PI / 180)) * Math.cos(lat2 * (Math.PI / 180)) * 
+    Math.sin(dLon/2) * Math.sin(dLon/2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+  return R * c; // Distance in km
+}
+
 // --- MOCK DATA STORE (For Offline Mode) ---
 let mockDrivers = [
   {
@@ -686,7 +699,36 @@ router.post('/trip/request', async (req, res) => {
     const trip = new Trip(tripData);
     await trip.save();
     const io = req.app.get('io');
-    io.emit('newJobRequest', trip);
+    
+    // Broadcast logic: 5km radius
+    const driverLocations = req.app.driverLocations || {};
+    const pickupLat = trip.pickupLocation.lat;
+    const pickupLng = trip.pickupLocation.lng;
+    let matchedDrivers = 0;
+
+    console.log(`[Trip Request] Finding drivers near ${pickupLat}, ${pickupLng} within 5km...`);
+
+    Object.keys(driverLocations).forEach(driverId => {
+      const loc = driverLocations[driverId];
+      if (loc && (loc.latitude || loc.lat) && (loc.longitude || loc.lng)) {
+         const dLat = loc.latitude || loc.lat;
+         const dLng = loc.longitude || loc.lng;
+         
+         const dist = getDistance(pickupLat, pickupLng, dLat, dLng);
+         if (dist <= 5) {
+            console.log(` -> Match: Driver ${driverId} is ${dist.toFixed(2)}km away.`);
+            io.to(`driver_${driverId}`).emit('newJobRequest', trip);
+            matchedDrivers++;
+         }
+      }
+    });
+
+    console.log(`[Trip Request] Sent to ${matchedDrivers} drivers.`);
+
+    // Always notify admin
+    io.to('admin_room').emit('newJobRequest', trip);
+    
+    // io.emit('newJobRequest', trip); // Removed global broadcast
     res.json(trip);
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -742,6 +784,11 @@ router.post('/trip/:id/cancel', async (req, res) => {
     } else {
         // If no driver assigned yet, we should also emit to remove it from available jobs
         io.emit('jobCancelled', { tripId: req.params.id });
+    }
+
+    // Notify customer
+    if (trip.customer) {
+      io.to(`customer_${trip.customer}`).emit('jobCancelled', { tripId: req.params.id });
     }
 
     res.json(trip);

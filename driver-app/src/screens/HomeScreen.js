@@ -281,18 +281,22 @@ export default function HomeScreen({ navigation, route }) {
               heading = (t * 180 / Math.PI + 360) % 360;
             }
             
-            setDriverLocation({ latitude, longitude, heading });
+            // Ensure heading is a number (default to 0) to prevent crash on receiver
+            const safeHeading = heading || 0;
+            
+            setDriverLocation({ latitude, longitude, heading: safeHeading });
             
             // Smoothly follow user if tracking is enabled
             if (mapRef.current && isFollowingRef.current) {
                mapRef.current.animateCamera({ 
                  center: { latitude, longitude },
-                 heading: heading || 0,
+                 heading: safeHeading,
                  pitch: 45, // Add some pitch for 3D feel
                  zoom: 17
                }, { duration: 1000 });
             }
 
+            // Real-time Update (1 sec interval per watchPositionAsync config)
             if (isOnline && socketRef.current && driverId) {
               const vehicle = driverInfoRef.current?.vehicle || {};
               socketRef.current.emit('driverLocationUpdated', {
@@ -300,7 +304,7 @@ export default function HomeScreen({ navigation, route }) {
                 location: { 
                   lat: latitude, 
                   lng: longitude,
-                  heading: heading,
+                  heading: safeHeading,
                   plateNumber: vehicle.plateNumber,
                   vehicleModel: vehicle.model,
                   vehicleColor: vehicle.color,
@@ -387,18 +391,7 @@ export default function HomeScreen({ navigation, route }) {
     socketRef.current.on('newJobRequest', async (tripData) => {
       if (isOnlineRef.current) {
         setIncomingRequest(tripData);
-        
-        // Schedule local notification
-        await Notifications.scheduleNotificationAsync({
-          content: {
-            title: "🔔 Шинэ дуудлага!",
-            body: `${tripData.pickupLocation?.address || 'Хаяг тодорхойгүй'} -> ${tripData.dropoffLocation?.address || 'Хаяг тодорхойгүй'}`,
-            data: { tripId: tripData._id },
-            sound: true,
-            priority: Notifications.AndroidNotificationPriority.MAX,
-          },
-          trigger: null, // Immediate
-        });
+        // Notification is now handled by NotificationManager
       }
     });
 

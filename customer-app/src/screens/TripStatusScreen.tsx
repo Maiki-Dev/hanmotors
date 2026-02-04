@@ -1,15 +1,16 @@
 import React, { useEffect, useState, useRef } from 'react';
-import { View, Text, StyleSheet, Image, TouchableOpacity, Alert, ActivityIndicator, Dimensions } from 'react-native';
+import { View, Text, StyleSheet, Image, TouchableOpacity, Alert, ActivityIndicator, Dimensions, Platform, Animated } from 'react-native';
 import MapView, { Marker, Polyline, PROVIDER_GOOGLE } from 'react-native-maps';
 import MapViewDirections from 'react-native-maps-directions';
 import { useRoute, useNavigation } from '@react-navigation/native';
 import { theme } from '../constants/theme';
-import { Phone, MessageCircle, Star, Shield, ArrowLeft } from 'lucide-react-native';
+import { Phone, MessageCircle, Star, Shield, ArrowLeft, MapPin, User, Navigation, X } from 'lucide-react-native';
 import { socket } from '../services/socket';
 import { GOOGLE_MAPS_APIKEY } from '../config';
 import { rideService } from '../services/api';
 import { useSelector } from 'react-redux';
 import { RootState } from '../store';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 const { width, height } = Dimensions.get('window');
 
@@ -18,10 +19,32 @@ const TripStatusScreen = () => {
   const navigation = useNavigation<any>();
   const mapRef = useRef<MapView>(null);
   const user = useSelector((state: RootState) => state.auth.user);
+  const insets = useSafeAreaInsets();
   
   const [trip, setTrip] = useState(route.params?.trip);
   const [driverLocation, setDriverLocation] = useState<any>(null);
-  const [eta, setEta] = useState<string>('');
+  
+  // Animation for pulsing effect
+  const pulseAnim = useRef(new Animated.Value(1)).current;
+
+  useEffect(() => {
+    if (trip?.status === 'pending') {
+      Animated.loop(
+        Animated.sequence([
+          Animated.timing(pulseAnim, {
+            toValue: 1.2,
+            duration: 1000,
+            useNativeDriver: true,
+          }),
+          Animated.timing(pulseAnim, {
+            toValue: 1,
+            duration: 1000,
+            useNativeDriver: true,
+          }),
+        ])
+      ).start();
+    }
+  }, [trip?.status]);
 
   const fetchTripDetails = async () => {
     if (!user?._id) return;
@@ -38,9 +61,6 @@ const TripStatusScreen = () => {
   useEffect(() => {
     if (!trip?._id) return;
     if (!socket) return;
-
-    // Join room for this trip? Or just listen to global events filtered by ID
-    // Ideally backend should put us in a room, but we can listen to general events for now
     
     const handleTripUpdate = (updatedTrip: any) => {
       if (updatedTrip._id === trip._id) {
@@ -50,7 +70,6 @@ const TripStatusScreen = () => {
 
     const handleDriverAccepted = (data: any) => {
       if (data.tripId === trip._id) {
-        // Refresh trip to get driver details
         fetchTripDetails();
       }
     };
@@ -63,8 +82,8 @@ const TripStatusScreen = () => {
 
     const handleTripCompleted = (data: any) => {
         if (data.tripId === trip._id) {
-            Alert.alert('Ride Completed', 'You have arrived at your destination.', [
-                { text: 'OK', onPress: () => navigation.navigate('HomeTab') }
+            Alert.alert('Аялал дууслаа', 'Та зорьсон газартаа ирлээ.', [
+                { text: 'ОК', onPress: () => navigation.navigate('HomeTab') }
             ]);
         }
     };
@@ -84,32 +103,51 @@ const TripStatusScreen = () => {
     };
   }, [trip, user]);
 
+  useEffect(() => {
+    if (trip && mapRef.current) {
+        // Fit to markers
+        const coordinates = [
+            { latitude: trip.pickupLocation.lat, longitude: trip.pickupLocation.lng },
+            { latitude: trip.dropoffLocation.lat, longitude: trip.dropoffLocation.lng }
+        ];
+        
+        if (driverLocation) {
+            coordinates.push({ latitude: driverLocation.lat, longitude: driverLocation.lng });
+        }
+
+        mapRef.current.fitToCoordinates(coordinates, {
+            edgePadding: { top: 100, right: 50, bottom: 350, left: 50 },
+            animated: true,
+        });
+    }
+  }, [trip, driverLocation]);
+
   const getStatusMessage = () => {
     switch (trip.status) {
-      case 'pending': return 'Finding you a driver...';
-      case 'accepted': return 'Driver is on the way';
-      case 'in_progress': return 'Ride in progress';
-      case 'completed': return 'Ride completed';
-      case 'cancelled': return 'Ride cancelled';
-      default: return 'Processing...';
+      case 'pending': return 'Жолооч хайж байна...';
+      case 'accepted': return 'Жолооч тань руу ирж байна';
+      case 'in_progress': return 'Аялал эхэллээ';
+      case 'completed': return 'Аялал дууслаа';
+      case 'cancelled': return 'Аялал цуцлагдлаа';
+      default: return 'Түр хүлээнэ үү...';
     }
   };
 
   const handleCancel = async () => {
     Alert.alert(
-      'Cancel Ride',
-      'Are you sure you want to cancel this ride request?',
+      'Аялал цуцлах',
+      'Та аялал цуцлахдаа итгэлтэй байна уу?',
       [
-        { text: 'No', style: 'cancel' },
+        { text: 'Үгүй', style: 'cancel' },
         { 
-          text: 'Yes, Cancel', 
+          text: 'Тийм, цуцлах', 
           style: 'destructive',
           onPress: async () => {
             try {
               await rideService.cancelTrip(trip._id);
               navigation.navigate('HomeTab');
             } catch (error) {
-              Alert.alert('Error', 'Failed to cancel trip');
+              Alert.alert('Алдаа', 'Аялал цуцлахад алдаа гарлаа');
             }
           }
         }
@@ -121,46 +159,73 @@ const TripStatusScreen = () => {
     if (!trip.driver && trip.status === 'pending') {
       return (
         <View style={styles.searchingContainer}>
-            <ActivityIndicator size="large" color={theme.colors.primary} />
-            <Text style={styles.searchingText}>Finding nearby drivers...</Text>
+            <Animated.View style={[styles.searchingAnimation, { transform: [{ scale: pulseAnim }] }]}>
+                <View style={styles.radarCircle}>
+                   <ActivityIndicator size="large" color={theme.colors.primary} />
+                </View>
+            </Animated.View>
+            <Text style={styles.searchingText}>Ойр хавьд жолооч хайж байна...</Text>
             <TouchableOpacity style={styles.cancelButton} onPress={handleCancel}>
-                <Text style={styles.cancelText}>Cancel Request</Text>
+                <X size={20} color={theme.colors.error} style={{ marginRight: 8 }} />
+                <Text style={styles.cancelText}>Захиалга цуцлах</Text>
             </TouchableOpacity>
         </View>
       );
     }
 
-    // Mock driver display if backend doesn't populate fully yet or for demo
-    // Ideally trip.driver would be an object
-    const driverName = trip.driver?.name || "Driver Assigned";
-    const vehicleInfo = trip.driver?.vehicle ? `${trip.driver.vehicle.color} ${trip.driver.vehicle.model}` : "Vehicle Info";
-    const plateNumber = trip.driver?.vehicle?.plateNumber || "1234";
+    const driverName = trip.driver?.name || "Жолооч";
+    const vehicleInfo = trip.driver?.vehicle ? `${trip.driver.vehicle.color} ${trip.driver.vehicle.model}` : "Машин";
+    const plateNumber = trip.driver?.vehicle?.plateNumber || "---";
 
     return (
-      <View style={styles.driverContainer}>
+      <View style={styles.driverInfoContainer}>
+        {/* Driver Profile Header */}
         <View style={styles.driverHeader}>
-            <View>
+            <View style={styles.driverAvatarContainer}>
+                <View style={styles.avatarPlaceholder}>
+                    <User size={30} color={theme.colors.textSecondary} />
+                </View>
+                {/* <Image source={{ uri: driverAvatarUrl }} style={styles.driverAvatar} /> */}
+            </View>
+            <View style={styles.driverDetails}>
                 <Text style={styles.driverName}>{driverName}</Text>
-                <Text style={styles.vehicleInfo}>{vehicleInfo}</Text>
-                <View style={styles.ratingContainer}>
+                <View style={styles.ratingRow}>
                     <Star size={14} color="#FFD700" fill="#FFD700" />
-                    <Text style={styles.ratingText}>4.8</Text>
+                    <Text style={styles.ratingText}>4.9</Text>
+                    <Text style={styles.tripCount}>• 1,240 аялал</Text>
                 </View>
             </View>
-            <View style={styles.plateContainer}>
-                <Text style={styles.plateText}>{plateNumber}</Text>
+            <View style={styles.vehiclePlateContainer}>
+                <Text style={styles.vehicleModel}>{vehicleInfo}</Text>
+                <View style={styles.plateBox}>
+                    <Text style={styles.plateText}>{plateNumber}</Text>
+                </View>
             </View>
         </View>
 
+        <View style={styles.divider} />
+
+        {/* Action Buttons */}
         <View style={styles.actionsContainer}>
             <TouchableOpacity style={styles.actionButton}>
-                <Phone size={20} color={theme.colors.text} />
+                <View style={[styles.actionIconCircle, { backgroundColor: '#E8F5E9' }]}>
+                    <Phone size={24} color="#2E7D32" />
+                </View>
+                <Text style={styles.actionLabel}>Залгах</Text>
             </TouchableOpacity>
+            
             <TouchableOpacity style={styles.actionButton}>
-                <MessageCircle size={20} color={theme.colors.text} />
+                <View style={[styles.actionIconCircle, { backgroundColor: '#E3F2FD' }]}>
+                    <MessageCircle size={24} color="#1565C0" />
+                </View>
+                <Text style={styles.actionLabel}>Зурвас</Text>
             </TouchableOpacity>
-            <TouchableOpacity style={styles.actionButton}>
-                <Shield size={20} color={theme.colors.text} />
+            
+            <TouchableOpacity style={[styles.actionButton, { opacity: 0.5 }]}>
+                <View style={[styles.actionIconCircle, { backgroundColor: '#FFF3E0' }]}>
+                    <Shield size={24} color="#EF6C00" />
+                </View>
+                <Text style={styles.actionLabel}>Тусламж</Text>
             </TouchableOpacity>
         </View>
       </View>
@@ -169,6 +234,13 @@ const TripStatusScreen = () => {
 
   return (
     <View style={styles.container}>
+        {/* Header Back Button */}
+        <View style={[styles.header, { top: insets.top }]}>
+            <TouchableOpacity onPress={() => navigation.navigate('HomeTab')} style={styles.backButton}>
+                <ArrowLeft color={theme.colors.text} size={24} />
+            </TouchableOpacity>
+        </View>
+
         <MapView
             ref={mapRef}
             provider={PROVIDER_GOOGLE}
@@ -180,28 +252,33 @@ const TripStatusScreen = () => {
                 longitudeDelta: 0.05,
             }}
         >
+            {/* Pickup Marker */}
             <Marker coordinate={{ latitude: trip.pickupLocation.lat, longitude: trip.pickupLocation.lng }}>
                 <View style={styles.markerContainer}>
-                    <View style={[styles.markerDot, { backgroundColor: 'green' }]} />
+                    <View style={[styles.markerIcon, { backgroundColor: theme.colors.success }]}>
+                        <MapPin color="white" size={20} />
+                    </View>
                 </View>
             </Marker>
             
+            {/* Dropoff Marker */}
             <Marker coordinate={{ latitude: trip.dropoffLocation.lat, longitude: trip.dropoffLocation.lng }}>
                 <View style={styles.markerContainer}>
-                    <View style={[styles.markerDot, { backgroundColor: 'red' }]} />
+                    <View style={[styles.markerIcon, { backgroundColor: theme.colors.primary }]}>
+                        <MapPin color="black" size={20} />
+                    </View>
                 </View>
             </Marker>
 
+            {/* Driver Marker */}
             {driverLocation && (
                  <Marker coordinate={{ latitude: driverLocation.lat, longitude: driverLocation.lng }}>
-                     <Image 
-                        source={
-                            (trip.serviceType === 'Ride' || trip.serviceType === 'Sedan') 
-                            ? require('../assets/car_icon.png') 
-                            : require('../assets/tow-truck.png')
-                        } 
-                        style={{ width: 40, height: 40, resizeMode: 'contain' }} 
-                     />
+                     <View style={styles.driverMarker}>
+                        <Image 
+                            source={require('../../assets/car_icon.png')} 
+                            style={{ width: 40, height: 40, resizeMode: 'contain' }} 
+                        />
+                     </View>
                  </Marker>
             )}
 
@@ -209,14 +286,21 @@ const TripStatusScreen = () => {
                 origin={{ latitude: trip.pickupLocation.lat, longitude: trip.pickupLocation.lng }}
                 destination={{ latitude: trip.dropoffLocation.lat, longitude: trip.dropoffLocation.lng }}
                 apikey={GOOGLE_MAPS_APIKEY}
-                strokeWidth={3}
+                strokeWidth={4}
                 strokeColor={theme.colors.primary}
             />
         </MapView>
 
-        <View style={styles.bottomSheet}>
+        {/* Bottom Sheet */}
+        <View style={[styles.bottomSheet, { paddingBottom: insets.bottom + 20 }]}>
+            <View style={styles.dragIndicator} />
             <Text style={styles.statusTitle}>{getStatusMessage()}</Text>
-            <View style={styles.divider} />
+            
+            {/* Progress Bar (Visual only) */}
+            <View style={styles.progressBarBg}>
+                <View style={[styles.progressBarFill, { width: trip.status === 'in_progress' ? '60%' : trip.status === 'accepted' ? '30%' : '10%' }]} />
+            </View>
+
             {renderDriverInfo()}
         </View>
     </View>
@@ -228,122 +312,222 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: theme.colors.background,
   },
-  map: {
-    flex: 1,
-  },
-  backButton: {
+  header: {
     position: 'absolute',
-    top: 50,
     left: 20,
     zIndex: 10,
   },
+  backButton: {
+    width: 40,
+    height: 40,
+    backgroundColor: theme.colors.surface,
+    borderRadius: 20,
+    justifyContent: 'center',
+    alignItems: 'center',
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  map: {
+    flex: 1,
+  },
   bottomSheet: {
     backgroundColor: theme.colors.surface,
-    padding: theme.spacing.l,
-    borderTopLeftRadius: theme.borderRadius.xl,
-    borderTopRightRadius: theme.borderRadius.xl,
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    padding: 20,
     shadowColor: "#000",
-    shadowOffset: { width: 0, height: -2 },
-    shadowOpacity: 0.25,
-    shadowRadius: 3.84,
-    elevation: 5,
-    paddingBottom: 40,
+    shadowOffset: { width: 0, height: -5 },
+    shadowOpacity: 0.1,
+    shadowRadius: 10,
+    elevation: 10,
+    marginTop: -30,
+  },
+  dragIndicator: {
+    width: 40,
+    height: 4,
+    backgroundColor: theme.colors.border,
+    borderRadius: 2,
+    alignSelf: 'center',
+    marginBottom: 20,
   },
   statusTitle: {
-    ...theme.typography.h3,
-    marginBottom: theme.spacing.m,
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: theme.colors.text,
+    marginBottom: 15,
     textAlign: 'center',
   },
-  divider: {
-    height: 1,
-    backgroundColor: theme.colors.border,
-    marginBottom: theme.spacing.m,
+  progressBarBg: {
+    height: 6,
+    backgroundColor: theme.colors.surfaceLight,
+    borderRadius: 3,
+    marginBottom: 20,
+    overflow: 'hidden',
+  },
+  progressBarFill: {
+    height: '100%',
+    backgroundColor: theme.colors.primary,
+    borderRadius: 3,
   },
   searchingContainer: {
     alignItems: 'center',
-    padding: theme.spacing.m,
+    paddingVertical: 20,
+  },
+  searchingAnimation: {
+    marginBottom: 30,
+    marginTop: 10,
+  },
+  radarCircle: {
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    backgroundColor: 'rgba(255, 215, 0, 0.1)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: theme.colors.primary,
   },
   searchingText: {
-    ...theme.typography.body,
-    marginTop: theme.spacing.m,
-    marginBottom: theme.spacing.l,
+    fontSize: 16,
+    color: theme.colors.textSecondary,
+    marginBottom: 30,
+    fontWeight: '500',
   },
   cancelButton: {
-    paddingVertical: theme.spacing.s,
-    paddingHorizontal: theme.spacing.l,
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 12,
+    paddingHorizontal: 24,
     backgroundColor: theme.colors.surfaceLight,
-    borderRadius: theme.borderRadius.m,
+    borderRadius: 30,
   },
   cancelText: {
     color: theme.colors.error,
+    fontWeight: '600',
+    fontSize: 16,
   },
-  driverContainer: {
-    
+  driverInfoContainer: {
+    marginTop: 10,
   },
   driverHeader: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: theme.spacing.l,
+    marginBottom: 24,
+  },
+  driverAvatarContainer: {
+    marginRight: 16,
+  },
+  avatarPlaceholder: {
+    width: 64,
+    height: 64,
+    borderRadius: 32,
+    backgroundColor: theme.colors.surfaceLight,
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 2,
+    borderColor: theme.colors.primary,
+  },
+  driverDetails: {
+    flex: 1,
   },
   driverName: {
-    ...theme.typography.h3,
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: theme.colors.text,
+    marginBottom: 6,
   },
-  vehicleInfo: {
-    ...theme.typography.caption,
-    color: theme.colors.textSecondary,
-    marginTop: 4,
-  },
-  ratingContainer: {
+  ratingRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginTop: 4,
   },
   ratingText: {
     marginLeft: 4,
-    ...theme.typography.caption,
+    fontSize: 14,
+    fontWeight: 'bold',
+    color: theme.colors.text,
   },
-  plateContainer: {
-    backgroundColor: theme.colors.surfaceLight,
-    paddingHorizontal: theme.spacing.m,
-    paddingVertical: theme.spacing.s,
-    borderRadius: theme.borderRadius.s,
-    borderWidth: 1,
-    borderColor: theme.colors.border,
+  tripCount: {
+    marginLeft: 6,
+    fontSize: 14,
+    color: theme.colors.textSecondary,
+  },
+  vehiclePlateContainer: {
+    alignItems: 'flex-end',
+  },
+  vehicleModel: {
+    fontSize: 14,
+    color: theme.colors.textSecondary,
+    marginBottom: 8,
+    fontWeight: '500',
+  },
+  plateBox: {
+    backgroundColor: '#fff',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 4,
+    borderWidth: 2,
+    borderColor: theme.colors.text,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.2,
+    shadowRadius: 2,
+    elevation: 2,
   },
   plateText: {
-    ...theme.typography.body,
+    fontSize: 16,
     fontWeight: 'bold',
+    color: theme.colors.text,
+    letterSpacing: 1,
+  },
+  divider: {
+    height: 1,
+    backgroundColor: theme.colors.surfaceLight,
+    marginBottom: 24,
   },
   actionsContainer: {
     flexDirection: 'row',
     justifyContent: 'space-around',
   },
   actionButton: {
-    width: 50,
-    height: 50,
-    borderRadius: 25,
-    backgroundColor: theme.colors.surfaceLight,
     alignItems: 'center',
+  },
+  actionIconCircle: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
     justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 10,
+  },
+  actionLabel: {
+    fontSize: 12,
+    color: theme.colors.textSecondary,
+    fontWeight: '500',
   },
   markerContainer: {
-    width: 20,
-    height: 20,
-    borderRadius: 10,
-    backgroundColor: 'white',
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  markerIcon: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 2,
+    borderColor: 'white',
     shadowColor: "#000",
     shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.25,
-    shadowRadius: 3.84,
+    shadowOpacity: 0.3,
+    shadowRadius: 3,
     elevation: 5,
   },
-  markerDot: {
-    width: 12,
-    height: 12,
-    borderRadius: 6,
+  driverMarker: {
+    width: 40,
+    height: 40,
   }
 });
 

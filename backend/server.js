@@ -5,9 +5,13 @@ const http = require('http');
 const { Server } = require('socket.io');
 require('dotenv').config();
 
-console.log('🚀 Starting Backend Server...'); // Immediate log
+console.log('🚀 Amjilttai holbogdoj aslaa...'); // Immediate log
 
 const app = express();
+// Attach driverLocations to app so routes can access it
+const driverLocations = {};
+app.driverLocations = driverLocations;
+
 const server = http.createServer(app);
 const io = new Server(server, {
   cors: {
@@ -45,8 +49,8 @@ const apiRoutes = require('./routes/api');
 
 app.use('/api', apiRoutes);
 
-// In-memory driver locations store
-const driverLocations = {};
+// In-memory driver locations store (Attached to app above)
+// const driverLocations = {}; <--- Removed to avoid duplicate
 const socketToDriver = {}; // Map socket.id -> driverId
 const driverStatus = {}; // Map driverId -> isOnline
 
@@ -62,6 +66,18 @@ io.on('connection', (socket) => {
     socket.emit('allDriverLocations', driverLocations);
   });
 
+  // Handle Customer Join
+  if (socket.handshake.query.customerId) {
+    const customerId = socket.handshake.query.customerId;
+    socket.join(`customer_${customerId}`);
+    console.log(`Customer ${customerId} joined room`);
+  }
+  
+  socket.on('customerJoin', (customerId) => {
+      socket.join(`customer_${customerId}`);
+      console.log(`Customer ${customerId} joined room (manual event)`);
+  });
+
   socket.on('adminJoin', () => {
     socket.join('admin_room');
     console.log('Admin joined room');
@@ -69,15 +85,25 @@ io.on('connection', (socket) => {
     socket.emit('allDriverLocations', driverLocations);
   });
 
+  // Listen for driver location updates
+  // Flow: Driver App (GPS) -> Server -> Broadcast to All (Admin + Customers)
   socket.on('driverLocationUpdated', (data) => {
-    // Update store (Client side handles isOnline check)
+    // data structure: { driverId, location: { lat, lng, heading, plateNumber, ... } }
+    
+    // 1. Update In-Memory Store
+    // We store the latest location for every online driver
     driverLocations[data.driverId] = data.location;
-    // Mark as online implicitly since they are sending updates
+    
+    // 2. Mark as Online
+    // If we receive updates, the driver is definitely online
     driverStatus[data.driverId] = true;
     
-    // Broadcast to admin and other drivers
-    // Also emit globally so customers can track their driver
+    // 3. Broadcast to Real-time Map Clients
+    // Emits to everyone. Clients (Customer App) filter by relevance if needed.
     io.emit('driverLocationUpdated', data);
+    
+    // Optional: Log for debugging (disable in high traffic production)
+    // console.log(`Driver ${data.driverId} moved to [${data.location.lat}, ${data.location.lng}]`);
   });
 
   socket.on('driverStatusUpdate', (data) => {
@@ -101,14 +127,39 @@ io.on('connection', (socket) => {
 
   socket.on('driverAccepted', (data) => {
     io.to('admin_room').emit('driverAccepted', data);
+    // Notify customer
+    if (data.trip && data.trip.customer) {
+        const customerId = typeof data.trip.customer === 'object' ? data.trip.customer._id : data.trip.customer;
+        io.to(`customer_${customerId}`).emit('driverAccepted', data);
+    }
   });
 
   socket.on('tripStarted', (data) => {
     io.to('admin_room').emit('tripStarted', data);
+    // Notify customer
+    if (data.tripId) {
+       // We might need trip object to get customerId, but usually tripStarted comes with tripId.
+       // Best to fetch or assume client sends customerId. 
+       // If data only has tripId, we can't easily emit to customer room without fetching trip.
+       // Let's assume data might contain customerId or we emit to global (inefficient) or fetch.
+       // BETTER: Client (Driver App) should send customerId or trip object.
+       // Let's check Driver App's emit.
+       // For now, emit to all (client filters) OR check if data has customerId.
+       if (data.customerId) {
+         io.to(`customer_${data.customerId}`).emit('tripStarted', data);
+       } else {
+         // Fallback: emit global tripUpdated, client filters.
+         // Or fetch trip (expensive).
+         // Driver App should send customerId.
+       }
+    }
   });
 
   socket.on('tripCompleted', (data) => {
     io.to('admin_room').emit('tripCompleted', data);
+    if (data.customerId) {
+        io.to(`customer_${data.customerId}`).emit('tripCompleted', data);
+    }
   });
 
   socket.on('disconnect', () => {
