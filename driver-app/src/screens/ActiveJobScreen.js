@@ -45,7 +45,10 @@ export default function ActiveJobScreen({ route, navigation }) {
   );
   const [loading, setLoading] = useState(false);
   const [userLocation, setUserLocation] = useState(null);
-  const [tripStats, setTripStats] = useState({ duration: 0, distance: 0 });
+  const [tripStats, setTripStats] = useState({ 
+    duration: 0, 
+    distance: job?.distance || 0 
+  });
   const [routeCoordinates, setRouteCoordinates] = useState([]);
   const [isFollowing, setIsFollowing] = useState(true);
   const mapRef = useRef(null);
@@ -260,7 +263,20 @@ export default function ActiveJobScreen({ route, navigation }) {
   useEffect(() => {
     let interval;
     if (status === 'in_progress') {
-      const startTime = Date.now() - (tripStats.duration * 1000);
+      let startTime;
+      
+      if (job?.startTime) {
+        startTime = new Date(job.startTime).getTime();
+      } else {
+        startTime = Date.now() - (tripStats.duration * 1000);
+      }
+
+      // Initial update
+      setTripStats(prev => ({
+          ...prev,
+          duration: Math.floor((Date.now() - startTime) / 1000)
+      }));
+
       interval = setInterval(() => {
         setTripStats(prev => ({
           ...prev,
@@ -269,7 +285,7 @@ export default function ActiveJobScreen({ route, navigation }) {
       }, 1000);
     }
     return () => clearInterval(interval);
-  }, [status]);
+  }, [status, job?.startTime]);
 
   const getDistanceFromLatLonInKm = (lat1, lon1, lat2, lon2) => {
     const R = 6371;

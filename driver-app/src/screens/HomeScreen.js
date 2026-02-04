@@ -182,6 +182,23 @@ export default function HomeScreen({ navigation, route }) {
     // Always fetch stats on mount/update
     fetchStats();
 
+    // Check for active job
+    const fetchActiveJob = async () => {
+      if (!driverId) return;
+      try {
+        const response = await fetch(`${API_URL}/api/driver/${driverId}/active-job`);
+        if (response.ok) {
+          const job = await response.json();
+          if (job) {
+             navigation.navigate('ActiveJob', { job, driverId });
+          }
+        }
+      } catch (error) {
+        console.error('Error fetching active job:', error);
+      }
+    };
+    fetchActiveJob();
+
   }, [driverId, isServiceModalVisible]);
 
   useEffect(() => {

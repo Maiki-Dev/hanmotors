@@ -17,21 +17,24 @@ interface Props {
 export const AnimatedDriverMarker = ({ driver, onPress }: Props) => {
   // AnimatedRegion for smooth coordinates
   const coordinate = useRef(new AnimatedRegion({
-    latitude: driver.lat,
-    longitude: driver.lng,
+    latitude: driver.lat || 0,
+    longitude: driver.lng || 0,
     latitudeDelta: 0,
     longitudeDelta: 0,
   })).current;
 
   // Animated.Value for smooth rotation
-  const heading = useRef(new Animated.Value(driver.heading)).current;
+  const heading = useRef(new Animated.Value(driver.heading || 0)).current;
 
   useEffect(() => {
     // Animate coordinate
+    const newLat = driver.lat || 0;
+    const newLng = driver.lng || 0;
+    
     if (Platform.OS === 'android') {
       coordinate.timing({
-        latitude: driver.lat,
-        longitude: driver.lng,
+        latitude: newLat,
+        longitude: newLng,
         latitudeDelta: 0,
         longitudeDelta: 0,
         duration: 2000,
@@ -40,8 +43,8 @@ export const AnimatedDriverMarker = ({ driver, onPress }: Props) => {
       } as any).start();
     } else {
        coordinate.timing({
-        latitude: driver.lat,
-        longitude: driver.lng,
+        latitude: newLat,
+        longitude: newLng,
         latitudeDelta: 0,
         longitudeDelta: 0,
         duration: 2000,
@@ -52,7 +55,7 @@ export const AnimatedDriverMarker = ({ driver, onPress }: Props) => {
 
     // Animate heading
     Animated.timing(heading, {
-      toValue: driver.heading,
+      toValue: driver.heading || 0,
       duration: 500,
       useNativeDriver: true,
       easing: Easing.linear,

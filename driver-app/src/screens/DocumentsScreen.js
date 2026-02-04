@@ -65,6 +65,8 @@ export default function DocumentsScreen({ navigation, route }) {
   const [refreshing, setRefreshing] = useState(false);
   const [saving, setSaving] = useState(false);
   const [viewingImage, setViewingImage] = useState(null);
+  const [imageLoading, setImageLoading] = useState(false);
+  const [imageError, setImageError] = useState(false);
 
   const fetchDocuments = async () => {
     try {
@@ -179,9 +181,6 @@ export default function DocumentsScreen({ navigation, route }) {
       </View>
     );
   }
-
-  const [imageLoading, setImageLoading] = useState(false);
-  const [imageError, setImageError] = useState(false);
 
   return (
     <View style={styles.container}>

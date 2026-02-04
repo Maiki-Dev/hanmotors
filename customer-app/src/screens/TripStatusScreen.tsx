@@ -45,6 +45,18 @@ const TripStatusScreen = () => {
           }),
         ])
       ).start();
+    } else if (trip?.status === 'cancelled') {
+        // Auto navigate home if cancelled
+        Alert.alert('Аялал цуцлагдлаа', 'Жолооч эсвэл систем аяллыг цуцалсан байна.', [
+            { text: 'ОК', onPress: () => navigation.navigate('HomeTab') }
+        ]);
+        
+        // Fallback navigation after delay in case alert is ignored or fails
+        const timer = setTimeout(() => {
+            navigation.navigate('HomeTab');
+        }, 3000);
+        
+        return () => clearTimeout(timer);
     }
   }, [trip?.status]);
 

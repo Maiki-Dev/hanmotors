@@ -39,6 +39,7 @@ console.log(`Target API URL: ${newUrl}`);
 
 const filesToUpdate = [
   path.join(__dirname, 'driver-app/src/config.js'),
+  path.join(__dirname, 'customer-app/src/config.ts'),
   path.join(__dirname, 'admin-dashboard/src/config.js')
 ];
 

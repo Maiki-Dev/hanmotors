@@ -989,7 +989,23 @@ router.post('/trip/:id/complete', async (req, res) => {
   }
 });
 
-// Get Wallet Info
+// Get Active Job for Driver
+router.get('/driver/:id/active-job', async (req, res) => {
+  if (isOffline()) return res.json(null);
+  
+  try {
+    const trip = await Trip.findOne({
+      driver: req.params.id,
+      status: { $in: ['accepted', 'in_progress', 'pickup'] }
+    }).populate('customer');
+    
+    res.json(trip || null);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Get Driver Wallet
 router.get('/driver/:id/wallet', async (req, res) => {
   if (isOffline()) {
     const driver = mockDrivers.find(d => d._id === req.params.id);
