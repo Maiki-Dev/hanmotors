@@ -1462,8 +1462,7 @@ router.post('/rides/request', async (req, res) => {
     
     price = Math.ceil(price / 100) * 100;
 
-    const trip = new Trip({
-      customer: customerId,
+    const tripData = {
       pickupLocation: pickup,
       dropoffLocation: dropoff,
       vehicleModel: vehicleType,
@@ -1472,7 +1471,13 @@ router.post('/rides/request', async (req, res) => {
       price,
       status: 'pending',
       createdAt: new Date()
-    });
+    };
+
+    if (customerId && customerId !== 'guest') {
+        tripData.customer = customerId;
+    }
+
+    const trip = new Trip(tripData);
 
     await trip.save();
     
@@ -1512,6 +1517,69 @@ router.get('/rides/active', async (req, res) => {
     if (!trip) return res.status(404).json({ message: 'No active trip' });
     
     res.json(trip);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Pricing Rules Routes
+router.get('/admin/pricing', async (req, res) => {
+  if (isOffline()) {
+    return res.json([
+      { vehicleType: 'Taxi', basePrice: 1000, pricePerKm: 1500, isActive: true },
+      { vehicleType: 'Delivery', basePrice: 5000, pricePerKm: 2000, isActive: true },
+      { vehicleType: 'SOS', basePrice: 2000, pricePerKm: 2000, isActive: true },
+      { vehicleType: 'Driver', basePrice: 3000, pricePerKm: 2500, isActive: true },
+      { vehicleType: 'Tow', basePrice: 80000, pricePerKm: 10000, isActive: true },
+      { vehicleType: 'Luxury', basePrice: 10000, pricePerKm: 5000, isActive: true }
+    ]);
+  }
+
+  try {
+    const pricing = await Pricing.find({ isActive: true }).sort({ order: 1 });
+    if (pricing.length === 0) {
+      // Seed default if empty
+      const defaults = [
+        { vehicleType: 'Taxi', basePrice: 1000, pricePerKm: 1500, order: 1 },
+        { vehicleType: 'Delivery', basePrice: 5000, pricePerKm: 2000, order: 2 },
+        { vehicleType: 'SOS', basePrice: 2000, pricePerKm: 2000, order: 3 },
+        { vehicleType: 'Driver', basePrice: 3000, pricePerKm: 2500, order: 4 },
+        { vehicleType: 'Tow', basePrice: 80000, pricePerKm: 10000, order: 5 },
+        { vehicleType: 'Luxury', basePrice: 10000, pricePerKm: 5000, order: 6 }
+      ];
+      await Pricing.insertMany(defaults);
+      return res.json(defaults);
+    }
+    res.json(pricing);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Calculate Price Endpoint
+router.post('/pricing/calculate', async (req, res) => {
+  const { distance, vehicleType } = req.body;
+  try {
+    let pricingRule = await Pricing.findOne({ vehicleType: vehicleType });
+    if (!pricingRule) {
+      // Fallback defaults
+      if (vehicleType === 'Taxi') pricingRule = { basePrice: 1000, pricePerKm: 1500 };
+      else if (vehicleType === 'Delivery') pricingRule = { basePrice: 5000, pricePerKm: 2000 };
+      else if (vehicleType === 'SOS') pricingRule = { basePrice: 2000, pricePerKm: 2000 };
+      else if (vehicleType === 'Tow') pricingRule = { basePrice: 80000, pricePerKm: 10000 };
+      else pricingRule = { basePrice: 2000, pricePerKm: 2000 };
+    }
+
+    const dist = Number(distance);
+    let price = pricingRule.basePrice;
+    if (dist > 4) {
+      price += (dist - 4) * pricingRule.pricePerKm;
+    }
+    
+    // Round to nearest 100
+    price = Math.ceil(price / 100) * 100;
+
+    res.json({ price, currency: '₮' });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

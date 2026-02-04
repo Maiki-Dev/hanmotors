@@ -34,6 +34,9 @@ export const rideService = {
   cancelTrip: (tripId: string) => api.post(`/trip/${tripId}/cancel`),
 
   getPricingRules: () => api.get('/admin/pricing'),
+
+  calculatePrice: (distance: number, vehicleType: string) => 
+    api.post('/pricing/calculate', { distance, vehicleType }),
 };
 
 export default api;

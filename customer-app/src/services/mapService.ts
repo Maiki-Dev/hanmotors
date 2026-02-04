@@ -36,9 +36,23 @@ export const mapService = {
       }
       return null;
     } catch (error) {
-      console.error('OSRM Routing failed:', error);
-      // If OSRM fails, we just return null to avoid crashing the app
-      // The map will just show markers without the line
+      console.error('OSRM Routing failed, trying Google:', error);
+      // Fallback to Google Directions API
+      try {
+        const url = `https://maps.googleapis.com/maps/api/directions/json?origin=${origin.latitude},${origin.longitude}&destination=${destination.latitude},${destination.longitude}&key=${GOOGLE_MAPS_APIKEY}&mode=driving`;
+        const response = await axios.get(url);
+        
+        if (response.data.routes && response.data.routes.length > 0) {
+            const route = response.data.routes[0];
+            return {
+                polyline: { encodedPolyline: route.overview_polyline.points },
+                distanceMeters: route.legs[0].distance.value,
+                duration: route.legs[0].duration.value
+            };
+        }
+      } catch (gError) {
+        console.error('Google Routing also failed:', gError);
+      }
       return null;
     }
   },

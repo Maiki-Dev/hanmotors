@@ -116,27 +116,29 @@ const RideRequestScreen = () => {
 
   useEffect(() => {
     const fetchServices = async () => {
-      if (route.params?.serviceType === 'sos') {
-        try {
-          const response = await rideService.getPricingRules();
-          const rules = response.data;
+      try {
+        const response = await rideService.getPricingRules();
+        const rules = response.data;
+        
+        if (rules && rules.length > 0) {
+          const dynamicServices = rules.map((rule: any) => ({
+            id: rule.vehicleType, 
+            label: rule.vehicleType,
+            icon: Car,
+            basePrice: rule.basePrice,
+            pricePerKm: rule.pricePerKm,
+            description: `${rule.basePrice}₮ + ${rule.pricePerKm}₮/км`
+          }));
           
-          if (rules && rules.length > 0) {
-            const dynamicServices = rules.map((rule: any) => ({
-              id: rule.vehicleType, 
-              label: rule.vehicleType,
-              icon: Car,
-              basePrice: rule.basePrice,
-              pricePerKm: rule.pricePerKm,
-              description: `${rule.basePrice}₮ + ${rule.pricePerKm}₮/км`
-            }));
-            
-            setAvailableServices(dynamicServices);
-            setSelectedService(dynamicServices[0]);
-          }
-        } catch (error) {
-          console.log('Error fetching pricing rules:', error);
+          setAvailableServices(dynamicServices);
+          
+          const requested = dynamicServices.find((s: any) => 
+             s.id.toLowerCase() === route.params?.serviceType?.toLowerCase()
+          );
+          setSelectedService(requested || dynamicServices[0]);
         }
+      } catch (error) {
+        console.log('Error fetching pricing rules:', error);
       }
     };
     
@@ -155,8 +157,8 @@ const RideRequestScreen = () => {
 
   // Calculate price when distance changes
   useEffect(() => {
-    if (distance > 0) {
-      setPrice(calculatePrice(distance, selectedService));
+    if (distance > 0 && selectedService?.id) {
+      calculatePrice(distance, selectedService);
     }
   }, [distance, selectedService]);
 
@@ -198,54 +200,8 @@ const RideRequestScreen = () => {
   };
 
   const fetchSuggestedPlaces = async () => {
-    // Show top 5 rated places nearby (e.g. tourist attractions, shopping malls, points of interest)
-    // We sort by prominence to get "top" places
-    if (!pickup) return;
-    try {
-        const radius = 5000; // 5km
-        // Use 'tourist_attraction' or broad 'point_of_interest' sorted by prominence/rating
-        const type = 'point_of_interest'; 
-        // rankby=prominence is default. We can add &minprice or &maxprice if needed, but not necessary.
-        const url = `https://maps.googleapis.com/maps/api/place/nearbysearch/json?location=${pickup.latitude},${pickup.longitude}&radius=${radius}&type=${type}&key=${GOOGLE_MAPS_APIKEY}&language=mn&rankby=prominence`;
-
-        const response = await fetch(url);
-        const data = await response.json();
-
-        if (data.results) {
-             // Filter for places with high rating or user_ratings_total to ensure they are "top"
-             // and take top 5
-             const places = data.results
-                .filter((p: any) => p.rating && p.rating >= 4.0 && p.user_ratings_total > 50)
-                .slice(0, 5)
-                .map((item: any) => ({
-                    id: item.place_id,
-                    name: item.name,
-                    address: item.vicinity,
-                    latitude: item.geometry.location.lat,
-                    longitude: item.geometry.location.lng,
-                    icon: Star // Use Star icon for top rated places
-                }));
-            
-            // If we found good results, use them. Otherwise, fallback or show raw top 5
-            if (places.length > 0) {
-                setSuggestedPlaces(places);
-            } else {
-                 // Fallback to just top 5 results without strict filtering if not enough high rated ones
-                 const rawPlaces = data.results.slice(0, 5).map((item: any) => ({
-                    id: item.place_id,
-                    name: item.name,
-                    address: item.vicinity,
-                    latitude: item.geometry.location.lat,
-                    longitude: item.geometry.location.lng,
-                    icon: MapPin
-                }));
-                setSuggestedPlaces(rawPlaces);
-            }
-        }
-    } catch (error) {
-        console.log('Error fetching suggested places:', error);
-        setSuggestedPlaces(SUGGESTED_PLACES); // Fallback
-    }
+      // Mock logic or Google API
+      setSuggestedPlaces(SUGGESTED_PLACES);
   };
 
   const handleSelectPlace = (place: any) => {
@@ -282,6 +238,9 @@ const RideRequestScreen = () => {
     };
 
     if (socket) {
+      if (user?._id) {
+        socket.emit('customerJoin', user._id);
+      }
       socket.on('driverLocationUpdated', handleDriverUpdate);
       socket.on('driverDisconnected', (data: { driverId: string }) => {
         setDrivers(prev => prev.filter(d => d.id !== data.driverId));
@@ -333,9 +292,28 @@ const RideRequestScreen = () => {
     }
   };
 
-  const calculatePrice = (distKm: number, service = selectedService) => {
-    const calculated = service.basePrice + distKm * service.pricePerKm;
-    return Math.ceil(calculated / 100) * 100;
+  const calculatePrice = async (distKm: number, service = selectedService) => {
+    try {
+      // Use backend calculation to ensure consistency
+      const response = await rideService.calculatePrice(distKm, service.id);
+      if (response.data && response.data.price) {
+        setPrice(response.data.price);
+      } else {
+        // Fallback to local calculation if backend fails
+        let calculated = service.basePrice;
+        if (distKm > 4) {
+          calculated += (distKm - 4) * service.pricePerKm;
+        }
+        setPrice(Math.ceil(calculated / 100) * 100);
+      }
+    } catch (error) {
+       console.log('Backend price calc failed, using local', error);
+       let calculated = service.basePrice;
+       if (distKm > 4) {
+         calculated += (distKm - 4) * service.pricePerKm;
+       }
+       setPrice(Math.ceil(calculated / 100) * 100);
+    }
   };
 
   const fetchAddress = async (lat: number, long: number) => {
@@ -387,8 +365,13 @@ const RideRequestScreen = () => {
   };
 
   const handleMapPick = () => {
+    console.log('Picking location:', pickerAddress, pickerRegion);
+    if (!pickerRegion) {
+        Alert.alert('Алдаа', 'Байршил сонгогдоогүй байна');
+        return;
+    }
     setDropoff({
-        address: pickerAddress,
+        address: pickerAddress || 'Сонгосон байршил',
         latitude: pickerRegion.latitude,
         longitude: pickerRegion.longitude
     });
@@ -486,7 +469,16 @@ const RideRequestScreen = () => {
             <ArrowLeft size={24} color={theme.colors.text} />
         </TouchableOpacity>
 
-        <View style={styles.bottomContainer}>
+        <View style={[styles.bottomContainer, { 
+            position: 'absolute', 
+            bottom: 0, 
+            left: 0, 
+            right: 0, 
+            zIndex: 999, 
+            elevation: 20, 
+            backgroundColor: theme.colors.surface,
+            paddingBottom: Math.max(insets.bottom, 16) + 90 
+        }]}>
             <TouchableOpacity style={styles.mainButton} onPress={handleMapPick}>
                 <Text style={styles.mainButtonText}>Энэ байршлыг сонгох</Text>
             </TouchableOpacity>
@@ -510,81 +502,15 @@ const RideRequestScreen = () => {
                <Text style={styles.inputText} numberOfLines={1}>{pickup?.address || 'Байршил сонгох...'}</Text>
             </View>
             <View style={styles.divider} />
-            <View style={[styles.inputBox, { height: 'auto', minHeight: 40, zIndex: 999 }]}>
-               <GooglePlacesAutocomplete
-                 placeholder="Хаах хаяг"
-                 onPress={(data, details = null) => {
-                   const name = data.structured_formatting?.main_text || data.description;
-                   handleSelectPlace({
-                     name: name,
-                     address: data.description,
-                     latitude: details?.geometry?.location?.lat,
-                     longitude: details?.geometry?.location?.lng,
-                   });
-                 }}
-                 query={{
-                   key: GOOGLE_MAPS_APIKEY,
-                   language: 'mn',
-                 }}
-                 fetchDetails={true}
-                 enablePoweredByContainer={false}
-                 styles={{
-                   container: {
-                     flex: 1,
-                     paddingRight: 32,
-                   },
-                   textInputContainer: {
-                     backgroundColor: 'transparent',
-                     borderTopWidth: 0,
-                     borderBottomWidth: 0,
-                     padding: 0,
-                     margin: 0,
-                     height: 40,
-                   },
-                   textInput: {
-                     backgroundColor: 'transparent',
-                     color: theme.colors.text,
-                     fontSize: 16,
-                     height: 40,
-                     padding: 0,
-                     margin: 0,
-                     fontWeight: '500',
-                   },
-                   listView: {
-                     position: 'absolute',
-                     top: 40,
-                     left: 0,
-                     right: 0,
-                     backgroundColor: theme.colors.surface,
-                     borderRadius: 8,
-                     elevation: 5,
-                     zIndex: 1000,
-                     marginTop: 4,
-                     borderWidth: 1,
-                     borderColor: theme.colors.border,
-                   },
-                   row: {
-                     backgroundColor: 'transparent',
-                     padding: 12,
-                     borderBottomWidth: 1,
-                     borderBottomColor: theme.colors.surfaceLight,
-                   },
-                   description: {
-                     color: theme.colors.text,
-                   },
-                   separator: {
-                     height: 0,
-                   },
-                 }}
-                 textInputProps={{
-                   placeholderTextColor: theme.colors.textSecondary,
-                   autoFocus: true,
-                 }}
-               />
-               <TouchableOpacity style={styles.mapIconBox} onPress={() => setShowMapPicker(true)}>
-                 <MapPin size={16} color={theme.colors.white} />
-               </TouchableOpacity>
-            </View>
+            <TouchableOpacity 
+               style={styles.inputBox}
+               onPress={() => setShowMapPicker(true)}
+            >
+               <Text style={styles.labelSmall}>Хаах хаяг</Text>
+               <Text style={styles.inputText} numberOfLines={1}>
+                 {dropoff?.address || 'Газрын зураг дээрээс сонгох...'}
+               </Text>
+            </TouchableOpacity>
           </View>
         </View>
       </View>
@@ -665,8 +591,17 @@ const RideRequestScreen = () => {
 
       {/* Bottom Button */}
       <View style={[styles.bottomContainer, { paddingBottom: Math.max(insets.bottom, 16) + 90 }]}>
-        <TouchableOpacity style={styles.mainButton} onPress={() => Alert.alert('Хайх', 'Эхлээд очих газраа сонгоно уу')}>
-          <Text style={styles.mainButtonText}>Дуудлага өгөх {'->'}</Text>
+        <TouchableOpacity 
+          style={[styles.mainButton, !dropoff && { opacity: 0.5 }]} 
+          onPress={() => {
+             if (dropoff) {
+               handleRequestRide();
+             } else {
+               Alert.alert('Хайх', 'Эхлээд очих газраа сонгоно уу');
+             }
+          }}
+        >
+          <Text style={styles.mainButtonText}>{dropoff ? `Захиалах (${price.toLocaleString()}₮)` : 'Дуудлага өгөх ->'}</Text>
         </TouchableOpacity>
       </View>
     </View>
@@ -713,7 +648,7 @@ const RideRequestScreen = () => {
         <ArrowLeft size={24} color={theme.colors.text} />
       </TouchableOpacity>
 
-      <View style={styles.confirmSheet}>
+      <View style={[styles.confirmSheet, { paddingBottom: Math.max(insets.bottom, 16) + 90 }]}>
         <View style={styles.handle} />
         <Text style={styles.priceText}>{price.toLocaleString()}₮</Text>
         <Text style={styles.distanceText}>{distance.toFixed(1)} км • {(distance * 2.5).toFixed(0)} мин</Text>
@@ -735,14 +670,9 @@ const RideRequestScreen = () => {
 
         <TouchableOpacity 
           style={styles.confirmButton} 
-          onPress={handleRequestRide}
-          disabled={loading}
+          onPress={() => setStep('destination_selection')}
         >
-          {loading ? (
-             <ActivityIndicator color={theme.colors.black} />
-          ) : (
-             <Text style={styles.confirmButtonText}>Захиалах</Text>
-          )}
+          <Text style={styles.confirmButtonText}>Үргэлжлүүлэх</Text>
         </TouchableOpacity>
       </View>
     </View>
@@ -769,12 +699,12 @@ const styles = StyleSheet.create({
   inputCard: {
     marginHorizontal: 16,
     backgroundColor: theme.colors.surface,
-    borderRadius: 12,
+    borderRadius: 16,
     padding: 16,
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.2,
-    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.1,
+    shadowRadius: 12,
     elevation: 4,
     marginBottom: 20,
     zIndex: 999,
@@ -784,40 +714,51 @@ const styles = StyleSheet.create({
   },
   iconContainer: {
     alignItems: 'center',
-    marginRight: 12,
-    paddingTop: 8,
+    marginRight: 16,
+    paddingTop: 12,
   },
   pickupDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    backgroundColor: theme.colors.textSecondary,
+    width: 12,
+    height: 12,
+    borderRadius: 6,
+    backgroundColor: theme.colors.primary,
+    borderWidth: 2,
+    borderColor: theme.colors.surface,
+    shadowColor: theme.colors.primary,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.3,
+    shadowRadius: 4,
   },
   verticalLine: {
-    width: 1,
+    width: 2,
     flex: 1,
-    backgroundColor: theme.colors.border,
+    backgroundColor: theme.colors.surfaceLight,
     marginVertical: 4,
+    borderRadius: 1,
   },
   dropoffSquare: {
-    width: 8,
-    height: 8,
-    backgroundColor: theme.colors.primary,
+    width: 12,
+    height: 12,
+    backgroundColor: theme.colors.text,
+    borderRadius: 2,
   },
   inputsWrapper: {
     flex: 1,
   },
   inputBox: {
-    height: 40,
+    height: 48,
     justifyContent: 'center',
   },
   labelSmall: {
     fontSize: 10,
     color: theme.colors.textSecondary,
     marginBottom: 2,
+    fontWeight: '600',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
   },
   inputText: {
-    fontSize: 14,
+    fontSize: 16,
     color: theme.colors.text,
     fontWeight: '500',
   },
@@ -829,18 +770,19 @@ const styles = StyleSheet.create({
   },
   divider: {
     height: 1,
-    backgroundColor: theme.colors.border,
-    marginVertical: 8,
+    backgroundColor: theme.colors.surfaceLight,
+    marginVertical: 4,
   },
   mapIconBox: {
     position: 'absolute',
     right: 0,
-    width: 24,
-    height: 24,
-    borderRadius: 12,
-    backgroundColor: theme.colors.textSecondary, // Should be colorful map icon usually
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: theme.colors.surfaceLight,
     alignItems: 'center',
     justifyContent: 'center',
+    top: 8,
   },
   markerFixed: {
     position: 'absolute',

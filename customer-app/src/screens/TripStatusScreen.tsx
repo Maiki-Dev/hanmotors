@@ -24,6 +24,7 @@ const TripStatusScreen = () => {
   
   const [trip, setTrip] = useState(route.params?.trip);
   const [driverLocation, setDriverLocation] = useState<any>(null);
+  const [routeError, setRouteError] = useState(false);
   
   // Animation for pulsing effect
   const pulseAnim = useRef(new Animated.Value(1)).current;
@@ -285,18 +286,34 @@ const TripStatusScreen = () => {
                  </Marker>
             )}
 
-            <MapViewDirections
-                origin={{ latitude: trip.pickupLocation.lat, longitude: trip.pickupLocation.lng }}
-                destination={{ latitude: trip.dropoffLocation.lat, longitude: trip.dropoffLocation.lng }}
-                apikey={GOOGLE_MAPS_APIKEY}
-                strokeWidth={5}
-                strokeColor={theme.colors.primary}
-                lineDashPattern={[0]}
-            />
+            {!routeError ? (
+                <MapViewDirections
+                    origin={{ latitude: trip.pickupLocation.lat, longitude: trip.pickupLocation.lng }}
+                    destination={{ latitude: trip.dropoffLocation.lat, longitude: trip.dropoffLocation.lng }}
+                    apikey={GOOGLE_MAPS_APIKEY}
+                    strokeWidth={5}
+                    strokeColor={theme.colors.primary}
+                    lineDashPattern={[0]}
+                    onError={(errorMessage) => {
+                        console.log('MapViewDirections Error:', errorMessage);
+                        setRouteError(true);
+                    }}
+                />
+            ) : (
+                <Polyline
+                    coordinates={[
+                        { latitude: trip.pickupLocation.lat, longitude: trip.pickupLocation.lng },
+                        { latitude: trip.dropoffLocation.lat, longitude: trip.dropoffLocation.lng }
+                    ]}
+                    strokeWidth={5}
+                    strokeColor={theme.colors.primary}
+                    lineDashPattern={[0]}
+                />
+            )}
         </MapView>
 
         {/* Bottom Sheet */}
-        <View style={[styles.bottomSheet, { paddingBottom: insets.bottom + 20 }]}>
+        <View style={[styles.bottomSheet, { paddingBottom: insets.bottom + 80 }]}>
             <View style={styles.dragIndicator} />
             <Text style={styles.statusTitle}>{getStatusMessage()}</Text>
             

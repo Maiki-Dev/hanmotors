@@ -47,6 +47,7 @@
         "expo-location",
         {
           "locationAlwaysAndWhenInUsePermission": "This app needs access to your location to track your ride status even when the app is in the background.",
+          "locationAlwaysPermission": "This app needs access to your location to track your ride status even when the app is in the background.",
           "locationWhenInUsePermission": "This app needs access to your location to find nearby drivers and track your ride.",
           "isAndroidBackgroundLocationEnabled": true
         }
