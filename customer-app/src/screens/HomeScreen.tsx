@@ -39,13 +39,7 @@ const SERVICES = [
 ];
 
 // Mock Nearby Drivers
-const INITIAL_DRIVERS = [
-  { id: 'd1', lat: 47.9190, lng: 106.9170, heading: 45 },
-  { id: 'd2', lat: 47.9200, lng: 106.9200, heading: 90 },
-  { id: 'd3', lat: 47.9150, lng: 106.9100, heading: 180 },
-  { id: 'd4', lat: 47.9170, lng: 106.9250, heading: 270 },
-  { id: 'd5', lat: 47.9220, lng: 106.9150, heading: 0 },
-];
+const INITIAL_DRIVERS: any[] = [];
 
 export default function HomeScreen() {
   const navigation = useNavigation<HomeScreenNavigationProp>();
@@ -162,16 +156,21 @@ export default function HomeScreen() {
           };
           return newDrivers;
         } else {
-          // Add new driver found in the vicinity
-          // In production, you might want to filter this by distance
+          // Add new driver found in the vicinity only if online (implicit since they are emitting)
           return [...prev, { id: data.driverId, ...data.location }];
         }
       });
     });
 
+    // Handle driver disconnect/offline (Optional: if server emits 'driverDisconnected')
+    socket.on('driverDisconnected', (data: { driverId: string }) => {
+        setDrivers(prev => prev.filter(d => d.id !== data.driverId));
+    });
+
     // 3. Cleanup listeners on unmount
     return () => { 
       socket.off('driverLocationUpdated'); 
+      socket.off('driverDisconnected');
     };
   }, []);
 

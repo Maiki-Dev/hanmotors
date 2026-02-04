@@ -26,10 +26,10 @@ import {
   Star, 
   MoreHorizontal 
 } from 'lucide-react-native';
-import MapView, { Marker, PROVIDER_GOOGLE } from 'react-native-maps';
-import MapViewDirections from 'react-native-maps-directions';
+import MapView, { Marker, PROVIDER_GOOGLE, Polyline } from 'react-native-maps';
 import { GOOGLE_MAPS_APIKEY } from '../config';
 import { rideService } from '../services/api';
+import { mapService, decodePolyline } from '../services/mapService';
 import { useSelector } from 'react-redux';
 import { RootState } from '../store';
 import { GooglePlacesAutocomplete } from 'react-native-google-places-autocomplete';
@@ -98,6 +98,11 @@ const RideRequestScreen = () => {
   const [distance, setDistance] = useState(0);
   const [price, setPrice] = useState(0);
   const [loading, setLoading] = useState(false);
+  const [nearbyPlaces, setNearbyPlaces] = useState<any[]>([]);
+  const [suggestedPlaces, setSuggestedPlaces] = useState<any[]>([]);
+  const [savedPlaces, setSavedPlaces] = useState<any[]>([]);
+  const [recentPlaces, setRecentPlaces] = useState<any[]>([]);
+
   const [selectedService, setSelectedService] = useState(SERVICES[0]);
   const [step, setStep] = useState<'destination_selection' | 'confirm_ride'>('destination_selection');
   const [activeCategory, setActiveCategory] = useState('suggested');
@@ -110,6 +115,7 @@ const RideRequestScreen = () => {
   });
   const [pickerAddress, setPickerAddress] = useState<string>('Байршил сонгоно уу');
   const [drivers, setDrivers] = useState<any[]>([]);
+  const [routeCoordinates, setRouteCoordinates] = useState<any[]>([]);
 
   // Calculate price when distance changes
   useEffect(() => {
@@ -117,6 +123,111 @@ const RideRequestScreen = () => {
       setPrice(calculatePrice(distance, selectedService));
     }
   }, [distance, selectedService]);
+
+  // Fetch places data
+  useEffect(() => {
+    if (pickup) {
+        fetchNearbyPlaces();
+        fetchSuggestedPlaces();
+        // In a real app, these would come from an API/Backend
+        setSavedPlaces(SAVED_PLACES); 
+        setRecentPlaces(RECENT_PLACES);
+    }
+  }, [pickup]);
+
+  const fetchNearbyPlaces = async () => {
+    if (!pickup) return;
+    try {
+        const radius = 1000; // 1km
+        const type = 'point_of_interest'; // General POIs
+        const url = `https://maps.googleapis.com/maps/api/place/nearbysearch/json?location=${pickup.latitude},${pickup.longitude}&radius=${radius}&type=${type}&key=${GOOGLE_MAPS_APIKEY}&language=mn`;
+        
+        const response = await fetch(url);
+        const data = await response.json();
+        
+        if (data.results) {
+            const places = data.results.slice(0, 6).map((item: any) => ({
+                id: item.place_id,
+                name: item.name,
+                address: item.vicinity,
+                latitude: item.geometry.location.lat,
+                longitude: item.geometry.location.lng,
+                icon: MapPin
+            }));
+            setNearbyPlaces(places);
+        }
+    } catch (error) {
+        console.log('Error fetching nearby places:', error);
+    }
+  };
+
+  const fetchSuggestedPlaces = async () => {
+    // Show top 5 rated places nearby (e.g. tourist attractions, shopping malls, points of interest)
+    // We sort by prominence to get "top" places
+    if (!pickup) return;
+    try {
+        const radius = 5000; // 5km
+        // Use 'tourist_attraction' or broad 'point_of_interest' sorted by prominence/rating
+        const type = 'point_of_interest'; 
+        // rankby=prominence is default. We can add &minprice or &maxprice if needed, but not necessary.
+        const url = `https://maps.googleapis.com/maps/api/place/nearbysearch/json?location=${pickup.latitude},${pickup.longitude}&radius=${radius}&type=${type}&key=${GOOGLE_MAPS_APIKEY}&language=mn&rankby=prominence`;
+
+        const response = await fetch(url);
+        const data = await response.json();
+
+        if (data.results) {
+             // Filter for places with high rating or user_ratings_total to ensure they are "top"
+             // and take top 5
+             const places = data.results
+                .filter((p: any) => p.rating && p.rating >= 4.0 && p.user_ratings_total > 50)
+                .slice(0, 5)
+                .map((item: any) => ({
+                    id: item.place_id,
+                    name: item.name,
+                    address: item.vicinity,
+                    latitude: item.geometry.location.lat,
+                    longitude: item.geometry.location.lng,
+                    icon: Star // Use Star icon for top rated places
+                }));
+            
+            // If we found good results, use them. Otherwise, fallback or show raw top 5
+            if (places.length > 0) {
+                setSuggestedPlaces(places);
+            } else {
+                 // Fallback to just top 5 results without strict filtering if not enough high rated ones
+                 const rawPlaces = data.results.slice(0, 5).map((item: any) => ({
+                    id: item.place_id,
+                    name: item.name,
+                    address: item.vicinity,
+                    latitude: item.geometry.location.lat,
+                    longitude: item.geometry.location.lng,
+                    icon: MapPin
+                }));
+                setSuggestedPlaces(rawPlaces);
+            }
+        }
+    } catch (error) {
+        console.log('Error fetching suggested places:', error);
+        setSuggestedPlaces(SUGGESTED_PLACES); // Fallback
+    }
+  };
+
+  const handleSelectPlace = (place: any) => {
+    const lat = place.latitude || place.geometry?.location?.lat;
+    const lng = place.longitude || place.geometry?.location?.lng;
+
+    if (!lat || !lng) {
+      Alert.alert('Алдаа', 'Байршлын мэдээлэл олдсонгүй. Газрын зураг дээрээс сонгоно уу.');
+      return;
+    }
+
+    setDropoff({
+      address: place.name,
+      latitude: lat,
+      longitude: lng,
+    });
+    setStep('confirm_ride');
+  };
 
   // Real-time Driver Tracking
   useEffect(() => {
@@ -136,40 +247,59 @@ const RideRequestScreen = () => {
 
     if (socket) {
       socket.on('driverLocationUpdated', handleDriverUpdate);
+      socket.on('driverDisconnected', (data: { driverId: string }) => {
+        setDrivers(prev => prev.filter(d => d.id !== data.driverId));
+      });
     }
 
     return () => {
       if (socket) {
         socket.off('driverLocationUpdated', handleDriverUpdate);
+        socket.off('driverDisconnected');
       }
     };
   }, []);
 
-  // Fit map to coordinates
+  // Fetch route and fit map
   useEffect(() => {
-    if (step === 'confirm_ride' && pickup && dropoff && mapRef.current) {
-      setTimeout(() => {
-        mapRef.current?.fitToCoordinates(
-          [
-            { latitude: pickup.latitude, longitude: pickup.longitude },
-            { latitude: dropoff.latitude, longitude: dropoff.longitude },
-          ],
-          {
-            edgePadding: { top: 100, right: 50, bottom: 400, left: 50 },
-            animated: true,
-          }
-        );
-      }, 500);
+    if (step === 'confirm_ride' && pickup && dropoff) {
+      fetchRoute();
     }
   }, [pickup, dropoff, step]);
+
+  const fetchRoute = async () => {
+    if (!pickup || !dropoff) return;
+    try {
+      const result = await mapService.getRoute(
+        { latitude: pickup.latitude, longitude: pickup.longitude },
+        { latitude: dropoff.latitude, longitude: dropoff.longitude }
+      );
+      
+      if (result) {
+        const points = decodePolyline(result.polyline.encodedPolyline);
+        setRouteCoordinates(points);
+        const distKm = result.distanceMeters / 1000;
+        setDistance(distKm);
+        
+        // Fit map to route
+        if (mapRef.current) {
+          setTimeout(() => {
+             mapRef.current?.fitToCoordinates(points, {
+                edgePadding: { top: 100, right: 50, bottom: 400, left: 50 },
+                animated: true,
+             });
+          }, 500);
+        }
+      }
+    } catch (error: any) {
+      console.log('Error fetching route:', error);
+      Alert.alert('Алдаа', 'Зам тооцоолоход алдаа гарлаа: ' + (error.message || 'Unknown error'));
+    }
+  };
 
   const calculatePrice = (distKm: number, service = selectedService) => {
     const calculated = service.basePrice + distKm * service.pricePerKm;
     return Math.ceil(calculated / 100) * 100;
-  };
-
-  const handleDirectionsReady = (result: any) => {
-    setDistance(result.distance);
   };
 
   const fetchAddress = async (lat: number, long: number) => {
@@ -184,20 +314,6 @@ const RideRequestScreen = () => {
       console.log('Error fetching address:', error);
       setPickerAddress('Тодорхойгүй байршил');
     }
-  };
-
-  const handleSelectPlace = (place: any) => {
-    // Mock selecting a place - in real app would get coords from Place API
-    const mockCoords = {
-      latitude: pickup ? pickup.latitude + 0.02 : 47.9188, 
-      longitude: pickup ? pickup.longitude + 0.02 : 106.9176,
-    };
-    
-    setDropoff({
-      address: place.name,
-      ...mockCoords
-    });
-    setStep('confirm_ride');
   };
 
   const handleRequestRide = async () => {
@@ -271,12 +387,17 @@ const RideRequestScreen = () => {
             )}
         </MapView>
         
-        <View style={styles.markerFixed}>
+        <TouchableOpacity 
+            style={styles.markerFixed} 
+            onPress={handleMapPick}
+            hitSlop={{ top: 60, bottom: 20, left: 20, right: 20 }}
+            activeOpacity={0.9}
+        >
             <View style={styles.tooltipContainer}>
                 <Text style={styles.tooltipText} numberOfLines={2}>{pickerAddress}</Text>
             </View>
             <MapPin size={40} color={theme.colors.primary} fill={theme.colors.primary} />
-        </View>
+        </TouchableOpacity>
 
         <TouchableOpacity 
             style={styles.backButton} 
@@ -309,12 +430,76 @@ const RideRequestScreen = () => {
                <Text style={styles.inputText} numberOfLines={1}>{pickup?.address || 'Байршил сонгох...'}</Text>
             </View>
             <View style={styles.divider} />
-            <View style={styles.inputBox}>
-               <TextInput 
+            <View style={[styles.inputBox, { height: 'auto', minHeight: 40, zIndex: 999 }]}>
+               <GooglePlacesAutocomplete
                  placeholder="Хаашаа явах вэ?"
-                 placeholderTextColor={theme.colors.textSecondary}
-                 style={styles.textInput}
-                 autoFocus={true}
+                 onPress={(data, details = null) => {
+                   const name = data.structured_formatting?.main_text || data.description;
+                   handleSelectPlace({
+                     name: name,
+                     address: data.description,
+                     latitude: details?.geometry?.location?.lat,
+                     longitude: details?.geometry?.location?.lng,
+                   });
+                 }}
+                 query={{
+                   key: GOOGLE_MAPS_APIKEY,
+                   language: 'mn',
+                 }}
+                 fetchDetails={true}
+                 enablePoweredByContainer={false}
+                 styles={{
+                   container: {
+                     flex: 1,
+                     paddingRight: 32,
+                   },
+                   textInputContainer: {
+                     backgroundColor: 'transparent',
+                     borderTopWidth: 0,
+                     borderBottomWidth: 0,
+                     padding: 0,
+                     margin: 0,
+                     height: 40,
+                   },
+                   textInput: {
+                     backgroundColor: 'transparent',
+                     color: theme.colors.text,
+                     fontSize: 16,
+                     height: 40,
+                     padding: 0,
+                     margin: 0,
+                     fontWeight: '500',
+                   },
+                   listView: {
+                     position: 'absolute',
+                     top: 40,
+                     left: 0,
+                     right: 0,
+                     backgroundColor: theme.colors.surface,
+                     borderRadius: 8,
+                     elevation: 5,
+                     zIndex: 1000,
+                     marginTop: 4,
+                     borderWidth: 1,
+                     borderColor: theme.colors.border,
+                   },
+                   row: {
+                     backgroundColor: 'transparent',
+                     padding: 12,
+                     borderBottomWidth: 1,
+                     borderBottomColor: theme.colors.surfaceLight,
+                   },
+                   description: {
+                     color: theme.colors.text,
+                   },
+                   separator: {
+                     height: 0,
+                   },
+                 }}
+                 textInputProps={{
+                   placeholderTextColor: theme.colors.textSecondary,
+                   autoFocus: true,
+                 }}
                />
                <TouchableOpacity style={styles.mapIconBox} onPress={() => setShowMapPicker(true)}>
                  <MapPin size={16} color={theme.colors.white} />
@@ -343,7 +528,7 @@ const RideRequestScreen = () => {
 
       {/* Places List */}
       <ScrollView style={styles.placesList}>
-        {activeCategory === 'suggested' && SUGGESTED_PLACES.map(place => (
+        {activeCategory === 'suggested' && suggestedPlaces.map(place => (
           <TouchableOpacity key={place.id} style={styles.placeItem} onPress={() => handleSelectPlace(place)}>
             <View style={styles.placeIconCircle}>
               <MapPin size={20} color={theme.colors.text} />
@@ -356,7 +541,7 @@ const RideRequestScreen = () => {
           </TouchableOpacity>
         ))}
 
-        {activeCategory === 'nearby' && NEARBY_PLACES.map(place => (
+        {activeCategory === 'nearby' && nearbyPlaces.map(place => (
           <TouchableOpacity key={place.id} style={styles.placeItem} onPress={() => handleSelectPlace(place)}>
             <View style={styles.placeIconCircle}>
               <MapPin size={20} color={theme.colors.text} />
@@ -369,7 +554,7 @@ const RideRequestScreen = () => {
           </TouchableOpacity>
         ))}
 
-        {activeCategory === 'saved' && SAVED_PLACES.map(place => (
+        {activeCategory === 'saved' && savedPlaces.map(place => (
           <TouchableOpacity key={place.id} style={styles.placeItem} onPress={() => handleSelectPlace(place)}>
             <View style={styles.placeIconCircle}>
               <place.icon size={20} color={theme.colors.textSecondary} />
@@ -384,7 +569,7 @@ const RideRequestScreen = () => {
           </TouchableOpacity>
         ))}
 
-        {activeCategory === 'recent' && RECENT_PLACES.map(place => (
+        {activeCategory === 'recent' && recentPlaces.map(place => (
           <TouchableOpacity key={place.id} style={styles.placeItem} onPress={() => handleSelectPlace(place)}>
             <View style={styles.placeIconCircle}>
               <MapPin size={20} color={theme.colors.text} />
@@ -432,14 +617,11 @@ const RideRequestScreen = () => {
           <Marker coordinate={{ latitude: dropoff.latitude, longitude: dropoff.longitude }} />
         )}
         
-        {pickup && dropoff && (
-          <MapViewDirections
-            origin={{ latitude: pickup.latitude, longitude: pickup.longitude }}
-            destination={{ latitude: dropoff.latitude, longitude: dropoff.longitude }}
-            apikey={GOOGLE_MAPS_APIKEY}
+        {pickup && dropoff && routeCoordinates.length > 0 && (
+          <Polyline
+            coordinates={routeCoordinates}
             strokeWidth={4}
             strokeColor={theme.colors.primary}
-            onReady={handleDirectionsReady}
           />
         )}
       </MapView>
@@ -523,6 +705,7 @@ const styles = StyleSheet.create({
     shadowRadius: 8,
     elevation: 4,
     marginBottom: 20,
+    zIndex: 999,
   },
   inputRow: {
     flexDirection: 'row',
