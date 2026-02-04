@@ -75,7 +75,7 @@ const RideHistoryScreen = () => {
       <FlatList
         data={trips}
         renderItem={renderItem}
-        keyExtractor={(item) => item._id}
+        keyExtractor={(item: any) => item._id}
         contentContainerStyle={styles.list}
         refreshControl={
           <RefreshControl refreshing={loading} onRefresh={fetchHistory} tintColor={theme.colors.primary} />

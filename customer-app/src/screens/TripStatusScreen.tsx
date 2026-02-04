@@ -56,14 +56,14 @@ const TripStatusScreen = () => {
 
     socket.on('tripUpdated', handleTripUpdate);
     socket.on('driverAccepted', handleDriverAccepted);
-    socket.on('driverLocationUpdate', handleDriverLocation); // Assuming this event exists
+    socket.on('driverLocationUpdated', handleDriverLocation); 
     socket.on('tripCompleted', handleTripCompleted);
 
     return () => {
       if (socket) {
         socket.off('tripUpdated', handleTripUpdate);
         socket.off('driverAccepted', handleDriverAccepted);
-        socket.off('driverLocationUpdate', handleDriverLocation);
+        socket.off('driverLocationUpdated', handleDriverLocation);
         socket.off('tripCompleted', handleTripCompleted);
       }
     };
@@ -163,7 +163,7 @@ const TripStatusScreen = () => {
 
             {driverLocation && (
                  <Marker coordinate={{ latitude: driverLocation.lat, longitude: driverLocation.lng }}>
-                     <Image source={require('../assets/car-icon.png')} style={{ width: 30, height: 30, resizeMode: 'contain' }} />
+                     <Image source={require('../assets/tow-truck.png')} style={{ width: 40, height: 40, resizeMode: 'contain' }} />
                  </Marker>
             )}
 

@@ -23,6 +23,7 @@ export const rideService = {
     pickup: { address: string; lat: number; lng: number };
     dropoff: { address: string; lat: number; lng: number };
     vehicleType: string;
+    serviceType?: string;
     distance: number;
   }) => api.post('/rides/request', data),
   

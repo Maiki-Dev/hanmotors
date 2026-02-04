@@ -10,6 +10,7 @@ import { GOOGLE_MAPS_APIKEY } from '../config';
 import { rideService } from '../services/api';
 import { useSelector } from 'react-redux';
 import { RootState } from '../store';
+import { GooglePlacesAutocomplete } from 'react-native-google-places-autocomplete';
 
 type RootStackParamList = {
   RideRequest: { 
@@ -28,30 +29,12 @@ const RideRequestScreen = () => {
   
   const [pickup, setPickup] = useState(route.params?.pickup || null);
   const [dropoff, setDropoff] = useState<{ address: string; lat: number; lng: number } | null>(null);
-  const [dropoffAddress, setDropoffAddress] = useState('');
   
   const [distance, setDistance] = useState(0);
   const [duration, setDuration] = useState(0);
   const [price, setPrice] = useState(0);
   const [loading, setLoading] = useState(false);
   const [selectedVehicle, setSelectedVehicle] = useState('Sedan');
-
-  // Mock Dropoff selection (In real app, use Google Places Autocomplete)
-  const handleDropoffSubmit = async () => {
-    // Simulating geocoding for "Ulaanbaatar" or whatever user types
-    // For demo, let's just pick a random point near pickup
-    if (!pickup) return;
-    
-    // Just a mock coordinate offset for demo
-    const mockLat = pickup.lat + 0.02; 
-    const mockLng = pickup.lng + 0.02;
-    
-    setDropoff({
-      address: dropoffAddress || "Selected Destination",
-      lat: mockLat,
-      lng: mockLng
-    });
-  };
 
   const calculatePrice = (distKm: number) => {
     // Simple mock pricing
@@ -76,6 +59,7 @@ const RideRequestScreen = () => {
         pickup,
         dropoff,
         vehicleType: selectedVehicle,
+        serviceType: 'Tow',
         distance
       });
       
@@ -138,20 +122,63 @@ const RideRequestScreen = () => {
         
         <View style={styles.connector} />
         
-        <View style={styles.inputRow}>
+        <View style={[styles.inputRow, { zIndex: 1000 }]}>
           <MapPin color={theme.colors.error} size={20} />
-          <TextInput 
-            style={styles.input}
-            placeholder="Where to?"
-            placeholderTextColor={theme.colors.textSecondary}
-            value={dropoffAddress}
-            onChangeText={setDropoffAddress}
-            onSubmitEditing={handleDropoffSubmit}
+          <GooglePlacesAutocomplete
+            placeholder='Where to?'
+            onPress={(data, details = null) => {
+              if (details) {
+                setDropoff({
+                  address: data.description,
+                  lat: details.geometry.location.lat,
+                  lng: details.geometry.location.lng,
+                });
+              }
+            }}
+            query={{
+              key: GOOGLE_MAPS_APIKEY,
+              language: 'en',
+            }}
+            fetchDetails={true}
+            enablePoweredByContainer={false}
+            styles={{
+              container: {
+                flex: 1,
+              },
+              textInputContainer: {
+                backgroundColor: 'transparent',
+                marginLeft: theme.spacing.s,
+                borderTopWidth: 0,
+                borderBottomWidth: 0,
+                width: '100%',
+              },
+              textInput: {
+                backgroundColor: 'transparent',
+                height: 44,
+                borderRadius: 0,
+                paddingVertical: 0,
+                paddingHorizontal: 0,
+                fontSize: 16,
+                color: theme.colors.text,
+              },
+              listView: {
+                position: 'absolute',
+                top: 44,
+                left: -35, // Adjust to cover the icon space if needed, or keep it aligned
+                width: '120%', // Make it wider to cover
+                backgroundColor: theme.colors.surface,
+                borderRadius: 5,
+                elevation: 5,
+                zIndex: 1000,
+              },
+              row: {
+                backgroundColor: theme.colors.surface,
+              },
+              description: {
+                color: theme.colors.text,
+              }
+            }}
           />
-          {/* Mock button to simulate 'Done' on keyboard if needed */}
-          <TouchableOpacity onPress={handleDropoffSubmit}>
-             <Text style={{color: theme.colors.primary}}>Set</Text>
-          </TouchableOpacity>
         </View>
 
         {dropoff && (
@@ -164,12 +191,12 @@ const RideRequestScreen = () => {
                 <Text style={styles.fareValue}>{price.toLocaleString()}₮</Text>
               </View>
               <View>
-                 <Text style={styles.fareLabel}>Distance</Text>
-                 <Text style={styles.fareValue}>{distance.toFixed(1)} km</Text>
+                <Text style={styles.fareLabel}>Distance</Text>
+                <Text style={styles.fareValue}>{distance.toFixed(1)} km</Text>
               </View>
               <View>
-                 <Text style={styles.fareLabel}>Time</Text>
-                 <Text style={styles.fareValue}>{Math.ceil(duration)} min</Text>
+                <Text style={styles.fareLabel}>Time</Text>
+                <Text style={styles.fareValue}>{Math.ceil(duration)} min</Text>
               </View>
             </View>
 
@@ -228,6 +255,7 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.25,
     shadowRadius: 3.84,
     elevation: 5,
+    zIndex: 10, // Ensure it's above other elements if needed
   },
   inputRow: {
     flexDirection: 'row',
@@ -235,6 +263,7 @@ const styles = StyleSheet.create({
     backgroundColor: theme.colors.surfaceLight,
     padding: theme.spacing.m,
     borderRadius: theme.borderRadius.m,
+    marginBottom: 0,
   },
   inputText: {
     ...theme.typography.body,
@@ -263,6 +292,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     marginBottom: theme.spacing.l,
+    zIndex: -1, // Ensure fare container is behind autocomplete list
   },
   fareLabel: {
     ...theme.typography.caption,
@@ -277,6 +307,7 @@ const styles = StyleSheet.create({
     padding: theme.spacing.m,
     borderRadius: theme.borderRadius.m,
     alignItems: 'center',
+    zIndex: -1,
   },
   requestButtonText: {
     ...theme.typography.button,
