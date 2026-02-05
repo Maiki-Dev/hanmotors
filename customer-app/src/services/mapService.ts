@@ -2,16 +2,33 @@ import axios from 'axios';
 import { GOOGLE_MAPS_APIKEY } from '../config';
 
 // Using OSRM (Open Source Routing Machine) as a free alternative to Google Directions API
-const OSRM_API_URL = 'http://router.project-osrm.org/route/v1/driving';
+const OSRM_API_URL = 'https://router.project-osrm.org/route/v1/driving';
 
 export const mapService = {
   getRoute: async (
     origin: { latitude: number; longitude: number },
     destination: { latitude: number; longitude: number }
   ) => {
+    // Try Google Maps first as it's more reliable
+    try {
+      const url = `https://maps.googleapis.com/maps/api/directions/json?origin=${origin.latitude},${origin.longitude}&destination=${destination.latitude},${destination.longitude}&key=${GOOGLE_MAPS_APIKEY}&mode=driving`;
+      const response = await axios.get(url);
+      
+      if (response.data.routes && response.data.routes.length > 0) {
+          const route = response.data.routes[0];
+          return {
+              polyline: { encodedPolyline: route.overview_polyline.points },
+              distanceMeters: route.legs[0].distance.value,
+              duration: route.legs[0].duration.value
+          };
+      }
+    } catch (gError) {
+      console.error('Google Routing failed, trying OSRM:', gError);
+    }
+
+    // Fallback to OSRM
     try {
       // OSRM format: /driving/longitude,latitude;longitude,latitude
-      // Note: OSRM takes coordinates as "lng,lat"
       const url = `${OSRM_API_URL}/${origin.longitude},${origin.latitude};${destination.longitude},${destination.latitude}`;
       
       const response = await axios.get(url, {
@@ -25,7 +42,6 @@ export const mapService = {
       if (response.data && response.data.routes && response.data.routes.length > 0) {
         const route = response.data.routes[0];
         
-        // Transform OSRM response to match our expected format
         return {
           polyline: {
             encodedPolyline: route.geometry
@@ -36,23 +52,7 @@ export const mapService = {
       }
       return null;
     } catch (error) {
-      console.error('OSRM Routing failed, trying Google:', error);
-      // Fallback to Google Directions API
-      try {
-        const url = `https://maps.googleapis.com/maps/api/directions/json?origin=${origin.latitude},${origin.longitude}&destination=${destination.latitude},${destination.longitude}&key=${GOOGLE_MAPS_APIKEY}&mode=driving`;
-        const response = await axios.get(url);
-        
-        if (response.data.routes && response.data.routes.length > 0) {
-            const route = response.data.routes[0];
-            return {
-                polyline: { encodedPolyline: route.overview_polyline.points },
-                distanceMeters: route.legs[0].distance.value,
-                duration: route.legs[0].duration.value
-            };
-        }
-      } catch (gError) {
-        console.error('Google Routing also failed:', gError);
-      }
+      console.error('OSRM Routing also failed:', error);
       return null;
     }
   },

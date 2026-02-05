@@ -102,10 +102,19 @@ const TripStatusScreen = () => {
         }
     };
 
+    const handleTripStarted = (data: any) => {
+        if (data.tripId === trip._id) {
+            setTrip((prev: any) => ({ ...prev, status: 'in_progress' }));
+            // Optionally force fetch latest details
+            fetchTripDetails();
+        }
+    };
+
     socket.on('tripUpdated', handleTripUpdate);
     socket.on('driverAccepted', handleDriverAccepted);
     socket.on('driverLocationUpdated', handleDriverLocation); 
     socket.on('tripCompleted', handleTripCompleted);
+    socket.on('tripStarted', handleTripStarted);
 
     return () => {
       if (socket) {
@@ -113,6 +122,7 @@ const TripStatusScreen = () => {
         socket.off('driverAccepted', handleDriverAccepted);
         socket.off('driverLocationUpdated', handleDriverLocation);
         socket.off('tripCompleted', handleTripCompleted);
+        socket.off('tripStarted', handleTripStarted);
       }
     };
   }, [trip, user]);
