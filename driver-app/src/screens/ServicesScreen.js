@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, FlatList, TouchableOpacity, Image, Dimensions } from 'react-native';
+import { View, Text, StyleSheet, FlatList, TouchableOpacity, Image, Dimensions, Alert } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { theme } from '../constants/theme';
 import { Car, Truck, Package, Shield, Zap, Crown, Share2 } from 'lucide-react-native';
@@ -33,6 +33,14 @@ const SERVICES = [
     icon: Share2,
     color: '#8b5cf6',
     bgColor: '#f5f5f5'
+  },
+  {
+    id: 'taxi',
+    title: 'Такси',
+    subtitle: 'Хүн тээвэр',
+    icon: Car,
+    color: '#3b82f6',
+    bgColor: '#f5f5f5'
   }
 ];
 
@@ -59,24 +67,9 @@ export default function ServicesScreen() {
   };
 
   const getFilteredServices = () => {
-    // Always show 'share' option
+    // Only show 'share' option as requested
     const shareService = SERVICES.find(s => s.id === 'share');
-    let filtered = [];
-
-    if (!role) filtered = [];
-    else if (role === 'tow' || vehicleType === 'Tow') {
-      filtered = [SERVICES.find(s => s.id === 'towing')];
-    } else if (role === 'delivery' || vehicleType === 'Cargo') {
-      filtered = [SERVICES.find(s => s.id === 'delivery')];
-    } else {
-      // Taxi role: nothing specific since we deleted all taxi services
-      // Just show share
-      filtered = [];
-    }
-    
-    // Add Share option at the end if not already present
-    // Filter out undefined in case find fails
-    return [...filtered, shareService].filter(Boolean);
+    return [shareService].filter(Boolean);
   };
 
   const handlePress = (item) => {

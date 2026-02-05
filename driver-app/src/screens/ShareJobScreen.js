@@ -14,7 +14,7 @@ export default function ShareJobScreen({ navigation }) {
     dropoff: '',
     price: '',
     phone: '',
-    serviceType: 'taxi', // Default
+    serviceType: 'tow', // Default
     distance: '5' // Mock distance for now
   });
 
@@ -146,14 +146,6 @@ export default function ShareJobScreen({ navigation }) {
           <Text style={styles.label}>Төрөл</Text>
           <View style={styles.typeContainer}>
             <TouchableOpacity 
-              style={[styles.typeButton, form.serviceType === 'taxi' && styles.typeButtonActive]}
-              onPress={() => setForm({...form, serviceType: 'taxi'})}
-            >
-              <Car color={form.serviceType === 'taxi' ? theme.colors.background : theme.colors.text} size={24} />
-              <Text style={[styles.typeText, form.serviceType === 'taxi' && styles.typeTextActive]}>Taxi</Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity 
               style={[styles.typeButton, form.serviceType === 'tow' && styles.typeButtonActive]}
               onPress={() => setForm({...form, serviceType: 'tow'})}
             >
@@ -162,30 +154,26 @@ export default function ShareJobScreen({ navigation }) {
             </TouchableOpacity>
 
             <TouchableOpacity 
-              style={[styles.typeButton, form.serviceType === 'delivery' && styles.typeButtonActive]}
-              onPress={() => setForm({...form, serviceType: 'delivery'})}
+              style={[styles.typeButton, { opacity: 0.5 }]}
+              onPress={() => Alert.alert("Мэдэгдэл", "Удахгүй нээгдэнэ")}
             >
-              <Package color={form.serviceType === 'delivery' ? theme.colors.background : theme.colors.text} size={24} />
-              <Text style={[styles.typeText, form.serviceType === 'delivery' && styles.typeTextActive]}>Хүргэлт</Text>
+              <Car color={theme.colors.text} size={24} />
+              <Text style={styles.typeText}>Taxi</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity 
+              style={[styles.typeButton, { opacity: 0.5 }]}
+              onPress={() => Alert.alert("Мэдэгдэл", "Удахгүй нээгдэнэ")}
+            >
+              <Package color={theme.colors.text} size={24} />
+              <Text style={styles.typeText}>Хүргэлт</Text>
             </TouchableOpacity>
           </View>
         </View>
 
         <View style={styles.buttonContainer}>
             <TouchableOpacity 
-              style={[styles.submitButton, { backgroundColor: theme.colors.surface, borderWidth: 1, borderColor: theme.colors.primary, flex: 1, marginRight: 8 }]}
-              onPress={() => handleShare(true)} // Self
-              disabled={loading}
-            >
-              {loading ? (
-                <ActivityIndicator color={theme.colors.primary} />
-              ) : (
-                <Text style={[styles.submitButtonText, { color: theme.colors.primary }]}>ӨӨРӨӨ ЯВАХ</Text>
-              )}
-            </TouchableOpacity>
-
-            <TouchableOpacity 
-              style={[styles.submitButton, { flex: 1, marginLeft: 8, marginTop: 0 }]}
+              style={[styles.submitButton, { marginTop: 0, flex: 1 }]}
               onPress={() => handleShare(false)} // Share
               disabled={loading}
             >
