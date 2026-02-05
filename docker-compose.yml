@@ -25,6 +25,15 @@ services:
     networks:
       - xanmotors-network
 
+  admin-dashboard:
+    build: ./admin-dashboard
+    container_name: xanmotors_admin
+    restart: always
+    ports:
+      - "3000:80"
+    networks:
+      - xanmotors-network
+
 networks:
   xanmotors-network:
     driver: bridge
