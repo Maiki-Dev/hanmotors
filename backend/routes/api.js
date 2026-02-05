@@ -650,11 +650,22 @@ router.put('/admin/driver/:id', async (req, res) => {
   }
 });
 
-// Save Push Token
+// Save Push Token (Driver)
 router.post('/driver/push-token', async (req, res) => {
   const { driverId, token } = req.body;
   try {
     await Driver.findByIdAndUpdate(driverId, { pushToken: token });
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Save Push Token (Customer)
+router.post('/customer/push-token', async (req, res) => {
+  const { customerId, token } = req.body;
+  try {
+    await require('../models/Customer').findByIdAndUpdate(customerId, { pushToken: token });
     res.json({ success: true });
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -921,6 +932,20 @@ router.post('/trip/:id/accept', async (req, res) => {
     // Also emit to other drivers to remove the request from their screen if they have it open
     io.emit('jobTaken', { tripId: trip._id, driverId });
 
+    // Notify Customer via Push
+    if (trip.customer) {
+        require('../models/Customer').findById(trip.customer).then(customer => {
+            if (customer && customer.pushToken) {
+                sendPushNotification(
+                    customer.pushToken,
+                    "Жолооч олдлоо! 🚕",
+                    `Жолооч ${driver.name} таны дуудлагыг хүлээж авлаа.`,
+                    { tripId: trip._id, status: 'accepted' }
+                );
+            }
+        });
+    }
+
     res.json(trip);
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -936,6 +961,21 @@ router.post('/trip/:id/start', async (req, res) => {
     
     const io = req.app.get('io');
     io.emit('tripStarted', { tripId: trip._id });
+
+    // Notify Customer via Push
+    if (trip.customer) {
+        require('../models/Customer').findById(trip.customer).then(customer => {
+            if (customer && customer.pushToken) {
+                sendPushNotification(
+                    customer.pushToken,
+                    "Аялал эхэллээ 🏁",
+                    "Таны аялал эхэллээ. Сайхан аялаарай!",
+                    { tripId: trip._id, status: 'in_progress' }
+                );
+            }
+        });
+    }
+
     res.json(trip);
   } catch (err) {
     res.status(500).json({ error: err.message });
