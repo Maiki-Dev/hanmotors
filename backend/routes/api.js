@@ -701,6 +701,284 @@ router.post('/customer/push-token', async (req, res) => {
   }
 });
 
+// Admin Get All Drivers
+router.get('/admin/drivers', async (req, res) => {
+  if (isOffline()) {
+    return res.json(mockDrivers);
+  }
+  try {
+    const drivers = await Driver.find().sort({ createdAt: -1 });
+    res.json(drivers);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Admin Update Driver
+router.put('/admin/driver/:id', async (req, res) => {
+  if (isOffline()) {
+    const driver = mockDrivers.find(d => d._id === req.params.id);
+    if (driver) {
+      Object.assign(driver, req.body);
+      return res.json(driver);
+    }
+    return res.status(404).json({ message: 'Driver not found' });
+  }
+  try {
+    const driver = await Driver.findByIdAndUpdate(req.params.id, req.body, { new: true });
+    if (!driver) return res.status(404).json({ message: 'Driver not found' });
+    res.json(driver);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Admin Get Documents (Drivers with docs)
+router.get('/admin/documents', async (req, res) => {
+    if (isOffline()) {
+        return res.json(mockDrivers);
+    }
+    try {
+        const drivers = await Driver.find().select('name phone vehicleType documents createdAt status');
+        res.json(drivers);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// Admin Update Document Status
+router.post('/admin/documents/:id/:docType/status', async (req, res) => {
+    const { id, docType } = req.params;
+    const { status } = req.body;
+
+    if (isOffline()) {
+        const driver = mockDrivers.find(d => d._id === id);
+        if (driver && driver.documents) {
+             if (!driver.documents[docType]) driver.documents[docType] = {};
+             driver.documents[docType].status = status;
+             return res.json(driver);
+        }
+        return res.status(404).json({ message: 'Driver not found' });
+    }
+
+    try {
+        const updateField = {};
+        updateField[`documents.${docType}.status`] = status;
+        
+        const driver = await Driver.findByIdAndUpdate(id, { $set: updateField }, { new: true });
+        
+        if (!driver) return res.status(404).json({ message: 'Driver not found' });
+        
+        res.json(driver);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// Admin Stats
+router.get('/admin/stats', async (req, res) => {
+    if (isOffline()) {
+        return res.json({
+            activeDrivers: 12,
+            onlineDrivers: 5,
+            todayRequests: 25,
+            totalRevenue: 1500000
+        });
+    }
+    try {
+        const { startDate, endDate } = req.query;
+        const start = startDate ? new Date(startDate) : new Date(0);
+        const end = endDate ? new Date(endDate) : new Date();
+        end.setHours(23, 59, 59, 999);
+
+        const activeDrivers = await Driver.countDocuments({ status: 'active' });
+        const onlineDrivers = await Driver.countDocuments({ isOnline: true });
+        
+        // Today's requests
+        const todayStart = new Date();
+        todayStart.setHours(0,0,0,0);
+        const todayRequests = await Trip.countDocuments({ createdAt: { $gte: todayStart } });
+
+        // Total Revenue (from completed trips)
+        const revenueAgg = await Trip.aggregate([
+            { $match: { 
+                status: 'completed',
+                createdAt: { $gte: start, $lte: end }
+            }},
+            { $group: { _id: null, total: { $sum: "$price" } } }
+        ]);
+        const totalRevenue = revenueAgg.length > 0 ? revenueAgg[0].total : 0;
+
+        res.json({
+            activeDrivers,
+            onlineDrivers,
+            todayRequests,
+            totalRevenue
+        });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// Admin Revenue Chart (Monthly)
+router.get('/admin/revenue-chart', async (req, res) => {
+    if (isOffline()) {
+        return res.json([
+            { name: 'Jan', total: 100000 },
+            { name: 'Feb', total: 150000 },
+        ]);
+    }
+    try {
+        const currentYear = new Date().getFullYear();
+        const revenue = await Trip.aggregate([
+            { $match: { 
+                status: 'completed',
+                createdAt: { $gte: new Date(`${currentYear}-01-01`), $lte: new Date(`${currentYear}-12-31`) }
+            }},
+            { $group: { 
+                _id: { $month: "$createdAt" }, 
+                total: { $sum: "$price" } 
+            }},
+            { $sort: { _id: 1 } }
+        ]);
+
+        const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+        const data = months.map((m, index) => {
+            const found = revenue.find(r => r._id === (index + 1));
+            return { name: m, total: found ? found.total : 0 };
+        });
+
+        res.json(data);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// Admin Transactions
+router.get('/admin/transactions', async (req, res) => {
+    if (isOffline()) {
+        return res.json({ transactions: [], stats: { totalRevenue: 0, totalWalletDeposits: 0, totalWalletDebits: 0, totalCurrentBalance: 0, transactionCount: 0 } });
+    }
+    try {
+        const { startDate, endDate } = req.query;
+        const start = startDate ? new Date(startDate) : new Date(0);
+        const end = endDate ? new Date(endDate) : new Date();
+        end.setHours(23, 59, 59, 999);
+
+        const drivers = await Driver.find({ 
+            'wallet.transactions.date': { $gte: start, $lte: end } 
+        }).select('name email wallet');
+
+        let transactions = [];
+        let totalWalletDeposits = 0;
+        let totalWalletDebits = 0;
+
+        drivers.forEach(d => {
+            if (d.wallet && d.wallet.transactions) {
+                d.wallet.transactions.forEach(t => {
+                    if (new Date(t.date) >= start && new Date(t.date) <= end) {
+                        transactions.push({
+                            date: t.date,
+                            driver: d.name,
+                            email: d.email,
+                            type: t.type,
+                            amount: t.amount,
+                            description: t.description,
+                            status: 'completed'
+                        });
+                        if (t.type === 'credit') totalWalletDeposits += t.amount;
+                        if (t.type === 'debit') totalWalletDebits += t.amount;
+                    }
+                });
+            }
+        });
+
+        transactions.sort((a, b) => new Date(b.date) - new Date(a.date));
+
+        // Total Revenue (from completed trips)
+        const revenueAgg = await Trip.aggregate([
+            { $match: { 
+                status: 'completed',
+                createdAt: { $gte: start, $lte: end }
+            }},
+            { $group: { _id: null, total: { $sum: "$price" } } }
+        ]);
+        const totalRevenue = revenueAgg.length > 0 ? revenueAgg[0].total : 0;
+
+        // Total Current Balance of all drivers
+        const balanceAgg = await Driver.aggregate([
+            { $group: { _id: null, total: { $sum: "$wallet.balance" } } }
+        ]);
+        const totalCurrentBalance = balanceAgg.length > 0 ? balanceAgg[0].total : 0;
+
+        res.json({ 
+            transactions,
+            stats: {
+                totalRevenue,
+                totalWalletDeposits,
+                totalWalletDebits,
+                totalCurrentBalance,
+                transactionCount: transactions.length
+            }
+        });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// --- PRICING & SERVICES ---
+
+// Get Pricing Rules
+router.get('/admin/pricing', async (req, res) => {
+    try {
+        const rules = await Pricing.find();
+        res.json(rules);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// Update Pricing Rule
+router.put('/admin/pricing/:id', async (req, res) => {
+    try {
+        const rule = await Pricing.findByIdAndUpdate(req.params.id, req.body, { new: true });
+        res.json(rule);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// Get Additional Services
+router.get('/admin/additional-services', async (req, res) => {
+    try {
+        const services = await AdditionalService.find();
+        res.json(services);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// Add Additional Service
+router.post('/admin/additional-services', async (req, res) => {
+    try {
+        const service = new AdditionalService(req.body);
+        await service.save();
+        res.json(service);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// Delete Additional Service
+router.delete('/admin/additional-services/:id', async (req, res) => {
+    try {
+        await AdditionalService.findByIdAndDelete(req.params.id);
+        res.json({ message: 'Deleted' });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
 // Admin Delete Driver
 router.delete('/admin/driver/:id', async (req, res) => {
   if (isOffline()) {
