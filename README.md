@@ -1,4 +1,4 @@
-# Xan Motors - Full Stack Ride Hailing System
+# Khan Motors - Full Stack project by Ankhbayar Zoltuya
 
 This project contains the full source code for Xan Motors, including a Backend API, Admin Dashboard, and Driver Mobile App.
 
