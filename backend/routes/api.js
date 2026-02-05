@@ -1655,14 +1655,16 @@ router.post('/driver/trip/share', async (req, res) => {
         drivers.forEach(driver => {
             // Check Role Compatibility via Vehicle Type
             const vehicleType = driver.vehicleType || 'Ride';
+            const role = driver.role || 'taxi'; // Added role support
             let isCompatible = false;
             
             if (trip.serviceType === 'Tow' || trip.serviceType === 'sos') {
-                isCompatible = (vehicleType === 'Tow');
+                isCompatible = (vehicleType === 'Tow' || vehicleType === 'SOS' || vehicleType === 'sos' || role === 'tow');
             } else if (trip.serviceType === 'delivery') {
-                isCompatible = (vehicleType === 'Cargo');
+                isCompatible = (vehicleType === 'Cargo' || vehicleType === 'Delivery' || role === 'delivery');
             } else {
-                isCompatible = (vehicleType === 'Ride');
+                // Taxi/Ride
+                isCompatible = (vehicleType === 'Ride' || vehicleType === 'Taxi' || vehicleType === 'Sedan' || role === 'taxi');
             }
 
             if (isCompatible) {
@@ -1673,7 +1675,7 @@ router.post('/driver/trip/share', async (req, res) => {
                      sendPushNotification(
                          driver.pushToken, 
                          "🔔 Жолооч дуудлага хуваалцлаа!", 
-                         `${trip.pickupLocation?.address} -> ${trip.dropoffLocation?.address}`,
+                         `${trip.pickupLocation?.address || 'Хаяг тодорхойгүй'} -> ${trip.dropoffLocation?.address || 'Хаяг тодорхойгүй'}`,
                          { tripId: trip._id }
                      );
                 }
