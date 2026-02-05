@@ -15,6 +15,7 @@
       "**/*"
     ],
     "ios": {
+      "bundleIdentifier": "com.hanmotors.customer",
       "supportsTablet": true,
       "infoPlist": {
         "NSLocationWhenInUseUsageDescription": "This app needs access to your location to find nearby drivers and track your ride.",
@@ -23,7 +24,8 @@
         "NSLocationUsageDescription": "This app needs access to your location to find nearby drivers and track your ride.",
         "UIBackgroundModes": [
           "location",
-          "fetch"
+          "fetch",
+          "remote-notification"
         ]
       }
     },
@@ -47,6 +49,7 @@
       }
     },
     "plugins": [
+      "expo-notifications",
       [
         "expo-location",
         {

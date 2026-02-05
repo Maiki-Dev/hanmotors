@@ -4,6 +4,7 @@ import { RootState } from '../store';
 import { initSocket, disconnectSocket, socket } from '../services/socket';
 import * as Notifications from 'expo-notifications';
 import { Alert, Platform } from 'react-native';
+import { API_URL } from '../config';
 
 // Configure notifications
 Notifications.setNotificationHandler({
@@ -21,7 +22,9 @@ const NotificationManager = () => {
   const responseListener = useRef<any>(null);
 
   useEffect(() => {
-    registerForPushNotificationsAsync();
+    if (user?._id) {
+        registerForPushNotificationsAsync(user._id);
+    }
 
     notificationListener.current = Notifications.addNotificationReceivedListener(notification => {
       // Handle notification received while app is foreground
@@ -103,7 +106,7 @@ const NotificationManager = () => {
   return null; // Invisible component
 };
 
-async function registerForPushNotificationsAsync() {
+async function registerForPushNotificationsAsync(userId: string) {
   let token;
 
   if (Platform.OS === 'android') {
@@ -118,16 +121,44 @@ async function registerForPushNotificationsAsync() {
   const { status: existingStatus } = await Notifications.getPermissionsAsync();
   let finalStatus = existingStatus;
   if (existingStatus !== 'granted') {
-    const { status } = await Notifications.requestPermissionsAsync();
+    const { status } = await Notifications.requestPermissionsAsync({
+        ios: {
+            allowAlert: true,
+            allowBadge: true,
+            allowSound: true,
+        },
+    });
     finalStatus = status;
   }
   
   if (finalStatus !== 'granted') {
-    // alert('Failed to get push token for push notification!');
+    console.log('Failed to get push token for push notification!');
     return;
   }
-  // token = (await Notifications.getExpoPushTokenAsync()).data;
-  // console.log(token);
+  
+  try {
+      // Using specific projectId if known, or let it infer from app config
+      const tokenData = await Notifications.getExpoPushTokenAsync({
+        projectId: '82d34329-fe87-437d-a5ac-744a6b1fd487' 
+      });
+      token = tokenData.data;
+      console.log('Expo Push Token:', token);
+
+      if (token && userId) {
+        await fetch(`${API_URL}/api/customer/push-token`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+                customerId: userId,
+                token: token,
+            }),
+        });
+      }
+  } catch (error) {
+      console.error('Error getting push token:', error);
+  }
 
   return token;
 }

@@ -20,15 +20,55 @@ const NotificationManager = ({ driverId }) => {
   useEffect(() => {
     if (!driverId) return;
 
-    // Register for push notifications (Android channel)
-    if (Platform.OS === 'android') {
-      Notifications.setNotificationChannelAsync('default', {
-        name: 'default',
-        importance: Notifications.AndroidImportance.MAX,
-        vibrationPattern: [0, 250, 250, 250],
-        lightColor: '#FF231F7C',
-      });
-    }
+    // Register for push notifications
+    const registerForPushNotifications = async () => {
+      try {
+        if (Platform.OS === 'android') {
+          await Notifications.setNotificationChannelAsync('default', {
+            name: 'default',
+            importance: Notifications.AndroidImportance.MAX,
+            vibrationPattern: [0, 250, 250, 250],
+            lightColor: '#FF231F7C',
+          });
+        }
+
+        const { status: existingStatus } = await Notifications.getPermissionsAsync();
+        let finalStatus = existingStatus;
+        if (existingStatus !== 'granted') {
+          const { status } = await Notifications.requestPermissionsAsync({
+            ios: {
+              allowAlert: true,
+              allowBadge: true,
+              allowSound: true,
+            },
+          });
+          finalStatus = status;
+        }
+
+        if (finalStatus !== 'granted') {
+          console.log('Push notification permission denied');
+          return;
+        }
+
+        // Get Expo Push Token
+        const tokenData = await Notifications.getExpoPushTokenAsync({
+            projectId: '82d34329-fe87-437d-a5ac-744a6b1fd487'
+        });
+        const token = tokenData.data;
+        console.log('Expo Push Token:', token);
+
+        // Send token to backend
+        await fetch(`${API_URL}/api/driver/push-token`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ driverId, token }),
+        });
+      } catch (error) {
+        console.error('Error registering for push notifications:', error);
+      }
+    };
+
+    registerForPushNotifications();
 
     // Connect Socket
     socketRef.current = io(API_URL, {

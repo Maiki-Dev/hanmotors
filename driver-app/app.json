@@ -13,6 +13,7 @@
       "backgroundColor": "#ffffff"
     },
     "ios": {
+      "bundleIdentifier": "com.hanmotors.driver",
       "supportsTablet": true,
       "infoPlist": {
         "NSLocationWhenInUseUsageDescription": "This app needs access to your location to show available jobs nearby.",
@@ -23,8 +24,7 @@
         "UIBackgroundModes": [
           "location",
           "fetch",
-          "location",
-          "fetch"
+          "remote-notification"
         ],
         "NSAppTransportSecurity": {
           "NSAllowsArbitraryLoads": true
