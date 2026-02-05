@@ -4,42 +4,48 @@ import Svg, { Path, Circle, Defs, RadialGradient, LinearGradient, Stop, G, Rect,
 const CarBase = () => (
   <G>
     {/* Shadow */}
-    <Ellipse cx="25" cy="25" rx="18" ry="10" fill="#000" fillOpacity="0.3" />
+    <Rect x="12" y="4" width="26" height="44" rx="8" fill="#000" fillOpacity="0.2" transform="translate(2, 2)" />
 
-    {/* Car Body - Main Chassis */}
+    {/* Wheels (Black rectangles peeking out) */}
+    <Rect x="10" y="8" width="4" height="8" rx="1" fill="#111" />
+    <Rect x="36" y="8" width="4" height="8" rx="1" fill="#111" />
+    <Rect x="10" y="34" width="4" height="8" rx="1" fill="#111" />
+    <Rect x="36" y="34" width="4" height="8" rx="1" fill="#111" />
+
+    {/* Main Body (Yellow Sedan) */}
     <Path
-      d="M12,25 C12,15 18,10 25,10 C32,10 38,15 38,25 C38,35 32,40 25,40 C18,40 12,35 12,25 Z"
+      d="M14,10 C14,6 18,4 25,4 C32,4 36,6 36,10 L36,40 C36,44 32,46 25,46 C18,46 14,44 14,40 Z"
       fill="#FFD400"
       stroke="#E6B800"
       strokeWidth="1"
     />
 
-    {/* Hood/Roof styling for 3D effect */}
-    <Path
-      d="M15,25 C15,18 19,13 25,13 C31,13 35,18 35,25 C35,32 31,37 25,37 C19,37 15,32 15,25 Z"
-      fill="#FFEA00" 
-      fillOpacity="0.5"
-    />
-
     {/* Windshield (Front) */}
     <Path
-      d="M16,22 C16,22 18,18 25,18 C32,18 34,22 34,22 L34,24 L16,24 Z"
-      fill="#1A1A1A"
+      d="M15,14 L35,14 L34,22 L16,22 Z"
+      fill="#222"
     />
+
+    {/* Roof (Yellow) */}
+    <Rect x="15" y="22" width="20" height="14" fill="#FFEA00" />
 
     {/* Rear Window */}
     <Path
-      d="M17,28 C17,28 19,32 25,32 C31,32 33,28 33,28 L33,27 L17,27 Z"
-      fill="#1A1A1A"
+      d="M16,36 L34,36 L35,39 L15,39 Z"
+      fill="#222"
     />
 
-    {/* Headlights */}
-    <Path d="M14,19 Q12,21 14,23" stroke="#FFF" strokeWidth="2" strokeLinecap="round" />
-    <Path d="M36,19 Q38,21 36,23" stroke="#FFF" strokeWidth="2" strokeLinecap="round" />
+    {/* Headlights (Front) */}
+    <Path d="M15,5 Q15,7 18,7 L20,7 Q20,5 18,5 Z" fill="#FFF" />
+    <Path d="M35,5 Q35,7 32,7 L30,7 Q30,5 32,5 Z" fill="#FFF" />
 
-    {/* Taillights */}
-    <Path d="M15,35 Q13,37 15,39" stroke="#FF0000" strokeWidth="2" strokeLinecap="round" />
-    <Path d="M35,35 Q37,37 35,39" stroke="#FF0000" strokeWidth="2" strokeLinecap="round" />
+    {/* Taillights (Rear) */}
+    <Rect x="15" y="44" width="6" height="2" rx="1" fill="#D32F2F" />
+    <Rect x="29" y="44" width="6" height="2" rx="1" fill="#D32F2F" />
+    
+    {/* Side Mirrors */}
+    <Path d="M14,14 L12,12 L12,16 Z" fill="#FFD400" />
+    <Path d="M36,14 L38,12 L38,16 Z" fill="#FFD400" />
   </G>
 );
 
@@ -52,12 +58,11 @@ export const CarIdle = ({ width = 50, height = 50 }) => (
 export const CarMoving = ({ width = 50, height = 50 }) => (
   <Svg width={width} height={height} viewBox="0 0 50 50">
     {/* Speed Lines */}
-    <Path d="M10,42 L5,45" stroke="#CCC" strokeWidth="1" strokeOpacity="0.6" strokeLinecap="round" />
-    <Path d="M40,42 L45,45" stroke="#CCC" strokeWidth="1" strokeOpacity="0.6" strokeLinecap="round" />
-    <Path d="M25,44 L25,48" stroke="#CCC" strokeWidth="1" strokeOpacity="0.6" strokeLinecap="round" />
+    <Path d="M12,48 L8,50" stroke="#AAA" strokeWidth="1" strokeLinecap="round" />
+    <Path d="M38,48 L42,50" stroke="#AAA" strokeWidth="1" strokeLinecap="round" />
+    <Path d="M25,48 L25,52" stroke="#AAA" strokeWidth="1" strokeLinecap="round" />
     
-    {/* Slight forward tilt simulated by shifting body up/forward relative to shadow */}
-    <G transform="translate(0, -2)">
+    <G transform="translate(0, -1)">
        <CarBase />
     </G>
   </Svg>
@@ -66,16 +71,14 @@ export const CarMoving = ({ width = 50, height = 50 }) => (
 export const CarSelected = ({ width = 60, height = 60 }) => (
   <Svg width={width} height={height} viewBox="0 0 60 60">
     <Defs>
-      <RadialGradient id="glow" cx="30" cy="30" rx="25" ry="25" fx="30" fy="30" gradientUnits="userSpaceOnUse">
-        <Stop offset="0" stopColor="#FFD400" stopOpacity="0.4" />
+      <RadialGradient id="glow" cx="30" cy="30" rx="28" ry="28" fx="30" fy="30" gradientUnits="userSpaceOnUse">
+        <Stop offset="0.5" stopColor="#FFD400" stopOpacity="0.3" />
         <Stop offset="1" stopColor="#FFD400" stopOpacity="0" />
       </RadialGradient>
     </Defs>
     
-    {/* Glow Halo */}
-    <Circle cx="30" cy="30" r="25" fill="url(#glow)" />
+    <Circle cx="30" cy="30" r="28" fill="url(#glow)" />
     
-    {/* Centered Car (Offset to center in 60x60) */}
     <G transform="translate(5, 5)">
       <CarBase />
     </G>
