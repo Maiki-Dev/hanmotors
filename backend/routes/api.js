@@ -1082,7 +1082,7 @@ router.post('/trip/request', async (req, res) => {
          const dLng = loc.longitude || loc.lng;
          
          const dist = getDistance(pickupLat, pickupLng, dLat, dLng);
-         if (dist <= 5) {
+         if (dist <= 10) { // Increased to 10km
             nearbyDriverIds.push(driverId);
          }
       }
@@ -1095,18 +1095,19 @@ router.post('/trip/request', async (req, res) => {
             
             drivers.forEach(driver => {
                 const vehicleType = driver.vehicleType || 'Ride';
+                const role = driver.role || 'taxi'; 
                 let isCompatible = false;
 
                 if (trip.serviceType === 'Tow' || trip.serviceType === 'sos') {
-                    isCompatible = (vehicleType === 'Tow');
+                    isCompatible = (vehicleType === 'Tow' || vehicleType === 'SOS' || vehicleType === 'sos' || role === 'tow');
                 } else if (trip.serviceType === 'delivery') {
-                    isCompatible = (vehicleType === 'Cargo');
+                    isCompatible = (vehicleType === 'Cargo' || vehicleType === 'Delivery' || role === 'delivery');
                 } else {
-                    isCompatible = (vehicleType === 'Ride');
+                    isCompatible = (vehicleType === 'Ride' || vehicleType === 'Taxi' || vehicleType === 'Sedan' || role === 'taxi');
                 }
 
                 if (isCompatible) {
-                    console.log(` -> Match: Driver ${driver._id} (${vehicleType}) is compatible.`);
+                    console.log(` -> Match: Driver ${driver._id} (${vehicleType}/${role}) is compatible.`);
                     io.to(`driver_${driver._id}`).emit('newJobRequest', trip);
                     matchedDrivers++;
 
@@ -1176,7 +1177,7 @@ router.post('/trip/:id/confirm-payment', async (req, res) => {
     let matchedDrivers = 0;
     const nearbyDriverIds = [];
 
-    console.log(`[Trip Paid] Finding drivers near ${pickupLat}, ${pickupLng} within 5km...`);
+    console.log(`[Trip Paid] Finding drivers near ${pickupLat}, ${pickupLng} within 10km...`);
 
     // 1. Identify drivers within range
     Object.keys(driverLocations).forEach(driverId => {
@@ -1186,7 +1187,7 @@ router.post('/trip/:id/confirm-payment', async (req, res) => {
          const dLng = loc.longitude || loc.lng;
          
          const dist = getDistance(pickupLat, pickupLng, dLat, dLng);
-         if (dist <= 5) {
+         if (dist <= 10) { // Increased to 10km
             nearbyDriverIds.push(driverId);
          }
       }
@@ -1199,22 +1200,23 @@ router.post('/trip/:id/confirm-payment', async (req, res) => {
             
             drivers.forEach(driver => {
                 const vehicleType = driver.vehicleType || 'Ride'; // Default to Ride (Taxi)
+                const role = driver.role || 'taxi';
                 let isCompatible = false;
 
                 // Compatibility Logic
                 // Tow requests -> Tow vehicle drivers only
                 if (trip.serviceType === 'Tow' || trip.serviceType === 'sos') {
-                    isCompatible = (vehicleType === 'Tow');
+                     isCompatible = (vehicleType === 'Tow' || vehicleType === 'SOS' || vehicleType === 'sos' || role === 'tow');
                 } else if (trip.serviceType === 'delivery') {
                     // Delivery -> Cargo
-                    isCompatible = (vehicleType === 'Cargo');
+                    isCompatible = (vehicleType === 'Cargo' || vehicleType === 'Delivery' || role === 'delivery');
                 } else {
                     // All other requests (Taxi) -> Ride vehicle drivers only
-                    isCompatible = (vehicleType === 'Ride');
+                    isCompatible = (vehicleType === 'Ride' || vehicleType === 'Taxi' || vehicleType === 'Sedan' || role === 'taxi');
                 }
 
                 if (isCompatible) {
-                    console.log(` -> Match: Driver ${driver._id} (${vehicleType}) is compatible.`);
+                    console.log(` -> Match: Driver ${driver._id} (${vehicleType}/${role}) is compatible.`);
                     io.to(`driver_${driver._id}`).emit('newJobRequest', trip);
                     matchedDrivers++;
 
@@ -2260,7 +2262,8 @@ router.post('/rides/request', async (req, res) => {
     let matchedDrivers = 0;
     const nearbyDriverIds = [];
 
-    console.log(`[Trip Request /rides/request] Finding drivers near ${pickupLat}, ${pickupLng} within 5km...`);
+    console.log(`[Trip Request /rides/request] Finding drivers near ${pickupLat}, ${pickupLng} within 10km...`);
+    console.log(`[Debug] ServiceType: ${trip.serviceType}, Active Drivers: ${Object.keys(driverLocations).length}`);
 
     // 1. Identify drivers within range
     Object.keys(driverLocations).forEach(driverId => {
@@ -2270,7 +2273,9 @@ router.post('/rides/request', async (req, res) => {
          const dLng = loc.longitude || loc.lng;
          
          const dist = getDistance(pickupLat, pickupLng, dLat, dLng);
-         if (dist <= 5) {
+         console.log(`[Debug] Driver ${driverId} distance: ${dist.toFixed(2)}km`);
+         
+         if (dist <= 10) { // Increased to 10km for easier testing
             nearbyDriverIds.push(driverId);
          }
       }
@@ -2283,18 +2288,22 @@ router.post('/rides/request', async (req, res) => {
             
             drivers.forEach(driver => {
                 const vehicleType = driver.vehicleType || 'Ride';
+                const role = driver.role || 'taxi'; // Support role-based dispatch
                 let isCompatible = false;
 
+                // Enhanced matching logic
                 if (trip.serviceType === 'Tow' || trip.serviceType === 'sos') {
-                    isCompatible = (vehicleType === 'Tow');
+                    // SOS requests should go to Tow drivers, SOS drivers, and anyone with 'tow' role
+                    isCompatible = (vehicleType === 'Tow' || vehicleType === 'SOS' || vehicleType === 'sos' || role === 'tow');
                 } else if (trip.serviceType === 'delivery') {
-                    isCompatible = (vehicleType === 'Cargo');
+                    isCompatible = (vehicleType === 'Cargo' || vehicleType === 'Delivery' || role === 'delivery');
                 } else {
-                    isCompatible = (vehicleType === 'Ride');
+                    // Taxi/Ride
+                    isCompatible = (vehicleType === 'Ride' || vehicleType === 'Taxi' || vehicleType === 'Sedan' || role === 'taxi');
                 }
 
                 if (isCompatible) {
-                    console.log(` -> Match: Driver ${driver._id} (${vehicleType}) is compatible.`);
+                    console.log(` -> Match: Driver ${driver._id} (${vehicleType}/${role}) is compatible.`);
                     io.to(`driver_${driver._id}`).emit('newJobRequest', trip);
                     matchedDrivers++;
 
@@ -2306,11 +2315,15 @@ router.post('/rides/request', async (req, res) => {
                             { tripId: trip._id }
                         );
                     }
+                } else {
+                    console.log(` -> Skip: Driver ${driver._id} (${vehicleType}/${role}) not compatible with ${trip.serviceType}`);
                 }
             });
         } catch (err) {
             console.error("Error filtering drivers by role:", err);
         }
+    } else {
+        console.log("[Debug] No drivers found within range.");
     }
 
     // Always notify admin
