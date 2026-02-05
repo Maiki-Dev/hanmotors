@@ -4,6 +4,7 @@ services:
   mongo:
     image: mongo:latest
     container_name: khanmotors_mongo
+    restart: always
     ports:
       - "27017:27017"
     volumes:
