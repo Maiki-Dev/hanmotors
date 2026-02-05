@@ -22,6 +22,7 @@ const TripSchema = new mongoose.Schema({
   serviceType: { type: String, required: true },
   vehicleModel: String,
   distance: Number,
+  duration: Number, // Estimated duration in minutes
   traveledDistance: { type: Number, default: 0 },
   additionalServices: [{
     name: String,

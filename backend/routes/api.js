@@ -950,6 +950,11 @@ router.post('/trip/:id/complete', async (req, res) => {
       console.log(`[Trip Complete] New Price: ${newPrice} (Old: ${trip.price})`);
       trip.price = newPrice;
       trip.distance = dist; // Update actual distance
+      trip.traveledDistance = dist; // Update traveled distance to match final
+    }
+
+    if (duration) {
+       trip.duration = Math.round(Number(duration) / 60); // Convert seconds to minutes
     }
 
     trip.status = 'completed';

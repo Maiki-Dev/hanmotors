@@ -153,6 +153,7 @@ const TripManagement = () => {
     customerName: '',
     customerPhone: '',
     distance: '',
+    duration: '',
     additionalServices: []
   });
 
@@ -199,20 +200,20 @@ const TripManagement = () => {
         
         // Auto select first route's distance
         if (routes.length > 0) {
-          setNewTrip(prev => ({ ...prev, distance: routes[0].distance }));
+          setNewTrip(prev => ({ ...prev, distance: routes[0].distance, duration: routes[0].duration }));
         }
       } else {
         // Fallback to Haversine
         const dist = getDistanceFromLatLonInKm(start.lat, start.lng, end.lat, end.lng);
         setRouteOptions([]);
-        setNewTrip(prev => ({ ...prev, distance: dist.toFixed(1) }));
+        setNewTrip(prev => ({ ...prev, distance: dist.toFixed(1), duration: Math.round(dist * 2) }));
       }
     } catch (error) {
       console.error("Error fetching routes:", error);
       // Fallback to Haversine
       const dist = getDistanceFromLatLonInKm(start.lat, start.lng, end.lat, end.lng);
       setRouteOptions([]);
-      setNewTrip(prev => ({ ...prev, distance: dist.toFixed(1) }));
+      setNewTrip(prev => ({ ...prev, distance: dist.toFixed(1), duration: Math.round(dist * 2) }));
     }
   };
 
@@ -301,6 +302,7 @@ const TripManagement = () => {
         dropoffLocation: newTrip.dropoffLocation,
         price: Number(newTrip.price),
         distance: Number(newTrip.distance),
+        duration: Number(newTrip.duration),
         serviceType: newTrip.serviceType,
         vehicleModel: newTrip.vehicleModel,
         hasDamage: newTrip.hasDamage === 'true' || newTrip.hasDamage === true,
@@ -452,6 +454,9 @@ const TripManagement = () => {
                     <TableHead>ID</TableHead>
                     <TableHead>Байршил</TableHead>
                     <TableHead>Төрөл</TableHead>
+                    <TableHead>KM</TableHead>
+                    <TableHead>Хугацаа</TableHead>
+                    <TableHead>Үнэ</TableHead>
                     <TableHead>Жолооч</TableHead>
                     <TableHead>Огноо</TableHead>
                     <TableHead>Төлөв</TableHead>
@@ -461,7 +466,7 @@ const TripManagement = () => {
                 <TableBody>
                   {filteredTrips.length === 0 ? (
                     <TableRow>
-                      <TableCell colSpan={7} className="text-center h-24 text-muted-foreground">
+                      <TableCell colSpan={10} className="text-center h-24 text-muted-foreground">
                         Одоогоор энэ төлөвтэй дуудлага алга байна.
                       </TableCell>
                     </TableRow>
@@ -475,6 +480,8 @@ const TripManagement = () => {
                         </div>
                       </TableCell>
                       <TableCell>{trip.serviceType}</TableCell>
+                      <TableCell>{trip.traveledDistance ? trip.traveledDistance.toFixed(1) : trip.distance} км</TableCell>
+                      <TableCell>{trip.duration ? `${trip.duration} мин` : '-'}</TableCell>
                       <TableCell>{(trip.price || 0).toLocaleString()}₮</TableCell>
                       <TableCell>{trip.driver ? (trip.driver.name || trip.driver.phone || 'Unknown') : '-'}</TableCell>
                       <TableCell>{new Date(trip.createdAt).toLocaleString()}</TableCell>
