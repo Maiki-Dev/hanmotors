@@ -46,6 +46,7 @@ const DriverSchema = new mongoose.Schema({
     requestSound: { type: Boolean, default: true },
     pushNotifications: { type: Boolean, default: true }
   },
+  pushToken: { type: String }, // Expo Push Token
   rating: { type: Number, default: 5.0 },
   ratingCount: { type: Number, default: 0 },
   earnings: {

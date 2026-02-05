@@ -6,6 +6,33 @@ const Customer = require('../models/Customer');
 const Trip = require('../models/Trip');
 const Pricing = require('../models/Pricing');
 const AdditionalService = require('../models/AdditionalService');
+const { Expo } = require('expo-server-sdk');
+const expo = new Expo();
+
+// Helper: Send Push Notification
+const sendPushNotification = async (pushToken, title, body, data) => {
+  if (!Expo.isExpoPushToken(pushToken)) {
+    console.error(`Push token ${pushToken} is not a valid Expo push token`);
+    return;
+  }
+  
+  const messages = [{
+    to: pushToken,
+    sound: 'default',
+    title: title,
+    body: body,
+    data: data,
+    priority: 'high',
+    channelId: 'default',
+  }];
+
+  try {
+    const ticketChunk = await expo.sendPushNotificationsAsync(messages);
+    console.log('Push notification sent:', ticketChunk);
+  } catch (error) {
+    console.error('Error sending push notification:', error);
+  }
+};
 
 // Helper: Calculate distance between two coordinates in km
 function getDistance(lat1, lon1, lat2, lon2) {
@@ -623,6 +650,17 @@ router.put('/admin/driver/:id', async (req, res) => {
   }
 });
 
+// Save Push Token
+router.post('/driver/push-token', async (req, res) => {
+  const { driverId, token } = req.body;
+  try {
+    await Driver.findByIdAndUpdate(driverId, { pushToken: token });
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // Admin Delete Driver
 router.delete('/admin/driver/:id', async (req, res) => {
   if (isOffline()) {
@@ -705,6 +743,7 @@ router.post('/trip/request', async (req, res) => {
     const pickupLat = trip.pickupLocation.lat;
     const pickupLng = trip.pickupLocation.lng;
     let matchedDrivers = 0;
+    const nearbyDriverIds = [];
 
     console.log(`[Trip Request] Finding drivers near ${pickupLat}, ${pickupLng} within 5km...`);
 
@@ -719,11 +758,29 @@ router.post('/trip/request', async (req, res) => {
             console.log(` -> Match: Driver ${driverId} is ${dist.toFixed(2)}km away.`);
             io.to(`driver_${driverId}`).emit('newJobRequest', trip);
             matchedDrivers++;
+            nearbyDriverIds.push(driverId);
          }
       }
     });
 
     console.log(`[Trip Request] Sent to ${matchedDrivers} drivers.`);
+
+    // Send Push Notifications to matched drivers
+    if (nearbyDriverIds.length > 0) {
+        // Run in background, don't await to avoid blocking response
+        Driver.find({ _id: { $in: nearbyDriverIds } }).then(drivers => {
+            drivers.forEach(driver => {
+                if (driver.pushToken) {
+                    sendPushNotification(
+                        driver.pushToken, 
+                        "🔔 Шинэ дуудлага!", 
+                        `${trip.pickupLocation?.address || 'Хаяг тодорхойгүй'} -> ${trip.dropoffLocation?.address || 'Хаяг тодорхойгүй'}`,
+                        { tripId: trip._id }
+                    );
+                }
+            });
+        }).catch(err => console.error("Error fetching drivers for push:", err));
+    }
 
     // Always notify admin
     io.to('admin_room').emit('newJobRequest', trip);
@@ -781,6 +838,17 @@ router.post('/trip/:id/cancel', async (req, res) => {
     io.emit('tripUpdated', trip);
     if (trip.driver) {
       io.to(`driver_${trip.driver}`).emit('jobCancelled', { tripId: req.params.id });
+      // Send Push
+      Driver.findById(trip.driver).then(driver => {
+          if (driver && driver.pushToken) {
+              sendPushNotification(
+                  driver.pushToken,
+                  "Аялал цуцлагдлаа",
+                  "Захиалагч аяллаа цуцаллаа.",
+                  { tripId: req.params.id }
+              );
+          }
+      });
     } else {
         // If no driver assigned yet, we should also emit to remove it from available jobs
         io.emit('jobCancelled', { tripId: req.params.id });
