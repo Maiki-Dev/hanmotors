@@ -1,7 +1,7 @@
 {
   "expo": {
-    "name": "HanMotors Customer",
-    "slug": "hanmotors-customer",
+    "name": "Khan Motors",
+    "slug": "khan-motors",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
@@ -21,10 +21,14 @@
         "NSLocationAlwaysAndWhenInUseUsageDescription": "This app needs access to your location to track your ride status even when the app is in the background.",
         "NSLocationAlwaysUsageDescription": "This app needs access to your location to track your ride status even when the app is in the background.",
         "NSLocationUsageDescription": "This app needs access to your location to find nearby drivers and track your ride.",
-        "UIBackgroundModes": ["location", "fetch"]
+        "UIBackgroundModes": [
+          "location",
+          "fetch"
+        ]
       }
     },
     "android": {
+      "package": "com.hanmotors.customer",
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#ffffff"
@@ -48,13 +52,10 @@
         {
           "locationAlwaysAndWhenInUsePermission": "This app needs access to your location to track your ride status even when the app is in the background.",
           "locationAlwaysPermission": "This app needs access to your location to track your ride status even when the app is in the background.",
-          "locationWhenInUsePermission": "This app needs access to your location to find nearby drivers and track your ride.",
-          "isAndroidBackgroundLocationEnabled": true
+          "isAndroidBackgroundLocationEnabled": true,
+          "isAndroidForegroundServiceEnabled": true
         }
       ]
-    ],
-    "web": {
-      "favicon": "./assets/favicon.png"
-    }
+    ]
   }
 }
