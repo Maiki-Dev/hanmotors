@@ -46,7 +46,7 @@ const DocumentVerification = () => {
       await api.post(`/admin/documents/${driverId}/${docType}/status`, { status });
       
       // Update local state immediately for better UX
-      if (selectedDriver && selectedDriver.driverId === driverId) {
+      if (selectedDriver && selectedDriver._id === driverId) {
         setSelectedDriver(prev => ({
             ...prev,
             documents: {
@@ -113,14 +113,14 @@ const DocumentVerification = () => {
                 <Button 
                     variant="outline" 
                     className="text-red-600 hover:text-red-700 hover:bg-red-50 border-red-200"
-                    onClick={() => handleStatusUpdate(selectedDriver.driverId, type, 'rejected')}
+                    onClick={() => handleStatusUpdate(selectedDriver._id, type, 'rejected')}
                 >
                     <X className="mr-2 h-4 w-4" />
                     Татгалзах
                 </Button>
                 <Button 
                     className="bg-green-600 hover:bg-green-700"
-                    onClick={() => handleStatusUpdate(selectedDriver.driverId, type, 'approved')}
+                    onClick={() => handleStatusUpdate(selectedDriver._id, type, 'approved')}
                 >
                     <Check className="mr-2 h-4 w-4" />
                     Баталгаажуулах
@@ -157,13 +157,13 @@ const DocumentVerification = () => {
                 </TableRow>
               ) : (
                 drivers.map((driver) => (
-                  <TableRow key={driver.driverId}>
+                  <TableRow key={driver._id}>
                     <TableCell className="font-medium">
-                        <div>{driver.driverName}</div>
-                        <div className="text-xs text-muted-foreground">ID: {driver.driverId.substring(0, 8)}...</div>
+                        <div>{driver.name}</div>
+                        <div className="text-xs text-muted-foreground">ID: {driver._id?.substring(0, 8)}...</div>
                     </TableCell>
-                    <TableCell>{new Date(driver.submittedDate).toLocaleDateString()}</TableCell>
-                    <TableCell>{getOverallStatus(driver.documents)}</TableCell>
+                    <TableCell>{new Date(driver.createdAt).toLocaleDateString()}</TableCell>
+                    <TableCell>{getOverallStatus(driver.documents || {})}</TableCell>
                     <TableCell className="text-right">
                       <Button variant="outline" size="sm" onClick={() => handleView(driver)}>
                         <Eye className="mr-2 h-4 w-4" />
@@ -182,7 +182,7 @@ const DocumentVerification = () => {
         {selectedDriver && (
             <DialogContent className="sm:max-w-[800px] max-h-[90vh] overflow-y-auto">
                 <DialogHeader>
-                    <DialogTitle>Баримт бичиг шалгах: {selectedDriver.driverName}</DialogTitle>
+                    <DialogTitle>Баримт бичиг шалгах: {selectedDriver.name}</DialogTitle>
                     <DialogDescription>
                         Жолоочийн илгээсэн бичиг баримтуудыг шалгаж баталгаажуулна уу.
                     </DialogDescription>
