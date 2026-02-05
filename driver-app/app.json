@@ -46,15 +46,6 @@
         "android.permission.READ_EXTERNAL_STORAGE",
         "android.permission.WRITE_EXTERNAL_STORAGE",
         "android.permission.READ_MEDIA_IMAGES",
-        "android.permission.RECORD_AUDIO",
-        "android.permission.ACCESS_COARSE_LOCATION",
-        "android.permission.ACCESS_FINE_LOCATION",
-        "android.permission.ACCESS_BACKGROUND_LOCATION",
-        "android.permission.FOREGROUND_SERVICE",
-        "android.permission.FOREGROUND_SERVICE_LOCATION",
-        "android.permission.READ_EXTERNAL_STORAGE",
-        "android.permission.WRITE_EXTERNAL_STORAGE",
-        "android.permission.READ_MEDIA_IMAGES",
         "android.permission.RECORD_AUDIO"
       ],
       "edgeToEdgeEnabled": true,
@@ -84,16 +75,13 @@
         }
       ]
     ],
-    "extra": {
-      "eas": {
-        "projectId": "bfb25a84-62a4-4c41-8bac-e2e64996f9f4"
-      }
-    },
     "runtimeVersion": {
       "policy": "appVersion"
     },
-    "updates": {
-      "url": "https://u.expo.dev/bfb25a84-62a4-4c41-8bac-e2e64996f9f4"
+    "extra": {
+      "eas": {
+        "projectId": "82d34329-fe87-437d-a5ac-744a6b1fd487"
+      }
     }
   }
 }
