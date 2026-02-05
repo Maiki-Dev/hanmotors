@@ -1052,24 +1052,85 @@ router.post('/trip/request', async (req, res) => {
       tripData.price = (Number(tripData.price) || 0) + additionalCost;
     }
 
-    // Prepayment Logic
-    const prepaymentPercentage = 0.10; // 10%
-    const prepaymentAmount = Math.ceil((tripData.price * prepaymentPercentage) / 100) * 100;
+    // Prepayment Logic (TEMPORARILY DISABLED)
+    const prepaymentPercentage = 0; // Was 0.10
+    const prepaymentAmount = 0;
     
     tripData.prepaymentAmount = prepaymentAmount;
-    tripData.remainingAmount = tripData.price - prepaymentAmount;
-    tripData.status = 'payment_pending';
+    tripData.remainingAmount = tripData.price;
+    tripData.status = 'pending';
     tripData.paymentStatus = 'pending';
 
     const trip = new Trip(tripData);
     await trip.save();
     
-    // Do NOT emit newJobRequest yet if payment is pending
-    // Only return trip details to customer to proceed with payment
+    // Broadcast logic (Copied from confirm-payment)
+    const io = req.app.get('io');
+    const driverLocations = req.app.driverLocations || {};
+    const pickupLat = trip.pickupLocation.lat;
+    const pickupLng = trip.pickupLocation.lng;
+    let matchedDrivers = 0;
+    const nearbyDriverIds = [];
+
+    console.log(`[Trip Request] Finding drivers near ${pickupLat}, ${pickupLng} within 5km...`);
+
+    // 1. Identify drivers within range
+    Object.keys(driverLocations).forEach(driverId => {
+      const loc = driverLocations[driverId];
+      if (loc && (loc.latitude || loc.lat) && (loc.longitude || loc.lng)) {
+         const dLat = loc.latitude || loc.lat;
+         const dLng = loc.longitude || loc.lng;
+         
+         const dist = getDistance(pickupLat, pickupLng, dLat, dLng);
+         if (dist <= 5) {
+            nearbyDriverIds.push(driverId);
+         }
+      }
+    });
+
+    // 2. Filter drivers by Vehicle Type and Dispatch
+    if (nearbyDriverIds.length > 0) {
+        try {
+            const drivers = await Driver.find({ _id: { $in: nearbyDriverIds } });
+            
+            drivers.forEach(driver => {
+                const vehicleType = driver.vehicleType || 'Ride';
+                let isCompatible = false;
+
+                if (trip.serviceType === 'Tow' || trip.serviceType === 'sos') {
+                    isCompatible = (vehicleType === 'Tow');
+                } else if (trip.serviceType === 'delivery') {
+                    isCompatible = (vehicleType === 'Cargo');
+                } else {
+                    isCompatible = (vehicleType === 'Ride');
+                }
+
+                if (isCompatible) {
+                    console.log(` -> Match: Driver ${driver._id} (${vehicleType}) is compatible.`);
+                    io.to(`driver_${driver._id}`).emit('newJobRequest', trip);
+                    matchedDrivers++;
+
+                    if (driver.pushToken) {
+                        sendPushNotification(
+                            driver.pushToken, 
+                            "🔔 Шинэ дуудлага!", 
+                            `${trip.pickupLocation?.address || 'Хаяг тодорхойгүй'} -> ${trip.dropoffLocation?.address || 'Хаяг тодорхойгүй'}`,
+                            { tripId: trip._id }
+                        );
+                    }
+                }
+            });
+        } catch (err) {
+            console.error("Error filtering drivers by role:", err);
+        }
+    }
+
+    // Always notify admin
+    io.to('admin_room').emit('newJobRequest', trip);
     
     res.json({
       ...trip.toObject(),
-      requiresPayment: true,
+      requiresPayment: false,
       prepaymentAmount
     });
   } catch (err) {
