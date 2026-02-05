@@ -14,6 +14,7 @@ export default function RegisterScreen({ navigation, route }) {
   const [licenseImage, setLicenseImage] = useState(null);
   const [registrationImage, setRegistrationImage] = useState(null);
   const [insuranceImage, setInsuranceImage] = useState(null);
+  const [vehicleType, setVehicleType] = useState('Ride');
   
   const [formData, setFormData] = useState({
     lastName: '',
@@ -76,7 +77,7 @@ export default function RegisterScreen({ navigation, route }) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           ...formData,
-          vehicleType: 'Tow', // Hardcoded
+          vehicleType: vehicleType,
           vehicle: {
             plateNumber: formData.plateNumber,
             model: formData.model,
@@ -159,7 +160,24 @@ export default function RegisterScreen({ navigation, route }) {
             secureTextEntry
           />
 
-          <Text style={styles.sectionTitle}>Тээврийн хэрэгсэл (Ачилтын машин)</Text>
+          <Text style={styles.sectionTitle}>Тээврийн хэрэгсэл</Text>
+          
+          <Text style={styles.label}>Төрөл</Text>
+          <View style={[styles.row, { marginBottom: 16 }]}>
+            <TouchableOpacity 
+              style={[styles.typeButton, vehicleType === 'Ride' && styles.selectedType]}
+              onPress={() => setVehicleType('Ride')}
+            >
+              <Text style={[styles.typeText, vehicleType === 'Ride' && styles.selectedTypeText]}>Суудлын машин</Text>
+            </TouchableOpacity>
+            <TouchableOpacity 
+              style={[styles.typeButton, vehicleType === 'Tow' && styles.selectedType]}
+              onPress={() => setVehicleType('Tow')}
+            >
+              <Text style={[styles.typeText, vehicleType === 'Tow' && styles.selectedTypeText]}>Ачигч машин</Text>
+            </TouchableOpacity>
+          </View>
+
           <Input
             label="Улсын дугаар"
             placeholder="1234 УБА"
@@ -289,5 +307,28 @@ const styles = StyleSheet.create({
     width: '100%',
     height: '100%',
     resizeMode: 'cover'
+  },
+  typeButton: {
+    flex: 1,
+    padding: theme.spacing.m,
+    borderWidth: 1,
+    borderColor: theme.colors.border,
+    borderRadius: theme.roundness,
+    marginHorizontal: 4,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: theme.colors.surface,
+  },
+  selectedType: {
+    borderColor: theme.colors.primary,
+    backgroundColor: 'rgba(251, 191, 36, 0.1)', // Gold with opacity
+  },
+  typeText: {
+    ...theme.typography.body,
+    fontWeight: '600',
+    color: theme.colors.textSecondary,
+  },
+  selectedTypeText: {
+    color: theme.colors.primary,
   }
 });

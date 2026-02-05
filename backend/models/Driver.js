@@ -11,7 +11,7 @@ const DriverSchema = new mongoose.Schema({
   otpExpiry: { type: Date },
   status: { type: String, enum: ['active', 'blocked', 'pending', 'inactive'], default: 'pending' },
   isOnline: { type: Boolean, default: false },
-  role: { type: String, enum: ['taxi', 'tow'], default: 'taxi' },
+  role: { type: String, enum: ['taxi', 'tow', 'delivery'], default: 'taxi' },
   currentLocation: {
     lat: Number,
     lng: Number

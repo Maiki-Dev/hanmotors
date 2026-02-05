@@ -55,7 +55,11 @@ export default function VehicleSettingsScreen({ navigation, route }) {
             <View style={styles.iconWrapper}>
                <Anchor size={24} color={theme.colors.black} />
             </View>
-            <Text style={styles.typeText}>{vehicleType}</Text>
+            <Text style={styles.typeText}>
+              {vehicleType === 'Tow' ? 'Ачигч машин' : 
+               vehicleType === 'Ride' ? 'Суудлын машин' : 
+               vehicleType === 'Cargo' ? 'Ачааны машин' : vehicleType}
+            </Text>
         </View>
 
         <Text style={styles.sectionTitle}>Тээврийн хэрэгслийн мэдээлэл</Text>

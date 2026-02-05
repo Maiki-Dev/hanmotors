@@ -40,6 +40,7 @@ const TripSchema = new mongoose.Schema({
   customerPhone: String,
   startTime: Date,
   endTime: Date,
+  createdByDriver: { type: mongoose.Schema.Types.ObjectId, ref: 'Driver' }, // Driver who created/shared this trip
   createdAt: { type: Date, default: Date.now }
 });
 

@@ -809,26 +809,29 @@ router.post('/trip/:id/confirm-payment', async (req, res) => {
       }
     });
 
-    // 2. Filter drivers by Role and Dispatch
+    // 2. Filter drivers by Vehicle Type and Dispatch
     if (nearbyDriverIds.length > 0) {
         try {
             const drivers = await Driver.find({ _id: { $in: nearbyDriverIds } });
             
             drivers.forEach(driver => {
-                const driverRole = driver.role || 'taxi'; // Default to taxi
+                const vehicleType = driver.vehicleType || 'Ride'; // Default to Ride (Taxi)
                 let isCompatible = false;
 
                 // Compatibility Logic
-                // Tow requests -> Tow drivers only
+                // Tow requests -> Tow vehicle drivers only
                 if (trip.serviceType === 'Tow' || trip.serviceType === 'sos') {
-                    isCompatible = (driverRole === 'tow');
+                    isCompatible = (vehicleType === 'Tow');
+                } else if (trip.serviceType === 'delivery') {
+                    // Delivery -> Cargo
+                    isCompatible = (vehicleType === 'Cargo');
                 } else {
-                    // All other requests (Taxi, Delivery, etc.) -> Taxi drivers only
-                    isCompatible = (driverRole === 'taxi');
+                    // All other requests (Taxi) -> Ride vehicle drivers only
+                    isCompatible = (vehicleType === 'Ride');
                 }
 
                 if (isCompatible) {
-                    console.log(` -> Match: Driver ${driver._id} (${driverRole}) is compatible.`);
+                    console.log(` -> Match: Driver ${driver._id} (${vehicleType}) is compatible.`);
                     io.to(`driver_${driver._id}`).emit('newJobRequest', trip);
                     matchedDrivers++;
 
@@ -1162,6 +1165,39 @@ router.post('/trip/:id/complete', async (req, res) => {
         transactions: updatedDriver.wallet.transactions 
       });
       console.log(`[Trip Complete] Wallet update emitted for driver: ${trip.driver}`);
+
+      // --- REFERRAL BONUS LOGIC ---
+      if (trip.createdByDriver && trip.createdByDriver.toString() !== trip.driver.toString()) {
+         const bonusAmount = 5000;
+         console.log(`[Trip Complete] Bonus Logic: Trip created by ${trip.createdByDriver}. Adding ${bonusAmount} bonus.`);
+         
+         const bonusResult = await Driver.findByIdAndUpdate(trip.createdByDriver, {
+            $inc: { 'wallet.balance': bonusAmount },
+            $push: {
+              'wallet.transactions': {
+                type: 'credit',
+                amount: bonusAmount,
+                description: `Bonus for shared trip #${trip._id.toString().slice(-6)}`,
+                date: new Date()
+              }
+            }
+         }, { new: true });
+         
+         if (bonusResult) {
+             io.emit('walletUpdated', {
+                 driverId: trip.createdByDriver.toString(),
+                 balance: bonusResult.wallet.balance,
+                 transactions: bonusResult.wallet.transactions
+             });
+             // Also notify via socket/push if possible
+             io.to(`driver_${trip.createdByDriver}`).emit('notification', {
+                 title: 'Бонус орлоо!',
+                 message: `Таны хуваалцсан аялал амжилттай дууслаа. +${bonusAmount}₮`
+             });
+         }
+      }
+      // ----------------------------
+
     } else {
       console.log(`[Trip Complete] No driver assigned to trip ${trip._id}`);
     }
@@ -1171,6 +1207,142 @@ router.post('/trip/:id/complete', async (req, res) => {
     res.json(trip);
   } catch (err) {
     console.error(`[Trip Complete] Error:`, err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Driver Share Trip (Create Trip)
+router.post('/driver/trip/share', async (req, res) => {
+  try {
+    const { driverId, pickup, dropoff, price, distance, duration, serviceType } = req.body;
+    
+    // Validate driver
+    const creatorDriver = await Driver.findById(driverId);
+    if (!creatorDriver) return res.status(404).json({ message: 'Driver not found' });
+
+    const newTrip = new Trip({
+      createdByDriver: driverId,
+      pickupLocation: pickup,
+      dropoffLocation: dropoff,
+      price: Number(price),
+      serviceType: serviceType || 'taxi', // Default
+      distance: Number(distance),
+      duration: Number(duration),
+      status: 'pending',
+      paymentStatus: 'pending', // Assume cash or handled separately
+      createdAt: new Date()
+    });
+
+    const trip = await newTrip.save();
+    console.log(`[Share Trip] Trip created by driver ${driverId}: ${trip._id}`);
+
+    // Dispatch Logic (Find nearby drivers)
+    // Reuse similar logic from /rides/request
+    const io = req.app.get('io');
+    const pickupLat = pickup.lat;
+    const pickupLng = pickup.lng;
+    
+    // Simple dispatch for now: Broadcast to all compatible drivers except creator
+    // In production, use geospatial query
+    
+    // 1. Identify drivers (mock or real)
+    let nearbyDriverIds = [];
+    Object.keys(driverLocations).forEach(dId => {
+      // Don't send to self
+      if (dId === driverId) return;
+
+      const loc = driverLocations[dId];
+      if (loc && (loc.latitude || loc.lat) && (loc.longitude || loc.lng)) {
+         const dLat = loc.latitude || loc.lat;
+         const dLng = loc.longitude || loc.lng;
+         const dist = getDistance(pickupLat, pickupLng, dLat, dLng);
+         
+         // Search radius 10km for shared trips (wider range)
+         if (dist <= 10) {
+            nearbyDriverIds.push(dId);
+         }
+      }
+    });
+
+    let matchedDrivers = 0;
+    if (nearbyDriverIds.length > 0) {
+        const drivers = await Driver.find({ _id: { $in: nearbyDriverIds } });
+        drivers.forEach(driver => {
+            // Check Role Compatibility via Vehicle Type
+            const vehicleType = driver.vehicleType || 'Ride';
+            let isCompatible = false;
+            
+            if (trip.serviceType === 'Tow' || trip.serviceType === 'sos') {
+                isCompatible = (vehicleType === 'Tow');
+            } else if (trip.serviceType === 'delivery') {
+                isCompatible = (vehicleType === 'Cargo');
+            } else {
+                isCompatible = (vehicleType === 'Ride');
+            }
+
+            if (isCompatible) {
+                io.to(`driver_${driver._id}`).emit('newJobRequest', trip);
+                matchedDrivers++;
+                
+                if (driver.pushToken) {
+                     sendPushNotification(
+                         driver.pushToken, 
+                         "🔔 Жолооч дуудлага хуваалцлаа!", 
+                         `${trip.pickupLocation?.address} -> ${trip.dropoffLocation?.address}`,
+                         { tripId: trip._id }
+                     );
+                }
+            }
+        });
+    }
+
+    console.log(`[Share Trip] Shared with ${matchedDrivers} drivers.`);
+    
+    // Also notify admin
+    io.to('admin_room').emit('newJobRequest', trip);
+
+    res.json(trip);
+  } catch (err) {
+    console.error('Share trip error:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Driver Self Trip (Create & Assign to Self)
+router.post('/driver/trip/self', async (req, res) => {
+  try {
+    const { driverId, pickup, dropoff, price, distance, duration, serviceType, customerPhone } = req.body;
+    
+    // Validate driver
+    const driver = await Driver.findById(driverId);
+    if (!driver) return res.status(404).json({ message: 'Driver not found' });
+
+    const newTrip = new Trip({
+      createdByDriver: driverId,
+      driver: driverId, // Assigned immediately
+      pickupLocation: pickup,
+      dropoffLocation: dropoff,
+      price: Number(price),
+      serviceType: serviceType || 'taxi',
+      distance: Number(distance),
+      duration: Number(duration),
+      status: 'in_progress', // Start immediately
+      paymentStatus: 'pending',
+      customerPhone: customerPhone || 'Street Hail',
+      startTime: new Date(),
+      createdAt: new Date()
+    });
+
+    const trip = await newTrip.save();
+    console.log(`[Self Trip] Trip created by driver ${driverId}: ${trip._id}`);
+    
+    // Emit updates so the app knows to switch to active job screen
+    const io = req.app.get('io');
+    io.to(`driver_${driverId}`).emit('requestAssigned', trip); // Trigger ActiveJob logic
+    
+    res.json(trip);
+  } catch (err) {
+    console.error('Self trip error:', err);
     res.status(500).json({ error: err.message });
   }
 });

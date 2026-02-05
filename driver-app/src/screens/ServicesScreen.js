@@ -2,53 +2,14 @@ import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, FlatList, TouchableOpacity, Image, Dimensions } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { theme } from '../constants/theme';
-import { Car, Truck, Package, Shield, Zap, Crown } from 'lucide-react-native';
+import { Car, Truck, Package, Shield, Zap, Crown, Share2 } from 'lucide-react-native';
+import { useNavigation } from '@react-navigation/native';
 
 const { width } = Dimensions.get('window');
 const COLUMN_COUNT = 2;
 const ITEM_WIDTH = (width - theme.spacing.l * 2 - theme.spacing.m) / COLUMN_COUNT;
 
 const SERVICES = [
-  {
-    id: 'black',
-    title: 'Black',
-    subtitle: 'Үнэ цэнэтэй',
-    icon: Crown,
-    color: '#000000',
-    bgColor: '#f5f5f5'
-  },
-  {
-    id: 'xl-suv',
-    title: 'XL-SUV',
-    subtitle: 'Тухтай, зайтай',
-    icon: Truck,
-    color: '#525252',
-    bgColor: '#f5f5f5'
-  },
-  {
-    id: 'justcab',
-    title: 'JustCab',
-    subtitle: 'Аль нь ч яахав',
-    icon: Zap,
-    color: '#2563eb',
-    bgColor: '#f5f5f5'
-  },
-  {
-    id: 'standard',
-    title: 'Стандарт',
-    subtitle: '1-р эгнээгээр зорчино',
-    icon: Car,
-    color: '#fbbf24',
-    bgColor: '#f5f5f5'
-  },
-  {
-    id: 'comfort',
-    title: 'Комфорт',
-    subtitle: 'Тав тухтай',
-    icon: Car,
-    color: '#06b6d4',
-    bgColor: '#f5f5f5'
-  },
   {
     id: 'delivery',
     title: 'Шуурхай Хүргэлт',
@@ -64,11 +25,21 @@ const SERVICES = [
     icon: Truck,
     color: '#ef4444',
     bgColor: '#f5f5f5'
+  },
+  {
+    id: 'share',
+    title: 'Дуудлага хуваалцах',
+    subtitle: 'Бусадтай хуваалцах',
+    icon: Share2,
+    color: '#8b5cf6',
+    bgColor: '#f5f5f5'
   }
 ];
 
 export default function ServicesScreen() {
   const [role, setRole] = useState(null);
+  const [vehicleType, setVehicleType] = useState(null);
+  const navigation = useNavigation();
 
   useEffect(() => {
     loadRole();
@@ -80,6 +51,7 @@ export default function ServicesScreen() {
       if (data) {
         const driver = JSON.parse(data);
         setRole(driver.role || 'taxi');
+        setVehicleType(driver.vehicleType || 'Ride');
       }
     } catch (e) {
       console.error('Failed to load driver role', e);
@@ -87,21 +59,41 @@ export default function ServicesScreen() {
   };
 
   const getFilteredServices = () => {
-    if (!role) return SERVICES;
-    
-    if (role === 'tow') {
-      return SERVICES.filter(s => s.id === 'towing');
+    // Always show 'share' option
+    const shareService = SERVICES.find(s => s.id === 'share');
+    let filtered = [];
+
+    if (!role) filtered = [];
+    else if (role === 'tow' || vehicleType === 'Tow') {
+      filtered = [SERVICES.find(s => s.id === 'towing')];
+    } else if (role === 'delivery' || vehicleType === 'Cargo') {
+      filtered = [SERVICES.find(s => s.id === 'delivery')];
+    } else {
+      // Taxi role: nothing specific since we deleted all taxi services
+      // Just show share
+      filtered = [];
     }
     
-    // Default/Taxi role: show everything EXCEPT towing
-    return SERVICES.filter(s => s.id !== 'towing');
+    // Add Share option at the end if not already present
+    // Filter out undefined in case find fails
+    return [...filtered, shareService].filter(Boolean);
+  };
+
+  const handlePress = (item) => {
+    if (item.id === 'share') {
+      navigation.navigate('ShareJob');
+    }
   };
 
   const renderItem = ({ item }) => {
     const Icon = item.icon;
     
     return (
-      <TouchableOpacity style={styles.card} activeOpacity={0.8}>
+      <TouchableOpacity 
+        style={styles.card} 
+        activeOpacity={0.8}
+        onPress={() => handlePress(item)}
+      >
         <View style={styles.iconContainer}>
           <Icon size={48} color={item.color} strokeWidth={1.5} />
         </View>

@@ -33,6 +33,7 @@ const DriverManagement = () => {
     phone: '', 
     email: '', 
     status: '',
+    role: 'taxi',
     vehicleType: '',
     vehicle: { plateNumber: '', model: '', color: '', year: '' }
   });
@@ -43,6 +44,7 @@ const DriverManagement = () => {
     email: '', 
     password: 'password', 
     vehicleType: 'Ride',
+    role: 'taxi',
     vehicle: { plateNumber: '', model: '', color: '', year: '' }
   });
   const [error, setError] = useState(null);
@@ -80,6 +82,7 @@ const DriverManagement = () => {
       email: '', 
       password: 'password', 
       vehicleType: 'Ride',
+      role: 'taxi',
       vehicle: { plateNumber: '', model: '', color: '', year: '' }
     });
     setIsAddOpen(true);
@@ -111,6 +114,7 @@ const DriverManagement = () => {
       phone: driver.phone,
       email: driver.email,
       status: driver.status,
+      role: driver.role || 'taxi',
       vehicleType: driver.vehicleType || 'Tow',
       vehicle: {
         plateNumber: driver.vehicle?.plateNumber || '',
@@ -220,6 +224,7 @@ const DriverManagement = () => {
                 <TableHead>ID</TableHead>
                 <TableHead>Нэр</TableHead>
                 <TableHead>Утас</TableHead>
+                <TableHead>Төрөл</TableHead>
                 <TableHead>Төлөв</TableHead>
                 <TableHead className="text-center">Үнэлгээ</TableHead>
                 <TableHead className="text-right">Бүртгүүлсэн</TableHead>
@@ -232,6 +237,11 @@ const DriverManagement = () => {
                   <TableCell className="font-medium">{(driver._id || driver.id).substring(0, 8)}...</TableCell>
                   <TableCell>{driver.name}</TableCell>
                   <TableCell>{driver.phone}</TableCell>
+                  <TableCell>
+                    <Badge variant="outline" className={driver.vehicleType === 'Tow' ? 'border-orange-500 text-orange-500' : 'border-blue-500 text-blue-500'}>
+                      {driver.vehicleType === 'Tow' ? 'Ачигч машин' : driver.vehicleType === 'Ride' ? 'Суудлын машин' : driver.vehicleType === 'Cargo' ? 'Ачааны машин' : driver.vehicleType || 'Суудлын машин'}
+                    </Badge>
+                  </TableCell>
                   <TableCell>{getStatusBadge(driver.status, driver.isOnline)}</TableCell>
                   <TableCell className="text-center">{driver.rating || '-'}</TableCell>
                   <TableCell className="text-right">
@@ -359,12 +369,31 @@ const DriverManagement = () => {
                     id="vehicleType"
                     className="flex h-10 w-full items-center justify-between rounded-md border border-input bg-background px-3 py-2 pl-9 text-sm ring-offset-background placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
                     value={addFormData.vehicleType} 
-                    onChange={(e) => setAddFormData({...addFormData, vehicleType: e.target.value})}
+                    onChange={(e) => {
+                      const vType = e.target.value;
+                      let newRole = 'taxi';
+                      if (vType === 'Tow') newRole = 'tow';
+                      else if (vType === 'Cargo') newRole = 'delivery';
+                      setAddFormData({...addFormData, vehicleType: vType, role: newRole});
+                    }}
                   >
-                    <option value="Ride">Ride</option>
-                    <option value="Cargo">Cargo</option>
-                    <option value="Tow">Tow (Ачигч)</option>
+                    <option value="Ride">Суудлын машин</option>
+                    <option value="Cargo">Ачааны машин</option>
+                    <option value="Tow">Ачигч машин</option>
                   </select>
+              </div>
+            </div>
+
+            <div className="grid gap-2">
+              <Label htmlFor="add-role">Үүрэг (Role - Автомат)</Label>
+              <div className="relative">
+                 <User className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+                 <Input 
+                    id="add-role"
+                    value={addFormData.role === 'tow' ? 'Tow (Ачигч)' : addFormData.role === 'delivery' ? 'Delivery (Хүргэлт)' : 'Taxi (Такси)'} 
+                    readOnly
+                    className="pl-9 bg-muted"
+                  />
               </div>
             </div>
             
@@ -515,6 +544,19 @@ const DriverManagement = () => {
                   </select>
               </div>
             </div>
+
+            <div className="grid gap-2">
+              <Label htmlFor="edit-role">Үүрэг (Role - Автомат)</Label>
+              <div className="relative">
+                 <User className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+                 <Input 
+                    id="edit-role"
+                    value={formData.role === 'tow' ? 'Tow (Ачигч)' : formData.role === 'delivery' ? 'Delivery (Хүргэлт)' : 'Taxi (Такси)'} 
+                    readOnly
+                    className="pl-9 bg-muted"
+                  />
+              </div>
+            </div>
             
             <div className="border-t pt-4 mt-2">
               <h4 className="text-sm font-semibold mb-3">Тээврийн хэрэгсэл</h4>
@@ -527,11 +569,17 @@ const DriverManagement = () => {
                           id="edit-vehicleType"
                           className="flex h-10 w-full items-center justify-between rounded-md border border-input bg-background px-3 py-2 pl-9 text-sm ring-offset-background placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
                           value={formData.vehicleType} 
-                          onChange={(e) => setFormData({...formData, vehicleType: e.target.value})}
+                          onChange={(e) => {
+                            const vType = e.target.value;
+                            let newRole = 'taxi';
+                            if (vType === 'Tow') newRole = 'tow';
+                            else if (vType === 'Cargo') newRole = 'delivery';
+                            setFormData({...formData, vehicleType: vType, role: newRole});
+                          }}
                         >
-                          <option value="Ride">Ride</option>
-                          <option value="Cargo">Cargo</option>
-                          <option value="Tow">Tow (Ачигч)</option>
+                          <option value="Ride">Суудлын машин</option>
+                          <option value="Cargo">Ачааны машин</option>
+                          <option value="Tow">Ачигч машин</option>
                         </select>
                     </div>
                  </div>
@@ -670,6 +718,8 @@ const DriverManagement = () => {
                   <div className="grid grid-cols-[100px_1fr] gap-2 text-sm">
                     <span className="text-muted-foreground">Төрөл:</span>
                     <span className="font-medium">{selectedDriver.vehicleType}</span>
+                    <span className="text-muted-foreground">Role:</span>
+                    <span className="font-medium uppercase">{selectedDriver.role || 'TAXI'}</span>
                     <span className="text-muted-foreground">Загвар:</span>
                     <span>{selectedDriver.vehicle?.model || '-'}</span>
                     <span className="text-muted-foreground">Улсын дугаар:</span>
@@ -815,6 +865,9 @@ const DriverManagement = () => {
              </div>
              <div className="flex gap-2">
                 <Button variant="outline" onClick={() => setIsDetailOpen(false)}>Хаах</Button>
+                <Button variant="outline" onClick={() => { setIsDetailOpen(false); handleEditClick(selectedDriver); }}>
+                  <Pencil className="mr-2 h-4 w-4" /> Засах
+                </Button>
                 {selectedDriver?.status !== 'active' && (
                   <Button onClick={handleVerify} className="bg-green-600 hover:bg-green-700">
                     <CheckCircle className="mr-2 h-4 w-4" /> Баталгаажуулах
