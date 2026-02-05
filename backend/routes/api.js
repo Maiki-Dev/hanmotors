@@ -1601,6 +1601,11 @@ router.post('/driver/trip/share', async (req, res) => {
   try {
     const { driverId, pickup, dropoff, price, distance, duration, serviceType } = req.body;
     
+    // Basic validation
+    if (!driverId) return res.status(400).json({ message: 'Driver ID is required' });
+    if (!pickup || !dropoff) return res.status(400).json({ message: 'Pickup and Dropoff locations are required' });
+    if (!price) return res.status(400).json({ message: 'Price is required' });
+
     // Validate driver
     const creatorDriver = await Driver.findById(driverId);
     if (!creatorDriver) return res.status(404).json({ message: 'Driver not found' });
@@ -1609,10 +1614,10 @@ router.post('/driver/trip/share', async (req, res) => {
       createdByDriver: driverId,
       pickupLocation: pickup,
       dropoffLocation: dropoff,
-      price: Number(price),
+      price: Number(price) || 0,
       serviceType: serviceType || 'taxi', // Default
-      distance: Number(distance),
-      duration: Number(duration),
+      distance: Number(distance) || 0,
+      duration: Number(duration) || 0,
       status: 'pending',
       paymentStatus: 'pending', // Assume cash or handled separately
       createdAt: new Date()
@@ -1632,22 +1637,31 @@ router.post('/driver/trip/share', async (req, res) => {
     
     // 1. Identify drivers (mock or real)
     let nearbyDriverIds = [];
-    Object.keys(driverLocations).forEach(dId => {
-      // Don't send to self
-      if (dId === driverId) return;
-
-      const loc = driverLocations[dId];
-      if (loc && (loc.latitude || loc.lat) && (loc.longitude || loc.lng)) {
-         const dLat = loc.latitude || loc.lat;
-         const dLng = loc.longitude || loc.lng;
-         const dist = getDistance(pickupLat, pickupLng, dLat, dLng);
-         
-         // Search radius 10km for shared trips (wider range)
-         if (dist <= 10) {
-            nearbyDriverIds.push(dId);
-         }
-      }
-    });
+    if (pickupLat && pickupLng) {
+        Object.keys(driverLocations).forEach(dId => {
+          // Don't send to self
+          if (dId === driverId) return;
+    
+          const loc = driverLocations[dId];
+          if (loc && (loc.latitude || loc.lat) && (loc.longitude || loc.lng)) {
+             const dLat = loc.latitude || loc.lat;
+             const dLng = loc.longitude || loc.lng;
+             const dist = getDistance(pickupLat, pickupLng, dLat, dLng);
+             
+             // Search radius 10km for shared trips (wider range)
+             if (dist <= 10) {
+                nearbyDriverIds.push(dId);
+             }
+          }
+        });
+    } else {
+        // If no coordinates, maybe broadcast to all active drivers? 
+        // Or just skip location filter and send to all active.
+        // For now, let's just find all active drivers if no coords provided (fallback)
+         Object.keys(driverLocations).forEach(dId => {
+            if (dId !== driverId) nearbyDriverIds.push(dId);
+         });
+    }
 
     let matchedDrivers = 0;
     if (nearbyDriverIds.length > 0) {
