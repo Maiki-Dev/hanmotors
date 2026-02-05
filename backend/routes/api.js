@@ -1629,6 +1629,7 @@ router.post('/driver/trip/share', async (req, res) => {
     // Dispatch Logic (Find nearby drivers)
     // Reuse similar logic from /rides/request
     const io = req.app.get('io');
+    const driverLocations = req.app.driverLocations || {};
     const pickupLat = pickup.lat;
     const pickupLng = pickup.lng;
     
