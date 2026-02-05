@@ -46,10 +46,10 @@ const Sidebar = ({ className, onClose }) => {
       <div className="h-20 flex items-center px-6 border-b border-sidebar-border/50 relative z-10">
         <div className="flex items-center gap-3">
             <div className="h-10 w-10 rounded-xl bg-gradient-to-br from-primary to-blue-600 flex items-center justify-center shadow-lg shadow-primary/25">
-                <span className="text-white font-bold text-xl">X</span>
+                <span className="text-white font-bold text-xl">K</span>
             </div>
             <div className="flex flex-col">
-                <h1 className="text-lg font-bold tracking-tight leading-none">XAN MOTORS</h1>
+                <h1 className="text-lg font-bold tracking-tight leading-none">KHAN MOTORS</h1>
                 <span className="text-[10px] text-sidebar-foreground/60 font-medium tracking-wider uppercase mt-1">Admin Portal</span>
             </div>
         </div>
