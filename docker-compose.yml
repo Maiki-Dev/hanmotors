@@ -26,7 +26,11 @@ services:
       - xanmotors-network
 
   admin-dashboard:
-    build: ./admin-dashboard
+    build: 
+      context: ./admin-dashboard
+      args:
+        VITE_SUPABASE_URL: https://addcixpchvbgykkkianm.supabase.co
+        VITE_SUPABASE_ANON_KEY: sb_publishable_5qJdaDYL3WkQTpm74UhOMA_wAREUZWD
     container_name: xanmotors_admin
     restart: always
     ports:
