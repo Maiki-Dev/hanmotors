@@ -153,6 +153,35 @@ router.post('/driver/register', async (req, res) => {
   }
 });
 
+// Customer Wallet Top Up
+router.post('/customer/wallet/topup', async (req, res) => {
+  try {
+    const { customerId, amount } = req.body;
+    
+    if (!customerId || !amount || amount <= 0) {
+      return res.status(400).json({ message: 'Invalid amount or customer ID' });
+    }
+
+    if (isOffline()) {
+       // Mock handling if needed, but for now we focus on online
+       return res.status(501).json({ message: 'Not implemented in offline mode' });
+    }
+
+    const customer = await Customer.findById(customerId);
+    if (!customer) {
+      return res.status(404).json({ message: 'Customer not found' });
+    }
+
+    customer.wallet = (customer.wallet || 0) + Number(amount);
+    await customer.save();
+
+    res.json({ success: true, wallet: customer.wallet, message: 'Wallet updated successfully' });
+  } catch (error) {
+    console.error('Wallet topup error:', error);
+    res.status(500).json({ message: 'Server error' });
+  }
+});
+
 // Request OTP
 router.post('/driver/auth/otp/request', async (req, res) => {
   const { phone } = req.body;

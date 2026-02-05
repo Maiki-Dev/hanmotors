@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Image, Alert, ActivityIndicator, ScrollView } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Image, Alert, ActivityIndicator, ScrollView, Modal, TextInput } from 'react-native';
 import { theme } from '../constants/theme';
 import { useDispatch, useSelector } from 'react-redux';
 import { logout } from '../store/slices/authSlice';
@@ -12,6 +12,8 @@ const ProfileScreen = () => {
   const user = useSelector((state: RootState) => state.auth.user);
   const [profile, setProfile] = useState<any>(null);
   const [loading, setLoading] = useState(false);
+  const [modalVisible, setModalVisible] = useState(false);
+  const [topUpAmount, setTopUpAmount] = useState('');
 
   useEffect(() => {
     fetchProfile();
@@ -28,6 +30,29 @@ const ProfileScreen = () => {
       console.log('Error fetching profile', error);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleTopUp = async () => {
+    if (!user?._id) {
+      Alert.alert('Алдаа', 'Хэрэглэгчийн мэдээлэл олдсонгүй');
+      return;
+    }
+
+    if (!topUpAmount || isNaN(Number(topUpAmount)) || Number(topUpAmount) <= 0) {
+      Alert.alert('Алдаа', 'Зөв дүн оруулна уу');
+      return;
+    }
+
+    try {
+      await customerService.topUpWallet(user._id, Number(topUpAmount));
+      Alert.alert('Амжилттай', 'Таны хэтэвч амжилттай цэнэглэгдлээ');
+      setModalVisible(false);
+      setTopUpAmount('');
+      fetchProfile();
+    } catch (error: any) {
+      Alert.alert('Алдаа', 'Хэтэвч цэнэглэхэд алдаа гарлаа: ' + (error.response?.data?.message || error.message));
+      console.log('TopUp Error:', error.response?.status, error.response?.data);
     }
   };
 
@@ -68,11 +93,19 @@ const ProfileScreen = () => {
             </View>
             )}
 
-            <View style={[styles.ratingContainer, { marginTop: 10, backgroundColor: theme.colors.primary }]}>
-                <Wallet size={16} color="white" />
-                <Text style={[styles.ratingText, { color: 'white' }]}>
-                    {profile?.wallet?.toLocaleString() || 0}₮
-                </Text>
+            <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 10, gap: 10 }}>
+                <View style={[styles.ratingContainer, { backgroundColor: theme.colors.primary, marginTop: 0 }]}>
+                    <Wallet size={16} color="white" />
+                    <Text style={[styles.ratingText, { color: 'white' }]}>
+                        {profile?.wallet?.toLocaleString() || 0}₮
+                    </Text>
+                </View>
+                <TouchableOpacity 
+                    style={[styles.ratingContainer, { backgroundColor: '#4CAF50', marginTop: 0 }]}
+                    onPress={() => setModalVisible(true)}
+                >
+                    <Text style={[styles.ratingText, { color: 'white', marginLeft: 0 }]}>Цэнэглэх</Text>
+                </TouchableOpacity>
             </View>
         </View>
 
@@ -127,6 +160,41 @@ const ProfileScreen = () => {
 
         <Text style={styles.versionText}>Хувилбар 1.0.0</Text>
       </ScrollView>
+
+      <Modal
+        animationType="slide"
+        transparent={true}
+        visible={modalVisible}
+        onRequestClose={() => setModalVisible(false)}
+      >
+        <View style={styles.modalContainer}>
+          <View style={styles.modalContent}>
+            <Text style={styles.modalTitle}>Хэтэвч цэнэглэх</Text>
+            <TextInput
+              style={styles.input}
+              placeholder="Дүн (₮)"
+              keyboardType="numeric"
+              value={topUpAmount}
+              onChangeText={setTopUpAmount}
+              placeholderTextColor="#999"
+            />
+            <View style={styles.modalButtons}>
+              <TouchableOpacity 
+                style={[styles.modalButton, styles.cancelButton]}
+                onPress={() => setModalVisible(false)}
+              >
+                <Text style={styles.cancelButtonText}>Болих</Text>
+              </TouchableOpacity>
+              <TouchableOpacity 
+                style={[styles.modalButton, styles.confirmButton]}
+                onPress={handleTopUp}
+              >
+                <Text style={styles.confirmButtonText}>Цэнэглэх</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 };
@@ -135,6 +203,74 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: theme.colors.background,
+  },
+  modalContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: 'rgba(0,0,0,0.5)',
+  },
+  modalContent: {
+    width: '80%',
+    backgroundColor: 'white',
+    borderRadius: 20,
+    padding: 20,
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+    shadowOpacity: 0.25,
+    shadowRadius: 4,
+    elevation: 5,
+  },
+  modalTitle: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    marginBottom: 15,
+    color: '#333',
+  },
+  input: {
+    width: '100%',
+    height: 50,
+    borderWidth: 1,
+    borderColor: '#ddd',
+    borderRadius: 10,
+    paddingHorizontal: 15,
+    marginBottom: 20,
+    fontSize: 16,
+    color: '#333',
+    backgroundColor: '#f9f9f9',
+  },
+  modalButtons: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    width: '100%',
+  },
+  modalButton: {
+    flex: 1,
+    height: 45,
+    borderRadius: 10,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginHorizontal: 5,
+  },
+  cancelButton: {
+    backgroundColor: '#f5f5f5',
+    borderWidth: 1,
+    borderColor: '#ddd',
+  },
+  confirmButton: {
+    backgroundColor: theme.colors.primary,
+  },
+  cancelButtonText: {
+    color: '#666',
+    fontWeight: '600',
+  },
+  confirmButtonText: {
+    color: 'white',
+    fontWeight: '600',
   },
   scrollContent: {
     padding: 20,

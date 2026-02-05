@@ -15,6 +15,7 @@ export const authService = {
 
 export const customerService = {
   getProfile: (id: string) => api.get('/customer/profile', { params: { id } }),
+  topUpWallet: (customerId: string, amount: number) => api.post('/customer/wallet/topup', { customerId, amount }),
 };
 
 export const rideService = {
