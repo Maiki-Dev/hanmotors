@@ -12,6 +12,8 @@ import { Eye, MapPin, Plus, Car, Pencil, Trash2, MoreHorizontal, Type, Map as Ma
 import { MapContainer, TileLayer, Marker, useMapEvents, Polyline, useMap, Popup } from 'react-leaflet';
 import 'leaflet/dist/leaflet.css';
 import L from 'leaflet';
+import { renderToStaticMarkup } from 'react-dom/server';
+import { CarIdle, CarMoving } from '../components/CarIcons';
 
 // Fix Leaflet default icon issue
 import icon from 'leaflet/dist/images/marker-icon.png';
@@ -25,13 +27,31 @@ let DefaultIcon = L.icon({
 });
 L.Marker.prototype.options.icon = DefaultIcon;
 
-// Define Car Icon for Live Map
-const carIcon = L.icon({
-  iconUrl: '/tow-truck.png',
-  iconSize: [40, 40],
-  iconAnchor: [20, 20],
-  popupAnchor: [0, -20]
-});
+// Dynamic Car Icon Generator
+const createDriverIcon = (heading = 0, isMoving = false) => {
+  const IconComponent = isMoving ? CarMoving : CarIdle;
+  const html = renderToStaticMarkup(
+    <div style={{ 
+      transform: `rotate(${heading}deg)`, 
+      width: '50px', 
+      height: '50px', 
+      display: 'flex', 
+      alignItems: 'center', 
+      justifyContent: 'center',
+      transition: 'transform 0.5s ease-in-out' // Smooth rotation
+    }}>
+      <IconComponent width={50} height={50} />
+    </div>
+  );
+  
+  return L.divIcon({
+    className: 'custom-car-marker', // Add a class for potential CSS targeting
+    html: html,
+    iconSize: [50, 50],
+    iconAnchor: [25, 25],
+    popupAnchor: [0, -25]
+  });
+};
 
 import {
   DropdownMenu,
@@ -558,7 +578,7 @@ const TripManagement = () => {
               <Marker 
                 key={driverId} 
                 position={[location.lat, location.lng]} 
-                icon={carIcon}
+                icon={createDriverIcon(location.heading || 0, (location.speed && location.speed > 0.5))}
               >
                 <Popup>
                   <div className="text-xs min-w-[120px]">

@@ -1,11 +1,13 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, TextInput, ScrollView, TouchableOpacity, Alert, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, TextInput, ScrollView, TouchableOpacity, Alert, ActivityIndicator, Dimensions } from 'react-native';
 import { theme } from '../constants/theme';
 import { ArrowLeft, MapPin, DollarSign, Navigation, Truck, Car, Package } from 'lucide-react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { API_URL } from '../config';
 
-export default function ShareJobScreen({ navigation }) {
+const { width } = Dimensions.get('window');
+
+export default function ShareJobScreen({ navigation, route }) {
   const [loading, setLoading] = useState(false);
   const [driverId, setDriverId] = useState(null);
   
@@ -15,12 +17,30 @@ export default function ShareJobScreen({ navigation }) {
     price: '',
     phone: '',
     serviceType: 'tow', // Default
-    distance: '5' // Mock distance for now
+    distance: '5' // Mock distance
+  });
+
+  // Coordinates state to store precise locations from map picker
+  const [coords, setCoords] = useState({
+    pickup: { lat: 47.9188, lng: 106.9176 },
+    dropoff: { lat: 47.9200, lng: 106.9200 }
   });
 
   useEffect(() => {
     loadDriver();
   }, []);
+
+  // Handle return from LocationPicker
+  useEffect(() => {
+    if (route.params?.selectedLocation && route.params?.type) {
+        const { selectedLocation, type } = route.params;
+        setForm(prev => ({ ...prev, [type]: selectedLocation.address }));
+        setCoords(prev => ({ 
+            ...prev, 
+            [type]: { lat: selectedLocation.lat, lng: selectedLocation.lng } 
+        }));
+    }
+  }, [route.params]);
 
   const loadDriver = async () => {
     try {
@@ -31,7 +51,15 @@ export default function ShareJobScreen({ navigation }) {
     }
   };
 
-  const handleShare = async (isSelf = false) => {
+  const openLocationPicker = (type) => {
+    navigation.navigate('LocationPicker', {
+        returnScreen: 'ShareJob',
+        type,
+        initialLocation: coords[type]
+    });
+  };
+
+  const handleShare = async () => {
     if (!form.pickup || !form.dropoff || !form.price) {
       Alert.alert('Дутуу мэдээлэл', 'Эхлэх цэг, очих цэг болон үнийг оруулна уу.');
       return;
@@ -41,17 +69,24 @@ export default function ShareJobScreen({ navigation }) {
     try {
       const payload = {
         driverId,
-        pickup: { address: form.pickup, lat: 47.9188, lng: 106.9176 }, // Mock coords
-        dropoff: { address: form.dropoff, lat: 47.9200, lng: 106.9200 }, // Mock coords
+        pickup: { 
+            address: form.pickup, 
+            lat: coords.pickup.lat, 
+            lng: coords.pickup.lng 
+        },
+        dropoff: { 
+            address: form.dropoff, 
+            lat: coords.dropoff.lat, 
+            lng: coords.dropoff.lng 
+        },
         price: Number(form.price),
         serviceType: form.serviceType,
         distance: Number(form.distance),
-        duration: 15, // Mock duration
+        duration: 15,
         customerPhone: form.phone
       };
 
-      const endpoint = isSelf ? '/api/driver/trip/self' : '/api/driver/trip/share';
-      const response = await fetch(`${API_URL}${endpoint}`, {
+      const response = await fetch(`${API_URL}/api/driver/trip/share`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload)
@@ -60,19 +95,11 @@ export default function ShareJobScreen({ navigation }) {
       const data = await response.json();
 
       if (response.ok) {
-        if (isSelf) {
-            Alert.alert(
-                'Амжилттай', 
-                'Аялал эхэллээ. Таныг идэвхтэй аялал руу шилжүүлж байна.',
-                [{ text: 'OK', onPress: () => navigation.popToTop() }] // Go back to Home/ActiveJob
-            );
-        } else {
-            Alert.alert(
-                'Амжилттай', 
-                'Дуудлага амжилттай бүртгэгдлээ. Бусад жолооч нар руу илгээгдлээ.',
-                [{ text: 'OK', onPress: () => navigation.goBack() }]
-            );
-        }
+        Alert.alert(
+            'Амжилттай', 
+            'Дуудлага амжилттай бүртгэгдлээ. Бусад жолооч нар руу илгээгдлээ.',
+            [{ text: 'OK', onPress: () => navigation.goBack() }]
+        );
       } else {
         Alert.alert('Алдаа', data.message || 'Дуудлага бүртгэхэд алдаа гарлаа');
       }
@@ -102,7 +129,9 @@ export default function ShareJobScreen({ navigation }) {
         <View style={styles.formGroup}>
           <Text style={styles.label}>Эхлэх цэг</Text>
           <View style={styles.inputContainer}>
-            <MapPin color={theme.colors.primary} size={20} />
+            <TouchableOpacity onPress={() => openLocationPicker('pickup')}>
+                <MapPin color={theme.colors.primary} size={20} />
+            </TouchableOpacity>
             <TextInput
               style={styles.input}
               placeholder="Хаяг оруулах..."
@@ -116,7 +145,9 @@ export default function ShareJobScreen({ navigation }) {
         <View style={styles.formGroup}>
           <Text style={styles.label}>Очих цэг</Text>
           <View style={styles.inputContainer}>
-            <Navigation color={theme.colors.primary} size={20} />
+            <TouchableOpacity onPress={() => openLocationPicker('dropoff')}>
+                <Navigation color={theme.colors.primary} size={20} />
+            </TouchableOpacity>
             <TextInput
               style={styles.input}
               placeholder="Хаяг оруулах..."
@@ -171,19 +202,17 @@ export default function ShareJobScreen({ navigation }) {
           </View>
         </View>
 
-        <View style={styles.buttonContainer}>
-            <TouchableOpacity 
-              style={[styles.submitButton, { marginTop: 0, flex: 1 }]}
-              onPress={() => handleShare(false)} // Share
-              disabled={loading}
-            >
-              {loading ? (
-                <ActivityIndicator color={theme.colors.background} />
-              ) : (
-                <Text style={styles.submitButtonText}>ХУВААЛЦАХ</Text>
-              )}
-            </TouchableOpacity>
-        </View>
+        <TouchableOpacity 
+          style={styles.submitButton}
+          onPress={handleShare}
+          disabled={loading}
+        >
+          {loading ? (
+            <ActivityIndicator color={theme.colors.background} />
+          ) : (
+            <Text style={styles.submitButtonText}>ХУВААЛЦАХ</Text>
+          )}
+        </TouchableOpacity>
 
       </ScrollView>
     </View>
@@ -194,13 +223,14 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: theme.colors.background,
-    paddingTop: 50,
   },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
+    paddingTop: 60,
     paddingHorizontal: theme.spacing.l,
-    marginBottom: theme.spacing.l,
+    paddingBottom: 20,
+    backgroundColor: theme.colors.background,
   },
   backButton: {
     padding: 8,
@@ -213,7 +243,6 @@ const styles = StyleSheet.create({
   },
   content: {
     padding: theme.spacing.l,
-    paddingBottom: 40,
   },
   description: {
     fontSize: 14,
@@ -278,17 +307,13 @@ const styles = StyleSheet.create({
   typeTextActive: {
     color: theme.colors.background,
   },
-  buttonContainer: {
-      flexDirection: 'row',
-      marginTop: 24,
-  },
   submitButton: {
     backgroundColor: theme.colors.primary,
     height: 56,
     borderRadius: 12,
     alignItems: 'center',
     justifyContent: 'center',
-    marginTop: 24, // Keep for backward compatibility if used alone
+    marginTop: 24,
   },
   submitButtonText: {
     fontSize: 16,

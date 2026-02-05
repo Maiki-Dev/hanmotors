@@ -387,7 +387,8 @@ const RideRequestScreen = () => {
           Alert.alert('Амжилттай', 'Төлбөр төлөгдлөө. Аялал баталгаажлаа!');
           navigation.navigate('TripStatus', { trip: response.data });
       } catch (error: any) {
-          Alert.alert('Алдаа', 'Төлбөр баталгаажуулахад алдаа гарлаа');
+          const message = error.response?.data?.message || 'Төлбөр баталгаажуулахад алдаа гарлаа';
+          Alert.alert('Алдаа', message);
       } finally {
           setLoading(false);
       }

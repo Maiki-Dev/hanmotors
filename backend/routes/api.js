@@ -774,15 +774,26 @@ router.post('/trip/request', async (req, res) => {
 router.post('/trip/:id/confirm-payment', async (req, res) => {
   try {
     const tripId = req.params.id;
-    // Simulate payment verification
-    // In real world, verify with payment gateway transaction ID
     
-    const trip = await Trip.findByIdAndUpdate(tripId, {
-      status: 'pending',
-      paymentStatus: 'partial_paid'
-    }, { new: true });
-    
+    const trip = await Trip.findById(tripId);
     if (!trip) return res.status(404).json({ message: 'Trip not found' });
+
+    // Wallet Deduction Logic
+    if (trip.customer) {
+      const customer = await Customer.findById(trip.customer);
+      if (customer) {
+        if (customer.wallet < trip.prepaymentAmount) {
+           return res.status(400).json({ message: 'Дансны үлдэгдэл хүрэлцэхгүй байна. Та цэнэглэнэ үү.' });
+        }
+        customer.wallet -= trip.prepaymentAmount;
+        await customer.save();
+        console.log(`[Payment] Deducted ${trip.prepaymentAmount} from Customer ${customer.phone}. New Balance: ${customer.wallet}`);
+      }
+    }
+    
+    trip.status = 'pending';
+    trip.paymentStatus = 'partial_paid';
+    await trip.save();
 
     const io = req.app.get('io');
     

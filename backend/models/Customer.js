@@ -8,6 +8,7 @@ const CustomerSchema = new mongoose.Schema({
   otpExpiry: { type: Date },
   pushToken: { type: String },
   rating: { type: Number, default: 5.0 },
+  wallet: { type: Number, default: 0 },
   createdAt: { type: Date, default: Date.now }
 });
 

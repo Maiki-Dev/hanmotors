@@ -23,6 +23,7 @@ import NotificationSettingsScreen from './src/screens/NotificationSettingsScreen
 import ProfileScreen from './src/screens/ProfileScreen';
 import WalletScreen from './src/screens/WalletScreen';
 import ShareJobScreen from './src/screens/ShareJobScreen';
+import LocationPickerScreen from './src/screens/LocationPickerScreen';
 
 import { View, Text, StyleSheet, TouchableOpacity, ScrollView, LogBox, Platform } from 'react-native';
 import { Header } from './src/components/Header';
@@ -149,6 +150,7 @@ export default function App() {
         <Stack.Screen name="JobHistory" component={JobHistoryScreen} />
         <Stack.Screen name="Wallet" component={WalletScreen} />
         <Stack.Screen name="ShareJob" component={ShareJobScreen} />
+        <Stack.Screen name="LocationPicker" component={LocationPickerScreen} />
         <Stack.Screen name="NotificationSettings" component={NotificationSettingsScreen} />
         <Stack.Screen name="Support" component={SupportScreen} />
       </Stack.Navigator>

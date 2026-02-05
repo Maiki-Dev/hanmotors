@@ -5,7 +5,7 @@ import { useDispatch, useSelector } from 'react-redux';
 import { logout } from '../store/slices/authSlice';
 import { RootState } from '../store';
 import { customerService } from '../services/api';
-import { LogOut, User, Shield, HelpCircle, Settings, Star, ChevronRight, Edit3 } from 'lucide-react-native';
+import { LogOut, User, Shield, HelpCircle, Settings, Star, ChevronRight, Edit3, Wallet } from 'lucide-react-native';
 
 const ProfileScreen = () => {
   const dispatch = useDispatch();
@@ -67,6 +67,13 @@ const ProfileScreen = () => {
                 <Text style={styles.ratingText}>{profile.rating.toFixed(1)}</Text>
             </View>
             )}
+
+            <View style={[styles.ratingContainer, { marginTop: 10, backgroundColor: theme.colors.primary }]}>
+                <Wallet size={16} color="white" />
+                <Text style={[styles.ratingText, { color: 'white' }]}>
+                    {profile?.wallet?.toLocaleString() || 0}₮
+                </Text>
+            </View>
         </View>
 
         <View style={styles.section}>

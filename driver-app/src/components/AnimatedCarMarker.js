@@ -1,11 +1,13 @@
 import React, { useEffect, useRef } from 'react';
 import { StyleSheet, Animated, Easing, Platform, Image, View } from 'react-native';
 import { Marker, AnimatedRegion } from 'react-native-maps';
+import { CarIdle, CarMoving, CarSelected } from './CarIcons';
 
 export const AnimatedCarMarker = ({ 
   coordinate, 
   heading = 0, 
-  isTowing = false,
+  vehicleType = 'Ride', // Ride, Tow, Cargo
+  status = 'idle', // idle, moving, selected
   duration = 2000,
   onPress
 }) => {
@@ -65,12 +67,29 @@ export const AnimatedCarMarker = ({
     outputRange: ['0deg', '360deg'],
   });
 
-  // Adjust rotation based on platform if needed (sometimes Android/iOS differ in marker orientation)
-  // Usually 0 is North. If icon points up, it's fine.
-  
-  const iconSource = isTowing 
-    ? require('../../assets/tow-truck.png') 
-    : require('../../assets/car_icon.png');
+  // Render correct icon based on type and status
+  const renderIcon = () => {
+    if (vehicleType === 'Tow') {
+      // Keep existing Tow Truck PNG for now
+      return (
+        <Image
+          source={require('../../assets/tow-truck.png')}
+          style={styles.carIcon}
+          resizeMode="contain"
+        />
+      );
+    }
+
+    // For Ride (Sedan)
+    switch (status) {
+      case 'moving':
+        return <CarMoving width={50} height={50} />;
+      case 'selected':
+        return <CarSelected width={60} height={60} />;
+      default:
+        return <CarIdle width={50} height={50} />;
+    }
+  };
 
   return (
     <Marker.Animated
@@ -88,11 +107,7 @@ export const AnimatedCarMarker = ({
           },
         ]}
       >
-        <Image
-          source={iconSource}
-          style={styles.carIcon}
-          resizeMode="contain"
-        />
+        {renderIcon()}
       </Animated.View>
     </Marker.Animated>
   );

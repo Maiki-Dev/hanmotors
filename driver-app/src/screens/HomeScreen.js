@@ -768,7 +768,8 @@ export default function HomeScreen({ navigation, route }) {
           <AnimatedCarMarker
             coordinate={driverLocation}
             heading={driverLocation.heading || 0}
-            isTowing={true} // Default to tow truck as per original hardcoded image
+            vehicleType="Ride" // Updated to show new Yellow Sedan icons
+            status={driverLocation.speed > 0.5 ? 'moving' : 'idle'} // Simple speed threshold
             duration={1000} // Fast updates for own location
           />
         )}
@@ -781,7 +782,8 @@ export default function HomeScreen({ navigation, route }) {
               key={id}
               coordinate={{ latitude: loc.lat, longitude: loc.lng }}
               heading={loc.heading || 0}
-              isTowing={loc.isTowing}
+              vehicleType={loc.isTowing ? 'Tow' : 'Ride'}
+              status="idle" // Default to idle for others for now
               duration={2000} // Smooth interpolation duration matching socket update interval
             />
           );

@@ -5,6 +5,7 @@ import MapView, { Marker, Polyline, PROVIDER_GOOGLE } from 'react-native-maps';
 import { io } from 'socket.io-client';
 import { Navigation, Phone, MessageCircle, Car, MapPin, User, ChevronRight, ShieldCheck, Clock, CheckCircle, Locate } from 'lucide-react-native';
 import * as Location from 'expo-location';
+import { AnimatedCarMarker } from '../components/AnimatedCarMarker';
 import { LinearGradient } from 'expo-linear-gradient';
 import { API_URL } from '../config';
 import { theme } from '../constants/theme';
@@ -430,6 +431,7 @@ export default function ActiveJobScreen({ route, navigation }) {
           latitude: lat,
           longitude: lng,
           heading,
+          speed: loc.coords.speed,
           latitudeDelta: 0.01,
           longitudeDelta: 0.01,
         });
@@ -442,6 +444,7 @@ export default function ActiveJobScreen({ route, navigation }) {
               lat: loc.coords.latitude, 
               lng: loc.coords.longitude,
               heading: loc.coords.heading,
+              speed: loc.coords.speed,
               plateNumber: vehicle.plateNumber,
               vehicleModel: vehicle.model,
               vehicleColor: vehicle.color
@@ -603,21 +606,13 @@ export default function ActiveJobScreen({ route, navigation }) {
         }}
       >
         {userLocation && (
-          <Marker 
-            coordinate={userLocation} 
-            anchor={{ x: 0.5, y: 0.5 }}
-            rotation={(userLocation.heading || 0) + (Platform.OS === 'ios' ? 0 : -90)} // iOS respects EXIF orientation (Up), Android needs adjustment (Right)
-            flat={true}
-          >
-             <View style={styles.carMarkerContainer}>
-               {/* 3D Realistic Tow Truck Marker */}
-               <View style={[styles.carMarkerGlow, { width: 40, height: 40, borderRadius: 20, opacity: 0.5 }]} />
-               <Image 
-                  source={require('../../assets/tow-truck.png')}
-                  style={{ width: 60, height: 60, resizeMode: 'contain' }}
-               />
-             </View>
-          </Marker>
+          <AnimatedCarMarker
+            coordinate={userLocation}
+            heading={userLocation.heading || 0}
+            vehicleType="Ride"
+            status={(userLocation.speed && userLocation.speed > 0.5) ? 'moving' : 'idle'}
+            duration={1000}
+          />
         )}
 
         <Marker 
