@@ -95,12 +95,12 @@ export default function LoginScreen({ navigation }) {
       style={styles.container}
     >
       <View style={styles.content}>
-        <View style={styles.header}>
-          <View style={styles.logoContainer}>
-             <Text style={styles.logoText}>X</Text>
+        <View style={styles.logoContainer}>
+          <View style={styles.logoBox}>
+            <Text style={styles.logoText}>K</Text>
           </View>
-          <Text style={styles.title}>XAN MOTORS</Text>
-          <Text style={styles.subtitle}>ЖОЛООЧИЙН ПРЕМИУМ АПП</Text>
+          <Text style={styles.appName}>KHAN MOTORS</Text>
+          <Text style={styles.brandSubtitle}>ЖОЛООЧИЙН ПРЕМИУМ АПП</Text>
         </View>
 
         <View style={styles.form}>

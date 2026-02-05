@@ -3,27 +3,27 @@ version: '3.8'
 services:
   mongo:
     image: mongo:latest
-    container_name: xanmotors_mongo
+    container_name: khanmotors_mongo
     ports:
       - "27017:27017"
     volumes:
       - mongo-data:/data/db
     networks:
-      - xanmotors-network
+      - khanmotors-network
 
   backend:
     build: ./backend
-    container_name: xanmotors_backend
+    container_name: khanmotors_backend
     restart: always
     ports:
       - "5000:5000"
     environment:
-      - MONGO_URI=mongodb://mongo:27017/xanmotors
+      - MONGO_URI=mongodb://mongo:27017/khanmotors
       - PORT=5000
     depends_on:
       - mongo
     networks:
-      - xanmotors-network
+      - khanmotors-network
 
   admin-dashboard:
     build: 
@@ -31,16 +31,16 @@ services:
       args:
         VITE_SUPABASE_URL: https://addcixpchvbgykkkianm.supabase.co
         VITE_SUPABASE_ANON_KEY: sb_publishable_5qJdaDYL3WkQTpm74UhOMA_wAREUZWD
-    container_name: xanmotors_admin
+    container_name: khanmotors_admin
     restart: always
     ports:
-      - "3000:80"
+      - "80:80"
     networks:
-      - xanmotors-network
-
-networks:
-  xanmotors-network:
-    driver: bridge
+      - khanmotors-network
 
 volumes:
   mongo-data:
+
+networks:
+  khanmotors-network:
+    driver: bridge

@@ -1,5 +1,5 @@
 {
-  "name": "xanmotors-backend",
+  "name": "khanmotors-backend",
   "version": "1.0.0",
   "description": "Backend for Xan Motors",
   "main": "server.js",

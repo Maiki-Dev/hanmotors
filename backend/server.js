@@ -24,7 +24,7 @@ app.use(cors());
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ limit: '50mb', extended: true }));
 
-const MONGO_URI = process.env.MONGO_URI || 'mongodb://127.0.0.1:27017/xanmotors';
+const MONGO_URI = process.env.MONGO_URI || 'mongodb://127.0.0.1:27017/khanmotors';
 global.OFFLINE_MODE = false;
 
 const connectDB = async () => {

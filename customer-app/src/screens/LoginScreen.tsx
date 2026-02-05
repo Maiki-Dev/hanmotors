@@ -43,9 +43,9 @@ const LoginScreen = () => {
     <View style={styles.container}>
       <View style={styles.logoContainer}>
          <View style={styles.logoBox}>
-            <Text style={styles.logoText}>X</Text>
+            <Text style={styles.logoText}>K</Text>
          </View>
-         <Text style={styles.appName}>XAN MOTORS</Text>
+         <Text style={styles.appName}>KHAN MOTORS</Text>
          <Text style={styles.brandSubtitle}>PREMIUM SERVICE</Text>
       </View>
 
