@@ -22,6 +22,7 @@ const TripSchema = new mongoose.Schema({
   serviceType: { type: String, required: true },
   vehicleModel: String,
   distance: Number,
+  traveledDistance: { type: Number, default: 0 },
   additionalServices: [{
     name: String,
     price: Number
@@ -35,3 +36,4 @@ const TripSchema = new mongoose.Schema({
 });
 
 module.exports = mongoose.model('Trip', TripSchema);
+

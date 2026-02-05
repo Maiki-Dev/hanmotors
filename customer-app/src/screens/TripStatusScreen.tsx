@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useRef } from 'react';
-import { View, Text, StyleSheet, Image, TouchableOpacity, Alert, ActivityIndicator, Dimensions, Platform, Animated } from 'react-native';
+import { View, Text, StyleSheet, Image, TouchableOpacity, Alert, ActivityIndicator, Dimensions, Platform, Animated, Linking } from 'react-native';
 import MapView, { Marker, Polyline, PROVIDER_GOOGLE } from 'react-native-maps';
 import MapViewDirections from 'react-native-maps-directions';
 import { useRoute, useNavigation } from '@react-navigation/native';
@@ -221,14 +221,34 @@ const TripStatusScreen = () => {
 
         {/* Action Buttons */}
         <View style={styles.actionsContainer}>
-            <TouchableOpacity style={styles.actionButton}>
+            <TouchableOpacity 
+                style={styles.actionButton}
+                onPress={() => {
+                    const phone = trip.driver?.phone;
+                    if (phone) {
+                        Linking.openURL(`tel:${phone}`);
+                    } else {
+                        Alert.alert('Мэдээлэл', 'Жолоочийн утасны дугаар олдсонгүй');
+                    }
+                }}
+            >
                 <View style={[styles.actionIconCircle, { backgroundColor: '#E8F5E9' }]}>
                     <Phone size={24} color="#2E7D32" />
                 </View>
                 <Text style={styles.actionLabel}>Залгах</Text>
             </TouchableOpacity>
             
-            <TouchableOpacity style={styles.actionButton}>
+            <TouchableOpacity 
+                style={styles.actionButton}
+                onPress={() => {
+                    const phone = trip.driver?.phone;
+                    if (phone) {
+                        Linking.openURL(`sms:${phone}`);
+                    } else {
+                        Alert.alert('Мэдээлэл', 'Жолоочийн утасны дугаар олдсонгүй');
+                    }
+                }}
+            >
                 <View style={[styles.actionIconCircle, { backgroundColor: '#E3F2FD' }]}>
                     <MessageCircle size={24} color="#1565C0" />
                 </View>

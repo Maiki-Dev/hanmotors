@@ -211,17 +211,19 @@ export default function HomeScreen({ navigation, route }) {
     (async () => {
       const perm = await Location.requestForegroundPermissionsAsync();
       if (perm.status !== 'granted') {
-        Alert.alert('Зөвшөөрөл шаардлагатай', 'Байршлын зөвшөөрлийг олгоно уу.');
+        // Alert.alert('Зөвшөөрөл шаардлагатай', 'Байршлын зөвшөөрлийг олгоно уу.');
+        console.log('Foreground location permission not granted');
         return;
       }
       // Check if location services are enabled
       const enabled = await Location.hasServicesEnabledAsync();
       if (!enabled) {
-        Alert.alert(
-          'Байршил унтраалттай байна', 
-          'Жолоочийн горимд ажиллахын тулд та утасны байршлаа асаана уу.',
-          [{ text: 'OK' }]
-        );
+        // Alert.alert(
+        //   'Байршил унтраалттай байна', 
+        //   'Жолоочийн горимд ажиллахын тулд та утасны байршлаа асаана уу.',
+        //   [{ text: 'OK' }]
+        // );
+        console.log('Location services disabled');
       }
 
       // Request Notification Permissions
@@ -686,7 +688,8 @@ export default function HomeScreen({ navigation, route }) {
                 }
             });
         } else {
-            Alert.alert('Анхааруулга', 'Background location permission not granted. Tracking may stop when app is closed.');
+            // Alert.alert('Анхааруулга', 'Background location permission not granted. Tracking may stop when app is closed.');
+            console.log('Background location permission not granted');
         }
     } catch (e) {
         console.log('Error starting background location:', e);

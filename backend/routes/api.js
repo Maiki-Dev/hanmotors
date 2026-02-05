@@ -874,6 +874,23 @@ router.post('/trip/:id/start', async (req, res) => {
   }
 });
 
+router.post('/trip/:id/update-distance', async (req, res) => {
+  try {
+    const { distance } = req.body;
+    const trip = await Trip.findByIdAndUpdate(req.params.id, { 
+      traveledDistance: distance 
+    }, { new: true });
+    
+    // Optional: emit socket event if needed for realtime dashboard
+    // const io = req.app.get('io');
+    // io.emit('tripDistanceUpdated', { tripId: trip._id, distance });
+    
+    res.json(trip);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 router.post('/trip/:id/complete', async (req, res) => {
   try {
     console.log(`[Trip Complete] Attempting to complete trip: ${req.params.id}`);
@@ -1387,7 +1404,7 @@ router.post('/auth/login', async (req, res) => {
 
     let customer = await Customer.findOne({ phone });
     if (!customer) {
-      customer = new Customer({ phone });
+      customer = new Customer({ phone, name: phone });
       await customer.save();
     }
 
@@ -1491,6 +1508,11 @@ router.post('/rides/request', async (req, res) => {
 
     if (customerId && customerId !== 'guest') {
         tripData.customer = customerId;
+        const customerObj = await Customer.findById(customerId);
+        if (customerObj) {
+            tripData.customerName = customerObj.name;
+            tripData.customerPhone = customerObj.phone;
+        }
     }
 
     const trip = new Trip(tripData);

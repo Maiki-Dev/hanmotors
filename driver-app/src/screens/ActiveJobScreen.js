@@ -38,7 +38,9 @@ const darkMapStyle = [
 
 export default function ActiveJobScreen({ route, navigation }) {
   const { job: paramJob, trip: paramTrip, driverId, driverInfo, mapMode = 'dark', showsTraffic = false } = route.params || {};
-  const job = paramJob || paramTrip;
+  const initialJob = paramJob || paramTrip;
+  const [activeJob, setActiveJob] = useState(initialJob);
+  const job = activeJob; // Use activeJob as the source of truth
 
   const [status, setStatus] = useState(
     job?.status === 'in_progress' ? 'in_progress' : 'pickup'
@@ -47,8 +49,67 @@ export default function ActiveJobScreen({ route, navigation }) {
   const [userLocation, setUserLocation] = useState(null);
   const [tripStats, setTripStats] = useState({ 
     duration: 0, 
-    distance: job?.distance || 0 
+    distance: job?.traveledDistance || 0 
   });
+  
+  // Sync distance to backend
+  const tripStatsRef = useRef(tripStats);
+  useEffect(() => {
+      tripStatsRef.current = tripStats;
+  }, [tripStats]);
+
+  // Fetch latest trip data on mount to ensure distance is accurate (Resume functionality)
+  useEffect(() => {
+      const fetchLatestTripData = async () => {
+          if (!job?._id || !driverId) return;
+          try {
+              const response = await fetch(`${API_URL}/api/driver/${driverId}/active-job`);
+              if (response.ok) {
+                  const latestJob = await response.json();
+                  if (latestJob && latestJob._id === job._id) {
+                      console.log('Resumed Trip Distance:', latestJob.traveledDistance);
+                      
+                      // Update activeJob to ensure startTime and other fields are fresh
+                      setActiveJob(latestJob);
+
+                      // Update distance from server if it exists
+                      if (latestJob.traveledDistance) {
+                           setTripStats(prev => ({
+                               ...prev,
+                               distance: latestJob.traveledDistance
+                           }));
+                      }
+                  }
+              }
+          } catch (e) {
+              console.log('Error fetching latest trip data:', e);
+          }
+      };
+      
+      fetchLatestTripData();
+  }, []);
+
+  useEffect(() => {
+    if (status !== 'in_progress') return;
+
+    const interval = setInterval(async () => {
+      const currentDist = tripStatsRef.current.distance;
+      if (currentDist > 0 && job?._id) {
+         try {
+           await fetch(`${API_URL}/api/trip/${job._id}/update-distance`, {
+             method: 'POST',
+             headers: { 'Content-Type': 'application/json' },
+             body: JSON.stringify({ distance: currentDist })
+           });
+         } catch (e) {
+           // silent fail
+         }
+      }
+    }, 10000); // Sync every 10 seconds
+
+    return () => clearInterval(interval);
+  }, [status, job?._id]);
+
   const [routeCoordinates, setRouteCoordinates] = useState([]);
   const [isFollowing, setIsFollowing] = useState(true);
   const mapRef = useRef(null);
@@ -388,21 +449,24 @@ export default function ActiveJobScreen({ route, navigation }) {
           });
         }
 
-        if (statusRef.current === 'in_progress') {
-          if (lastLocRef.current) {
-            const d = getDistanceFromLatLonInKm(
-              lastLocRef.current.latitude,
-              lastLocRef.current.longitude,
-              lat,
-              lng
-            );
-            if (d > 0.003) {
+        // Always track location changes to maintain accurate reference
+        if (lastLocRef.current) {
+          const d = getDistanceFromLatLonInKm(
+            lastLocRef.current.latitude,
+            lastLocRef.current.longitude,
+            lat,
+            lng
+          );
+          
+          if (d > 0.003) {
+            // Only accumulate distance if the trip is in progress
+            if (statusRef.current === 'in_progress') {
               setTripStats(prev => ({ ...prev, distance: prev.distance + d }));
-              lastLocRef.current = { latitude: lat, longitude: lng };
             }
-          } else {
             lastLocRef.current = { latitude: lat, longitude: lng };
           }
+        } else {
+          lastLocRef.current = { latitude: lat, longitude: lng };
         }
 
         // Auto-follow logic using Ref to avoid stale closure
@@ -465,7 +529,11 @@ export default function ActiveJobScreen({ route, navigation }) {
           method: 'POST',
         });
         if (response.ok) {
+          const updatedTrip = await response.json();
+          setActiveJob(updatedTrip);
+          
           setStatus('in_progress');
+          setTripStats({ duration: 0, distance: 0 });
           if (socketRef.current) socketRef.current.emit('tripStarted', { tripId: job._id });
         }
       } else if (status === 'in_progress') {
@@ -613,20 +681,34 @@ export default function ActiveJobScreen({ route, navigation }) {
                   <User size={24} color="#FFF" />
                </View>
                <View style={styles.customerInfo}>
-                  <Text style={styles.customerName}>{job?.customerName || 'Зочин'}</Text>
+                  <Text style={styles.customerName}>{job?.customerName || job?.customer?.name || 'Зочин'}</Text>
                   <Text style={styles.tripPrice}>₮{(job?.price || 0).toLocaleString()}</Text>
                </View>
                
                <View style={styles.actionButtons}>
                   <TouchableOpacity 
                     style={[styles.actionBtn, styles.msgBtn]}
-                    onPress={() => Alert.alert('Message', 'Coming soon')}
+                    onPress={() => {
+                        const phone = job?.customerPhone || job?.customer?.phone;
+                        if (phone) {
+                            Linking.openURL(`sms:${phone}`);
+                        } else {
+                            Alert.alert('Info', 'No phone number');
+                        }
+                    }}
                   >
                     <MessageCircle size={20} color="#FFF" />
                   </TouchableOpacity>
                   <TouchableOpacity 
                     style={[styles.actionBtn, styles.callBtn]}
-                    onPress={() => job?.customerPhone ? Linking.openURL(`tel:${job.customerPhone}`) : Alert.alert('Info', 'No phone number')}
+                    onPress={() => {
+                        const phone = job?.customerPhone || job?.customer?.phone;
+                        if (phone) {
+                            Linking.openURL(`tel:${phone}`);
+                        } else {
+                            Alert.alert('Info', 'No phone number');
+                        }
+                    }}
                   >
                     <Phone size={20} color="#FFF" />
                   </TouchableOpacity>

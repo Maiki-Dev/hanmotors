@@ -13,3 +13,5 @@ yarn-error.log*
 .vscode/
 android/app/build/
 ios/Pods/
+java/
+jdk-17.zip
