@@ -20,6 +20,10 @@ services:
     build: ./backend
     container_name: khanmotors_backend
     restart: always
+    command: npm run dev
+    volumes:
+      - ./backend:/app
+      - /app/node_modules
     deploy:
       resources:
         limits:
