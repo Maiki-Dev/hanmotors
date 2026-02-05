@@ -23,7 +23,7 @@ import NotificationSettingsScreen from './src/screens/NotificationSettingsScreen
 import ProfileScreen from './src/screens/ProfileScreen';
 import WalletScreen from './src/screens/WalletScreen';
 
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView, LogBox } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView, LogBox, Platform } from 'react-native';
 import { Header } from './src/components/Header';
 import { PremiumCard } from './src/components/PremiumCard';
 import { ChevronRight } from 'lucide-react-native';
@@ -72,12 +72,12 @@ function MainTabs({ route }) {
         tabBarShowLabel: false,
         tabBarStyle: {
           position: 'absolute',
-          bottom: 25,
+          bottom: Platform.OS === 'android' ? 15 : 25,
           left: 20,
           right: 20,
           height: 70,
           borderRadius: 35,
-          backgroundColor: theme.colors.glass || 'rgba(28, 25, 23, 0.9)',
+          backgroundColor: theme.colors.glass || 'rgba(28, 25, 23, 0.95)',
           borderTopWidth: 0,
           borderWidth: 1,
           borderColor: theme.colors.glassBorder || 'rgba(255, 255, 255, 0.1)',
@@ -90,6 +90,8 @@ function MainTabs({ route }) {
           shadowOpacity: 0.3,
           shadowRadius: 10,
           paddingBottom: 0,
+          // Ensure it's above system navigation bar
+          marginBottom: Platform.OS === 'android' ? 10 : 0, 
         },
       }}
     >

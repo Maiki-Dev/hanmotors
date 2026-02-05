@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, KeyboardAvoidingView, Platform, Alert, TouchableOpacity } from 'react-native';
+import { View, Text, StyleSheet, KeyboardAvoidingView, Platform, Alert, TouchableOpacity, Image } from 'react-native';
 import { API_URL } from '../config';
 import { theme } from '../constants/theme';
 import { GoldButton } from '../components/GoldButton';
@@ -96,10 +96,7 @@ export default function LoginScreen({ navigation }) {
     >
       <View style={styles.content}>
         <View style={styles.logoContainer}>
-          <View style={styles.logoBox}>
-            <Text style={styles.logoText}>K</Text>
-          </View>
-          <Text style={styles.appName}>KHAN MOTORS</Text>
+          <Image source={require('../../assets/icon.png')} style={styles.logoImage} resizeMode="contain" />
           <Text style={styles.brandSubtitle}>ЖОЛООЧИЙН ПРЕМИУМ АПП</Text>
         </View>
 
@@ -108,7 +105,7 @@ export default function LoginScreen({ navigation }) {
             <>
               <Text style={styles.label}>Утасны дугаараа оруулна уу</Text>
               <Input
-                placeholder="80080810"
+                placeholder="Утасны дугаар"
                 value={phone}
                 onChangeText={setPhone}
                 keyboardType="phone-pad"
@@ -167,29 +164,13 @@ const styles = StyleSheet.create({
     marginBottom: theme.spacing.xxl,
   },
   logoContainer: {
-    width: 80,
-    height: 80,
-    backgroundColor: theme.colors.surface,
-    borderRadius: 40,
     alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: theme.spacing.m,
-    borderWidth: 1,
-    borderColor: theme.colors.border,
+    marginBottom: 60, // Increased to move logo up
   },
-  logoText: {
-    fontSize: 40,
-    fontWeight: 'bold',
-    color: theme.colors.primary,
-  },
-  title: {
-    ...theme.typography.h1,
-    marginBottom: theme.spacing.xs,
-  },
-  subtitle: {
-    ...theme.typography.caption,
-    letterSpacing: 2,
-    color: theme.colors.textSecondary,
+  logoImage: {
+    width: 180, // Smaller size
+    height: 150,
+    marginBottom: 0,
   },
   form: {
     width: '100%',
@@ -206,6 +187,11 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     marginBottom: theme.spacing.l,
+  },
+  brandSubtitle: {
+    ...theme.typography.caption,
+    letterSpacing: 1,
+    color: theme.colors.textSecondary,
   },
   backText: {
     ...theme.typography.body,
