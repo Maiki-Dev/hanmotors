@@ -37,6 +37,8 @@ export const rideService = {
 
   calculatePrice: (distance: number, vehicleType: string) => 
     api.post('/pricing/calculate', { distance, vehicleType }),
+
+  confirmPayment: (tripId: string) => api.post(`/trip/${tripId}/confirm-payment`),
 };
 
 export default api;

@@ -15,9 +15,16 @@ const TripSchema = new mongoose.Schema({
   },
   status: { 
     type: String, 
-    enum: ['pending', 'accepted', 'in_progress', 'completed', 'cancelled'], 
+    enum: ['pending', 'accepted', 'driver_arrived', 'in_progress', 'completed', 'cancelled', 'payment_pending'], 
     default: 'pending' 
   },
+  paymentStatus: {
+    type: String,
+    enum: ['pending', 'partial_paid', 'full_paid'],
+    default: 'pending'
+  },
+  prepaymentAmount: { type: Number, default: 0 },
+  remainingAmount: { type: Number, default: 0 },
   price: { type: Number, required: true },
   serviceType: { type: String, required: true },
   vehicleModel: String,

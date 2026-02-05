@@ -1,5 +1,6 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, FlatList, TouchableOpacity, Image, Dimensions } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { theme } from '../constants/theme';
 import { Car, Truck, Package, Shield, Zap, Crown } from 'lucide-react-native';
 
@@ -55,10 +56,47 @@ const SERVICES = [
     icon: Package,
     color: '#f97316',
     bgColor: '#f5f5f5'
+  },
+  {
+    id: 'towing',
+    title: 'Ачилт',
+    subtitle: 'Машин ачих үйлчилгээ',
+    icon: Truck,
+    color: '#ef4444',
+    bgColor: '#f5f5f5'
   }
 ];
 
 export default function ServicesScreen() {
+  const [role, setRole] = useState(null);
+
+  useEffect(() => {
+    loadRole();
+  }, []);
+
+  const loadRole = async () => {
+    try {
+      const data = await AsyncStorage.getItem('driver_data');
+      if (data) {
+        const driver = JSON.parse(data);
+        setRole(driver.role || 'taxi');
+      }
+    } catch (e) {
+      console.error('Failed to load driver role', e);
+    }
+  };
+
+  const getFilteredServices = () => {
+    if (!role) return SERVICES;
+    
+    if (role === 'tow') {
+      return SERVICES.filter(s => s.id === 'towing');
+    }
+    
+    // Default/Taxi role: show everything EXCEPT towing
+    return SERVICES.filter(s => s.id !== 'towing');
+  };
+
   const renderItem = ({ item }) => {
     const Icon = item.icon;
     
@@ -79,11 +117,13 @@ export default function ServicesScreen() {
     <View style={styles.container}>
       <View style={styles.header}>
         <Text style={styles.headerTitle}>Үйлчилгээ</Text>
-        <Text style={styles.headerSubtitle}>Танд санал болгож буй үйлчилгээнүүд</Text>
+        <Text style={styles.headerSubtitle}>
+          {role === 'tow' ? 'Танд зөвхөн ачилтын үйлчилгээ харагдана' : 'Танд санал болгож буй үйлчилгээнүүд'}
+        </Text>
       </View>
       
       <FlatList
-        data={SERVICES}
+        data={getFilteredServices()}
         renderItem={renderItem}
         keyExtractor={item => item.id}
         numColumns={COLUMN_COUNT}

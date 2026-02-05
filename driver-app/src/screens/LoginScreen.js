@@ -6,6 +6,8 @@ import { GoldButton } from '../components/GoldButton';
 import { Input } from '../components/Input';
 import { Phone, KeyRound, ArrowLeft } from 'lucide-react-native';
 
+import AsyncStorage from '@react-native-async-storage/async-storage';
+
 export default function LoginScreen({ navigation }) {
   const [step, setStep] = useState(1); // 1: Phone, 2: OTP
   const [phone, setPhone] = useState('');
@@ -77,6 +79,8 @@ export default function LoginScreen({ navigation }) {
       const data = await response.json();
 
       if (response.ok) {
+        await AsyncStorage.setItem('driver_id', data._id);
+        await AsyncStorage.setItem('driver_data', JSON.stringify(data));
         navigation.replace('Main', { driverId: data._id, driverName: data.name });
       } else {
         Alert.alert('Алдаа', data.message || 'OTP буруу байна');

@@ -745,19 +745,57 @@ router.post('/trip/request', async (req, res) => {
       tripData.price = (Number(tripData.price) || 0) + additionalCost;
     }
 
+    // Prepayment Logic
+    const prepaymentPercentage = 0.10; // 10%
+    const prepaymentAmount = Math.ceil((tripData.price * prepaymentPercentage) / 100) * 100;
+    
+    tripData.prepaymentAmount = prepaymentAmount;
+    tripData.remainingAmount = tripData.price - prepaymentAmount;
+    tripData.status = 'payment_pending';
+    tripData.paymentStatus = 'pending';
+
     const trip = new Trip(tripData);
     await trip.save();
+    
+    // Do NOT emit newJobRequest yet if payment is pending
+    // Only return trip details to customer to proceed with payment
+    
+    res.json({
+      ...trip.toObject(),
+      requiresPayment: true,
+      prepaymentAmount
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Confirm Prepayment
+router.post('/trip/:id/confirm-payment', async (req, res) => {
+  try {
+    const tripId = req.params.id;
+    // Simulate payment verification
+    // In real world, verify with payment gateway transaction ID
+    
+    const trip = await Trip.findByIdAndUpdate(tripId, {
+      status: 'pending',
+      paymentStatus: 'partial_paid'
+    }, { new: true });
+    
+    if (!trip) return res.status(404).json({ message: 'Trip not found' });
+
     const io = req.app.get('io');
     
-    // Broadcast logic: 5km radius
+    // Broadcast logic: 5km radius (Moved from trip/request)
     const driverLocations = req.app.driverLocations || {};
     const pickupLat = trip.pickupLocation.lat;
     const pickupLng = trip.pickupLocation.lng;
     let matchedDrivers = 0;
     const nearbyDriverIds = [];
 
-    console.log(`[Trip Request] Finding drivers near ${pickupLat}, ${pickupLng} within 5km...`);
+    console.log(`[Trip Paid] Finding drivers near ${pickupLat}, ${pickupLng} within 5km...`);
 
+    // 1. Identify drivers within range
     Object.keys(driverLocations).forEach(driverId => {
       const loc = driverLocations[driverId];
       if (loc && (loc.latitude || loc.lat) && (loc.longitude || loc.lng)) {
@@ -766,37 +804,55 @@ router.post('/trip/request', async (req, res) => {
          
          const dist = getDistance(pickupLat, pickupLng, dLat, dLng);
          if (dist <= 5) {
-            console.log(` -> Match: Driver ${driverId} is ${dist.toFixed(2)}km away.`);
-            io.to(`driver_${driverId}`).emit('newJobRequest', trip);
-            matchedDrivers++;
             nearbyDriverIds.push(driverId);
          }
       }
     });
 
-    console.log(`[Trip Request] Sent to ${matchedDrivers} drivers.`);
-
-    // Send Push Notifications to matched drivers
+    // 2. Filter drivers by Role and Dispatch
     if (nearbyDriverIds.length > 0) {
-        // Run in background, don't await to avoid blocking response
-        Driver.find({ _id: { $in: nearbyDriverIds } }).then(drivers => {
+        try {
+            const drivers = await Driver.find({ _id: { $in: nearbyDriverIds } });
+            
             drivers.forEach(driver => {
-                if (driver.pushToken) {
-                    sendPushNotification(
-                        driver.pushToken, 
-                        "🔔 Шинэ дуудлага!", 
-                        `${trip.pickupLocation?.address || 'Хаяг тодорхойгүй'} -> ${trip.dropoffLocation?.address || 'Хаяг тодорхойгүй'}`,
-                        { tripId: trip._id }
-                    );
+                const driverRole = driver.role || 'taxi'; // Default to taxi
+                let isCompatible = false;
+
+                // Compatibility Logic
+                // Tow requests -> Tow drivers only
+                if (trip.serviceType === 'Tow' || trip.serviceType === 'sos') {
+                    isCompatible = (driverRole === 'tow');
+                } else {
+                    // All other requests (Taxi, Delivery, etc.) -> Taxi drivers only
+                    isCompatible = (driverRole === 'taxi');
+                }
+
+                if (isCompatible) {
+                    console.log(` -> Match: Driver ${driver._id} (${driverRole}) is compatible.`);
+                    io.to(`driver_${driver._id}`).emit('newJobRequest', trip);
+                    matchedDrivers++;
+
+                    // Send Push Notification
+                    if (driver.pushToken) {
+                        sendPushNotification(
+                            driver.pushToken, 
+                            "🔔 Шинэ дуудлага!", 
+                            `${trip.pickupLocation?.address || 'Хаяг тодорхойгүй'} -> ${trip.dropoffLocation?.address || 'Хаяг тодорхойгүй'}`,
+                            { tripId: trip._id }
+                        );
+                    }
                 }
             });
-        }).catch(err => console.error("Error fetching drivers for push:", err));
+        } catch (err) {
+            console.error("Error filtering drivers by role:", err);
+        }
     }
+
+    console.log(`[Trip Paid] Sent to ${matchedDrivers} drivers.`);
 
     // Always notify admin
     io.to('admin_room').emit('newJobRequest', trip);
     
-    // io.emit('newJobRequest', trip); // Removed global broadcast
     res.json(trip);
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -1615,9 +1671,16 @@ router.post('/rides/request', async (req, res) => {
       serviceType: req.body.serviceType || 'Tow', // Default to Tow if not specified
       distance: Number(distance),
       price,
-      status: 'pending',
+      status: 'payment_pending', // Changed from pending
+      paymentStatus: 'pending',
       createdAt: new Date()
     };
+
+    // Prepayment Logic
+    const prepaymentPercentage = 0.10; // 10%
+    const prepaymentAmount = Math.ceil((tripData.price * prepaymentPercentage) / 100) * 100;
+    tripData.prepaymentAmount = prepaymentAmount;
+    tripData.remainingAmount = price - prepaymentAmount;
 
     if (customerId && customerId !== 'guest') {
         tripData.customer = customerId;
@@ -1632,10 +1695,15 @@ router.post('/rides/request', async (req, res) => {
 
     await trip.save();
     
-    const io = req.app.get('io');
-    io.emit('newJobRequest', trip);
+    // Do NOT emit newJobRequest yet
+    // const io = req.app.get('io');
+    // io.emit('newJobRequest', trip);
 
-    res.json(trip);
+    res.json({
+      ...trip.toObject(),
+      requiresPayment: true,
+      prepaymentAmount
+    });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

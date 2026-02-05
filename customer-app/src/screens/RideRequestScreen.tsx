@@ -10,7 +10,8 @@ import {
   Platform, 
   Dimensions, 
   TextInput,
-  FlatList 
+  FlatList,
+  Modal 
 } from 'react-native';
 import { theme } from '../constants/theme';
 import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
@@ -113,6 +114,11 @@ const RideRequestScreen = () => {
   );
   const [step, setStep] = useState<'destination_selection' | 'confirm_ride'>('destination_selection');
   const [activeCategory, setActiveCategory] = useState('suggested');
+
+  // Payment States
+  const [paymentModalVisible, setPaymentModalVisible] = useState(false);
+  const [pendingTrip, setPendingTrip] = useState<any>(null);
+  const [prepaymentAmount, setPrepaymentAmount] = useState(0);
 
   useEffect(() => {
     const fetchServices = async () => {
@@ -355,6 +361,13 @@ const RideRequestScreen = () => {
         distance
       });
       
+      if (response.data.requiresPayment) {
+          setPendingTrip(response.data);
+          setPrepaymentAmount(response.data.prepaymentAmount);
+          setPaymentModalVisible(true);
+          return;
+      }
+
       Alert.alert('Амжилттай', 'Аялал амжилттай захиалагдлаа!');
       navigation.navigate('TripStatus', { trip: response.data }); 
     } catch (error: any) {
@@ -362,6 +375,22 @@ const RideRequestScreen = () => {
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleConfirmPayment = async () => {
+      if (!pendingTrip) return;
+      
+      setLoading(true);
+      try {
+          const response = await rideService.confirmPayment(pendingTrip._id);
+          setPaymentModalVisible(false);
+          Alert.alert('Амжилттай', 'Төлбөр төлөгдлөө. Аялал баталгаажлаа!');
+          navigation.navigate('TripStatus', { trip: response.data });
+      } catch (error: any) {
+          Alert.alert('Алдаа', 'Төлбөр баталгаажуулахад алдаа гарлаа');
+      } finally {
+          setLoading(false);
+      }
   };
 
   const handleMapPick = () => {
@@ -683,11 +712,119 @@ const RideRequestScreen = () => {
       {showMapPicker ? renderMapPicker() : (
         step === 'destination_selection' ? renderDestinationSelection() : renderConfirmRide()
       )}
+      
+      {/* Payment Modal */}
+      <Modal
+          visible={paymentModalVisible}
+          transparent={true}
+          animationType="slide"
+          onRequestClose={() => setPaymentModalVisible(false)}
+      >
+          <View style={styles.modalOverlay}>
+              <View style={styles.modalContent}>
+                  <Text style={styles.modalTitle}>Урьдчилгаа төлбөр</Text>
+                  <Text style={styles.modalText}>
+                      Та захиалгаа баталгаажуулахын тулд урьдчилгаа {prepaymentAmount?.toLocaleString()}₮ төлнө үү.
+                      (Нийт дүнгийн 10%)
+                  </Text>
+                  
+                  <View style={styles.paymentInfo}>
+                      <Text style={styles.paymentLabel}>Төлөх дүн:</Text>
+                      <Text style={styles.paymentValue}>{prepaymentAmount?.toLocaleString()}₮</Text>
+                  </View>
+
+                  <TouchableOpacity 
+                      style={styles.payButton}
+                      onPress={handleConfirmPayment}
+                      disabled={loading}
+                  >
+                      {loading ? (
+                          <ActivityIndicator color="#fff" />
+                      ) : (
+                          <Text style={styles.payButtonText}>Төлөх</Text>
+                      )}
+                  </TouchableOpacity>
+                  
+                  <TouchableOpacity 
+                      style={styles.cancelButton}
+                      onPress={() => setPaymentModalVisible(false)}
+                      disabled={loading}
+                  >
+                      <Text style={styles.cancelButtonText}>Буцах</Text>
+                  </TouchableOpacity>
+              </View>
+          </View>
+      </Modal>
     </View>
   );
 };
 
 const styles = StyleSheet.create({
+  modalOverlay: {
+      flex: 1,
+      backgroundColor: 'rgba(0,0,0,0.5)',
+      justifyContent: 'center',
+      alignItems: 'center',
+  },
+  modalContent: {
+      backgroundColor: 'white',
+      width: '85%',
+      padding: 20,
+      borderRadius: 16,
+      alignItems: 'center',
+      elevation: 5,
+  },
+  modalTitle: {
+      fontSize: 20,
+      fontWeight: 'bold',
+      marginBottom: 10,
+      color: theme.colors.text,
+  },
+  modalText: {
+      fontSize: 16,
+      textAlign: 'center',
+      color: theme.colors.textSecondary,
+      marginBottom: 20,
+  },
+  paymentInfo: {
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      width: '100%',
+      backgroundColor: theme.colors.background,
+      padding: 15,
+      borderRadius: 8,
+      marginBottom: 20,
+  },
+  paymentLabel: {
+      fontSize: 16,
+      fontWeight: '600',
+      color: theme.colors.text,
+  },
+  paymentValue: {
+      fontSize: 18,
+      fontWeight: 'bold',
+      color: theme.colors.primary,
+  },
+  payButton: {
+      backgroundColor: theme.colors.primary,
+      width: '100%',
+      padding: 15,
+      borderRadius: 8,
+      alignItems: 'center',
+      marginBottom: 10,
+  },
+  payButtonText: {
+      color: 'white',
+      fontSize: 16,
+      fontWeight: 'bold',
+  },
+  cancelButton: {
+      padding: 15,
+  },
+  cancelButtonText: {
+      color: theme.colors.textSecondary,
+      fontSize: 16,
+  },
   container: {
     flex: 1,
     backgroundColor: theme.colors.background,
