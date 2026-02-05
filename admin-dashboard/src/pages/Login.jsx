@@ -7,6 +7,7 @@ import { Input } from "../components/ui/input";
 import { Label } from "../components/ui/label";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "../components/ui/card";
 import { AlertCircle } from "lucide-react";
+import logo from "../assets/logo.png";
 
 export default function Login() {
   const [email, setEmail] = useState('');
@@ -43,6 +44,7 @@ export default function Login() {
     <div className="min-h-screen flex items-center justify-center bg-gray-100 dark:bg-gray-900 p-4">
       <Card className="w-full max-w-md">
         <CardHeader className="space-y-1">
+          
           <CardTitle className="text-2xl font-bold text-center">KHAN MOTORS ADMIN</CardTitle>
           <CardDescription className="text-center">
             Админ системд нэвтрэх
