@@ -811,8 +811,12 @@ router.post('/trip/:id/confirm-payment', async (req, res) => {
     if (trip.customer) {
       const customer = await Customer.findById(trip.customer);
       if (customer) {
-        if (customer.wallet < trip.prepaymentAmount) {
-           return res.status(400).json({ message: 'Дансны үлдэгдэл хүрэлцэхгүй байна. Та цэнэглэнэ үү.' });
+        console.log(`[Payment Debug] Customer Wallet: ${customer.wallet}, Trip Prepayment: ${trip.prepaymentAmount}`);
+        
+        if ((customer.wallet || 0) < trip.prepaymentAmount) {
+           return res.status(400).json({ 
+             message: `Дансны үлдэгдэл хүрэлцэхгүй байна. Таны үлдэгдэл: ${customer.wallet || 0}₮, Төлөх дүн: ${trip.prepaymentAmount}₮. Та цэнэглэнэ үү.` 
+           });
         }
         customer.wallet -= trip.prepaymentAmount;
         await customer.save();

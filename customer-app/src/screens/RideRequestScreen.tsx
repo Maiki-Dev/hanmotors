@@ -30,7 +30,7 @@ import {
 } from 'lucide-react-native';
 import MapView, { Marker, PROVIDER_GOOGLE, Polyline } from 'react-native-maps';
 import { GOOGLE_MAPS_APIKEY } from '../config';
-import { rideService } from '../services/api';
+import { rideService, customerService } from '../services/api';
 import { mapService, decodePolyline } from '../services/mapService';
 import { useSelector } from 'react-redux';
 import { RootState } from '../store';
@@ -225,6 +225,26 @@ const RideRequestScreen = () => {
       longitude: lng,
     });
     setStep('confirm_ride');
+  };
+
+  const [topUpAmount, setTopUpAmount] = useState('');
+  const [walletBalance, setWalletBalance] = useState<number | null>(null);
+
+  useEffect(() => {
+    if (paymentModalVisible && user?._id) {
+        fetchWalletBalance();
+    }
+  }, [paymentModalVisible, user]);
+
+  const fetchWalletBalance = async () => {
+    try {
+        if (user?._id) {
+            const response = await customerService.getProfile(user._id);
+            setWalletBalance(response.data.wallet || 0);
+        }
+    } catch (error) {
+        console.log('Error fetching wallet:', error);
+    }
   };
 
   // Real-time Driver Tracking
@@ -730,14 +750,29 @@ const RideRequestScreen = () => {
                   </Text>
                   
                   <View style={styles.paymentInfo}>
-                      <Text style={styles.paymentLabel}>Төлөх дүн:</Text>
-                      <Text style={styles.paymentValue}>{prepaymentAmount?.toLocaleString()}₮</Text>
+                      <View style={{ width: '100%', marginBottom: 10 }}>
+                          <Text style={styles.paymentLabel}>Төлөх дүн (10%):</Text>
+                          <Text style={styles.paymentValue}>{prepaymentAmount?.toLocaleString()}₮</Text>
+                      </View>
+                      
+                      <View style={{ width: '100%', flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', borderTopWidth: 1, borderTopColor: '#eee', paddingTop: 10 }}>
+                          <Text style={styles.paymentLabel}>Таны хэтэвч:</Text>
+                          <Text style={[styles.paymentValue, { color: (walletBalance || 0) < (prepaymentAmount || 0) ? 'red' : 'green' }]}>
+                              {walletBalance?.toLocaleString() || 0}₮
+                          </Text>
+                      </View>
+
+                      {(walletBalance || 0) < (prepaymentAmount || 0) && (
+                          <Text style={{ color: 'red', marginTop: 10, fontSize: 12 }}>
+                              Үлдэгдэл хүрэлцэхгүй байна. Профайл хэсэг рүү орж цэнэглэнэ үү.
+                          </Text>
+                      )}
                   </View>
 
                   <TouchableOpacity 
-                      style={styles.payButton}
+                      style={[styles.payButton, { backgroundColor: (walletBalance || 0) < (prepaymentAmount || 0) ? '#ccc' : theme.colors.primary }]}
                       onPress={handleConfirmPayment}
-                      disabled={loading}
+                      disabled={loading || (walletBalance || 0) < (prepaymentAmount || 0)}
                   >
                       {loading ? (
                           <ActivityIndicator color="#fff" />
