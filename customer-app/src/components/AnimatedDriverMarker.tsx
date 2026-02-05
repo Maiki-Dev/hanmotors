@@ -1,12 +1,14 @@
 import React, { useEffect, useRef } from 'react';
-import { StyleSheet, Animated, Easing, Platform } from 'react-native';
+import { StyleSheet, Animated, Easing, Platform, View } from 'react-native';
 import { Marker, AnimatedRegion } from 'react-native-maps';
+import { CarIdle, CarMoving } from './CarIcons';
 
 interface Driver {
   id: string;
   lat: number;
   lng: number;
   heading: number;
+  speed?: number;
 }
 
 interface Props {
@@ -42,7 +44,7 @@ export const AnimatedDriverMarker = ({ driver, onPress }: Props) => {
         easing: Easing.linear,
       } as any).start();
     } else {
-       coordinate.timing({
+      coordinate.timing({
         latitude: newLat,
         longitude: newLng,
         latitudeDelta: 0,
@@ -69,35 +71,33 @@ export const AnimatedDriverMarker = ({ driver, onPress }: Props) => {
     outputRange: ['0deg', '360deg'],
   });
 
+  const isMoving = (driver.speed || 0) > 0.5;
+
   return (
     <Marker.Animated
       coordinate={coordinate as any}
       anchor={{ x: 0.5, y: 0.5 }}
       flat={true}
       onPress={onPress}
+      style={{ zIndex: 10 }}
     >
-      <Animated.Image
-        source={require('../../assets/car_icon.png')}
+      <Animated.View
         style={[
-          styles.carIcon,
+          styles.markerContainer,
           {
             transform: [{ rotate: rotate }],
           },
         ]}
-        resizeMode="contain"
-      />
+      >
+        {isMoving ? <CarMoving width={50} height={50} /> : <CarIdle width={50} height={50} />}
+      </Animated.View>
     </Marker.Animated>
   );
 };
 
 const styles = StyleSheet.create({
-  carIcon: {
-    width: 40,
-    height: 40,
-    // Add shadow for 3D effect
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.5,
-    shadowRadius: 4,
+  markerContainer: {
+    alignItems: 'center',
+    justifyContent: 'center',
   },
 });
