@@ -115,11 +115,6 @@ const RideRequestScreen = () => {
   const [step, setStep] = useState<'destination_selection' | 'confirm_ride'>('destination_selection');
   const [activeCategory, setActiveCategory] = useState('suggested');
 
-  // Payment States
-  const [paymentModalVisible, setPaymentModalVisible] = useState(false);
-  const [pendingTrip, setPendingTrip] = useState<any>(null);
-  const [prepaymentAmount, setPrepaymentAmount] = useState(0);
-
   useEffect(() => {
     const fetchServices = async () => {
       try {
@@ -225,26 +220,6 @@ const RideRequestScreen = () => {
       longitude: lng,
     });
     setStep('confirm_ride');
-  };
-
-  const [topUpAmount, setTopUpAmount] = useState('');
-  const [walletBalance, setWalletBalance] = useState<number | null>(null);
-
-  useEffect(() => {
-    if (paymentModalVisible && user?._id) {
-        fetchWalletBalance();
-    }
-  }, [paymentModalVisible, user]);
-
-  const fetchWalletBalance = async () => {
-    try {
-        if (user?._id) {
-            const response = await customerService.getProfile(user._id);
-            setWalletBalance(response.data.wallet || 0);
-        }
-    } catch (error) {
-        console.log('Error fetching wallet:', error);
-    }
   };
 
   // Real-time Driver Tracking
@@ -381,13 +356,6 @@ const RideRequestScreen = () => {
         distance
       });
       
-      if (response.data.requiresPayment) {
-          setPendingTrip(response.data);
-          setPrepaymentAmount(response.data.prepaymentAmount);
-          setPaymentModalVisible(true);
-          return;
-      }
-
       Alert.alert('Амжилттай', 'Аялал амжилттай захиалагдлаа!');
       navigation.navigate('TripStatus', { trip: response.data }); 
     } catch (error: any) {
@@ -395,23 +363,6 @@ const RideRequestScreen = () => {
     } finally {
       setLoading(false);
     }
-  };
-
-  const handleConfirmPayment = async () => {
-      if (!pendingTrip) return;
-      
-      setLoading(true);
-      try {
-          const response = await rideService.confirmPayment(pendingTrip._id);
-          setPaymentModalVisible(false);
-          Alert.alert('Амжилттай', 'Төлбөр төлөгдлөө. Аялал баталгаажлаа!');
-          navigation.navigate('TripStatus', { trip: response.data });
-      } catch (error: any) {
-          const message = error.response?.data?.message || 'Төлбөр баталгаажуулахад алдаа гарлаа';
-          Alert.alert('Алдаа', message);
-      } finally {
-          setLoading(false);
-      }
   };
 
   const handleMapPick = () => {
@@ -733,64 +684,6 @@ const RideRequestScreen = () => {
       {showMapPicker ? renderMapPicker() : (
         step === 'destination_selection' ? renderDestinationSelection() : renderConfirmRide()
       )}
-      
-      {/* Payment Modal */}
-      <Modal
-          visible={paymentModalVisible}
-          transparent={true}
-          animationType="slide"
-          onRequestClose={() => setPaymentModalVisible(false)}
-      >
-          <View style={styles.modalOverlay}>
-              <View style={styles.modalContent}>
-                  <Text style={styles.modalTitle}>Урьдчилгаа төлбөр</Text>
-                  <Text style={styles.modalText}>
-                      Та захиалгаа баталгаажуулахын тулд урьдчилгаа {prepaymentAmount?.toLocaleString()}₮ төлнө үү.
-                      (Нийт дүнгийн 10%)
-                  </Text>
-                  
-                  <View style={styles.paymentInfo}>
-                      <View style={{ width: '100%', marginBottom: 10 }}>
-                          <Text style={styles.paymentLabel}>Төлөх дүн (10%):</Text>
-                          <Text style={styles.paymentValue}>{prepaymentAmount?.toLocaleString()}₮</Text>
-                      </View>
-                      
-                      <View style={{ width: '100%', flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', borderTopWidth: 1, borderTopColor: '#eee', paddingTop: 10 }}>
-                          <Text style={styles.paymentLabel}>Таны хэтэвч:</Text>
-                          <Text style={[styles.paymentValue, { color: (walletBalance || 0) < (prepaymentAmount || 0) ? 'red' : 'green' }]}>
-                              {walletBalance?.toLocaleString() || 0}₮
-                          </Text>
-                      </View>
-
-                      {(walletBalance || 0) < (prepaymentAmount || 0) && (
-                          <Text style={{ color: 'red', marginTop: 10, fontSize: 12 }}>
-                              Үлдэгдэл хүрэлцэхгүй байна. Профайл хэсэг рүү орж цэнэглэнэ үү.
-                          </Text>
-                      )}
-                  </View>
-
-                  <TouchableOpacity 
-                      style={[styles.payButton, { backgroundColor: (walletBalance || 0) < (prepaymentAmount || 0) ? '#ccc' : theme.colors.primary }]}
-                      onPress={handleConfirmPayment}
-                      disabled={loading || (walletBalance || 0) < (prepaymentAmount || 0)}
-                  >
-                      {loading ? (
-                          <ActivityIndicator color="#fff" />
-                      ) : (
-                          <Text style={styles.payButtonText}>Төлөх</Text>
-                      )}
-                  </TouchableOpacity>
-                  
-                  <TouchableOpacity 
-                      style={styles.cancelButton}
-                      onPress={() => setPaymentModalVisible(false)}
-                      disabled={loading}
-                  >
-                      <Text style={styles.cancelButtonText}>Буцах</Text>
-                  </TouchableOpacity>
-              </View>
-          </View>
-      </Modal>
     </View>
   );
 };
