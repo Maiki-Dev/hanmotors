@@ -15,3 +15,4 @@ android/app/build/
 ios/Pods/
 java/
 jdk-17.zip
+mongo-data/

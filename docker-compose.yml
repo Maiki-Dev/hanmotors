@@ -5,14 +5,15 @@ services:
     image: mongo:latest
     container_name: khanmotors_mongo
     restart: always
+    command: ["mongod", "--wiredTigerCacheSizeGB", "0.25"]
     deploy:
       resources:
         limits:
-          memory: 1G
+          memory: 512M
     ports:
       - "27017:27017"
     volumes:
-      - mongo-data:/data/db
+      - ./mongo-data:/data/db
     networks:
       - khanmotors-network
 
@@ -20,19 +21,18 @@ services:
     build: ./backend
     container_name: khanmotors_backend
     restart: always
-    command: npm run dev
-    volumes:
-      - ./backend:/app
-      - /app/node_modules
+    command: npm start
     deploy:
       resources:
         limits:
-          memory: 1G
+          memory: 512M
     ports:
       - "5000:5000"
     environment:
       - MONGO_URI=mongodb://mongo:27017/khanmotors
       - PORT=5000
+      - NODE_ENV=production
+      - NODE_OPTIONS=--max-old-space-size=460
     depends_on:
       - mongo
     networks:
@@ -49,7 +49,7 @@ services:
     deploy:
       resources:
         limits:
-          memory: 256M
+          memory: 128M
     ports:
       - "80:80"
       - "443:443"
@@ -65,9 +65,6 @@ services:
       - ./certbot/www:/var/www/certbot
       - ./certbot/conf:/etc/letsencrypt
 
-
-volumes:
-  mongo-data:
 
 networks:
   khanmotors-network:

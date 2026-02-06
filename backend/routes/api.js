@@ -7,6 +7,8 @@ const Trip = require('../models/Trip');
 const Pricing = require('../models/Pricing');
 const AdditionalService = require('../models/AdditionalService');
 const Invoice = require('../models/Invoice');
+const multer = require('multer');
+const { uploadToCloudinary } = require('../utils/cloudStorage');
 const { Expo } = require('expo-server-sdk');
 const expo = new Expo();
 const qpayService = require('../utils/qpay');
@@ -48,6 +50,42 @@ function getDistance(lat1, lon1, lat2, lon2) {
   const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
   return R * c; // Distance in km
 }
+
+// --- FILE UPLOAD CONFIG ---
+const upload = multer({ 
+    storage: multer.memoryStorage(),
+    limits: { fileSize: 10 * 1024 * 1024 } // 10MB limit
+});
+
+// Generic File Upload Route
+router.post('/upload', upload.single('file'), async (req, res) => {
+    try {
+        if (!req.file) {
+            return res.status(400).json({ message: 'No file uploaded' });
+        }
+        
+        // Check if Cloudinary is configured
+        if (!process.env.CLOUDINARY_CLOUD_NAME) {
+            console.warn('⚠️ Cloudinary keys missing. Cannot upload.');
+            return res.status(503).json({ 
+                message: 'Cloud storage is not configured. Please add CLOUDINARY_CLOUD_NAME, API_KEY, API_SECRET to .env' 
+            });
+        }
+
+        console.log(`Uploading file: ${req.file.originalname} (${req.file.size} bytes)`);
+        const result = await uploadToCloudinary(req.file.buffer, 'khanmotors/uploads');
+        
+        console.log('✅ Upload successful:', result.secure_url);
+        res.json({
+            success: true,
+            url: result.secure_url,
+            public_id: result.public_id
+        });
+    } catch (error) {
+        console.error('❌ Upload Error:', error);
+        res.status(500).json({ message: 'File upload failed', error: error.message });
+    }
+});
 
 // --- MOCK DATA STORE (For Offline Mode) ---
 // DISABLED BY USER REQUEST - STRICT REAL DATA MODE
