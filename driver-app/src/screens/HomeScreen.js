@@ -571,7 +571,10 @@ export default function HomeScreen({ navigation, route }) {
       
       // Stop background updates
       try {
-         await Location.stopLocationUpdatesAsync(LOCATION_TASK_NAME);
+         const hasStarted = await Location.hasStartedLocationUpdatesAsync(LOCATION_TASK_NAME);
+         if (hasStarted) {
+            await Location.stopLocationUpdatesAsync(LOCATION_TASK_NAME);
+         }
          await AsyncStorage.setItem('driver_is_online', 'false');
       } catch (e) {
          console.log('Error stopping background location:', e);
