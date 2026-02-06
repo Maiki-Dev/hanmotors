@@ -29,17 +29,21 @@ global.OFFLINE_MODE = false;
 
 const connectDB = async () => {
   try {
+    console.log(`Connecting to MongoDB at ${MONGO_URI}...`);
     await mongoose.connect(MONGO_URI, {
       useNewUrlParser: true,
       useUnifiedTopology: true,
-      serverSelectionTimeoutMS: 5000 // Timeout after 5s instead of 30s
+      serverSelectionTimeoutMS: 5000 
     });
     console.log('✅ MongoDB Connected');
     global.OFFLINE_MODE = false;
   } catch (err) {
     console.error('❌ MongoDB Connection Error:', err.message);
-    console.log('⚠️ SWITCHING TO OFFLINE MOCK MODE. Data will be stored in memory only.');
-    global.OFFLINE_MODE = true;
+    // User requested to disable mock mode and use real data only.
+    // console.log('⚠️ SWITCHING TO OFFLINE MOCK MODE. Data will be stored in memory only.');
+    // global.OFFLINE_MODE = true;
+    console.error('❌ Failed to connect to Database. Exiting process to avoid Mock Data confusion.');
+    process.exit(1);
   }
 };
 

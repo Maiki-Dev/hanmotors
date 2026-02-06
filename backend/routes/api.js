@@ -6,8 +6,10 @@ const Customer = require('../models/Customer');
 const Trip = require('../models/Trip');
 const Pricing = require('../models/Pricing');
 const AdditionalService = require('../models/AdditionalService');
+const Invoice = require('../models/Invoice');
 const { Expo } = require('expo-server-sdk');
 const expo = new Expo();
+const qpayService = require('../utils/qpay');
 
 // Helper: Send Push Notification
 const sendPushNotification = async (pushToken, title, body, data) => {
@@ -48,47 +50,12 @@ function getDistance(lat1, lon1, lat2, lon2) {
 }
 
 // --- MOCK DATA STORE (For Offline Mode) ---
-let mockDrivers = [
-  {
-    _id: 'mock_driver_1',
-    firstName: 'Бат-Эрдэнэ',
-    lastName: 'Дорж',
-    name: 'Дорж Бат-Эрдэнэ',
-    email: 'bat@example.com',
-    phone: '99112233',
-    password: 'password',
-    status: 'active',
-    vehicleType: 'Tow',
-    isOnline: true,
-    rating: 4.8,
-    vehicle: { plateNumber: 'УБА 1234', model: 'Hyundai Porter' },
-    earnings: { total: 150000, daily: 50000, weekly: 150000 },
-    wallet: { balance: 25000 },
-    documents: { isVerified: true },
-    createdAt: new Date()
-  },
-  {
-    _id: 'mock_driver_2',
-    firstName: 'Ганзориг',
-    lastName: 'Болд',
-    name: 'Болд Ганзориг',
-    email: 'ganzo@example.com',
-    phone: '88114455',
-    password: 'password',
-    status: 'pending',
-    vehicleType: 'Tow',
-    isOnline: false,
-    rating: 0,
-    vehicle: { plateNumber: 'УББ 5678', model: 'Kia Bongo' },
-    earnings: { total: 0, daily: 0, weekly: 0 },
-    wallet: { balance: 0 },
-    documents: { isVerified: false },
-    createdAt: new Date()
-  }
-];
+// DISABLED BY USER REQUEST - STRICT REAL DATA MODE
+let mockDrivers = [];
 
 // Helper to check offline mode (controlled by server.js)
-const isOffline = () => global.OFFLINE_MODE === true;
+// Always false because we exit process if DB fails
+const isOffline = () => false;
 
 // Register new driver
 router.post('/driver/register', async (req, res) => {
@@ -1827,6 +1794,248 @@ router.post('/driver/:id/wallet/recharge', async (req, res) => {
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
+});
+
+// --- PAYMENT: QPAY INTEGRATION ---
+
+router.post('/payment/qpay/create-invoice', async (req, res) => {
+  try {
+    const { driverId, amount } = req.body;
+    
+    if (!driverId || !amount) {
+      return res.status(400).json({ message: 'Driver ID and amount are required' });
+    }
+
+    const driver = await Driver.findById(driverId);
+    if (!driver) return res.status(404).json({ message: 'Driver not found' });
+
+    // Create Invoice in QPay
+    const invoiceData = await qpayService.createInvoice(amount, `Wallet Topup - ${driver.name}`, {
+        name: driver.name,
+        phone: driver.phone,
+        email: driver.email,
+        register: driver.registerNumber // Assuming this field exists or driver.licenseNumber
+    });
+    
+    // Save Invoice to DB to link invoice_id with driverId
+    const newInvoice = new Invoice({
+      invoiceId: invoiceData.invoice_id,
+      driverId: driver._id,
+      amount: amount,
+      description: `Wallet Topup - ${driver.name}`,
+      status: 'pending',
+      qpayResponse: invoiceData
+    });
+    
+    await newInvoice.save();
+    
+    res.json(invoiceData);
+  } catch (error) {
+    console.error('QPay Invoice Error:', error);
+    res.status(500).json({ message: 'Failed to create QPay invoice', details: error.message });
+  }
+});
+
+router.post('/payment/qpay/check', async (req, res) => {
+  try {
+    const { invoiceId, driverId } = req.body;
+    
+    if (!invoiceId) {
+      return res.status(400).json({ message: 'Invoice ID is required' });
+    }
+
+    // Find local invoice record
+    let invoice = await Invoice.findOne({ invoiceId });
+    
+    // If invoice is already marked paid in DB, return success immediately
+    if (invoice && invoice.status === 'paid') {
+       const driver = await Driver.findById(invoice.driverId);
+       return res.json({ success: true, message: 'Already processed', wallet: driver ? driver.wallet : null });
+    }
+
+    // Verify with QPay API
+    const checkResult = await qpayService.checkPayment(invoiceId);
+    
+    let isPaid = false;
+    let paidAmount = 0;
+
+    if (checkResult && checkResult.rows && checkResult.rows.length > 0) {
+       const payment = checkResult.rows[0];
+       if (payment.payment_status === 'PAID') {
+          isPaid = true;
+          paidAmount = payment.payment_amount;
+       }
+    } else if (checkResult && checkResult.payment_status === 'PAID') {
+        isPaid = true;
+        paidAmount = checkResult.payment_amount || 0;
+    }
+
+    if (isPaid) {
+       // If local invoice doesn't exist (legacy?), try to use passed driverId
+       const targetDriverId = invoice ? invoice.driverId : driverId;
+       
+       if (!targetDriverId) {
+         return res.status(400).json({ message: 'Driver ID unknown for this invoice' });
+       }
+
+       const driver = await Driver.findById(targetDriverId);
+       if (!driver) return res.status(404).json({ message: 'Driver not found' });
+
+       // Double check transaction history just in case
+       const alreadyProcessed = driver.wallet.transactions.some(t => t.description.includes(invoiceId));
+       
+       if (alreadyProcessed) {
+         // Update local invoice status if needed
+         if (invoice && invoice.status !== 'paid') {
+            invoice.status = 'paid';
+            invoice.paidAt = new Date();
+            await invoice.save();
+         }
+         return res.json({ success: true, message: 'Already processed', wallet: driver.wallet });
+       }
+
+       // Credit Wallet
+       driver.wallet.balance += Number(paidAmount);
+       driver.wallet.transactions.unshift({
+          type: 'credit',
+          amount: Number(paidAmount),
+          description: `QPay Topup (${invoiceId})`,
+          date: new Date()
+       });
+
+       await driver.save();
+       
+       // Update Invoice Record
+       if (invoice) {
+         invoice.status = 'paid';
+         invoice.paidAt = new Date();
+         invoice.qpayResponse = checkResult;
+         await invoice.save();
+       } else {
+         // Create record for legacy/direct calls if missing
+         await Invoice.create({
+           invoiceId,
+           driverId: driver._id,
+           amount: paidAmount,
+           status: 'paid',
+           paidAt: new Date(),
+           description: 'Restored from Check',
+           qpayResponse: checkResult
+         });
+       }
+       
+       // Notify via socket
+       const io = req.app.get('io');
+       io.emit('walletUpdated', {
+          driverId: driver._id,
+          balance: driver.wallet.balance,
+          transactions: driver.wallet.transactions
+       });
+
+       return res.json({ success: true, wallet: driver.wallet });
+    } else {
+       return res.json({ success: false, message: 'Payment not found or not paid yet' });
+    }
+
+  } catch (error) {
+    console.error('QPay Check Error:', error);
+    res.status(500).json({ message: 'Failed to check payment status' });
+  }
+});
+
+router.get('/payment/qpay/callback', async (req, res) => {
+    try {
+        const invoiceId = req.query.invoice_id || req.query.payment_id;
+
+        if (invoiceId) {
+            console.log(`QPay Callback received for Invoice: ${invoiceId}. Checking status...`);
+            
+            // 1. Find the invoice to identify the driver
+            const invoice = await Invoice.findOne({ invoiceId });
+            
+            if (invoice) {
+                if (invoice.status === 'paid') {
+                    console.log(`Invoice ${invoiceId} already paid.`);
+                } else {
+                    // 2. Check QPay status
+                    const checkResult = await qpayService.checkPayment(invoiceId);
+                    let isPaid = false;
+                    let paidAmount = 0;
+
+                    if (checkResult && checkResult.rows && checkResult.rows.length > 0) {
+                        const payment = checkResult.rows[0];
+                        if (payment.payment_status === 'PAID') {
+                            isPaid = true;
+                            paidAmount = payment.payment_amount;
+                        }
+                    } else if (checkResult && checkResult.payment_status === 'PAID') {
+                        isPaid = true;
+                        paidAmount = checkResult.payment_amount || 0;
+                    }
+                    
+                    if (isPaid) {
+                        // 3. Credit Driver
+                        const driver = await Driver.findById(invoice.driverId);
+                        if (driver) {
+                             // Check for duplicates
+                             const alreadyProcessed = driver.wallet.transactions.some(t => t.description.includes(invoiceId));
+                             if (!alreadyProcessed) {
+                                 driver.wallet.balance += Number(paidAmount);
+                                 driver.wallet.transactions.unshift({
+                                    type: 'credit',
+                                    amount: Number(paidAmount),
+                                    description: `QPay Topup (${invoiceId})`,
+                                    date: new Date()
+                                 });
+                                 await driver.save();
+                                 console.log(`Driver ${driver.name} credited ${paidAmount} via Callback.`);
+                                 
+                                 // Notify Socket
+                                 const io = req.app.get('io');
+                                 io.emit('walletUpdated', {
+                                    driverId: driver._id,
+                                    balance: driver.wallet.balance,
+                                    transactions: driver.wallet.transactions
+                                 });
+                             }
+                             
+                             // 4. Update Invoice Status
+                             invoice.status = 'paid';
+                             invoice.paidAt = new Date();
+                             invoice.qpayResponse = checkResult;
+                             await invoice.save();
+                        }
+                    }
+                }
+            } else {
+                console.warn(`Callback received for unknown invoice: ${invoiceId}`);
+            }
+            
+            // Return success page
+            return res.send(`
+                <html>
+                    <body style="display:flex;justify-content:center;align-items:center;height:100vh;font-family:sans-serif;background-color:#f0fdf4;">
+                        <div style="text-align:center;padding:2rem;background:white;border-radius:1rem;box-shadow:0 4px 6px -1px rgb(0 0 0 / 0.1);">
+                            <div style="color:#16a34a;font-size:3rem;margin-bottom:1rem;">✓</div>
+                            <h1 style="color:#166534;margin-bottom:0.5rem;">Төлбөр амжилттай!</h1>
+                            <p style="color:#4b5563;">Таны данс цэнэглэгдлээ. Апп руугаа буцна уу.</p>
+                            <script>
+                                setTimeout(function() {
+                                    // Try to close window or redirect deep link if you have one
+                                    // window.close();
+                                }, 3000);
+                            </script>
+                        </div>
+                    </body>
+                </html>
+            `);
+        }
+        
+        res.send('Payment processing... Please return to the app.');
+    } catch (error) {
+        console.error('Callback Error:', error);
+        res.status(500).send('Error processing payment callback');
+    }
 });
 
 // Admin: Get All Transactions & Stats
