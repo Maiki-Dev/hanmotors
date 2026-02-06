@@ -2305,19 +2305,7 @@ router.post('/admin/documents/:driverId/:docType/status', async (req, res) => {
 // Get all pricing rules
 router.get('/admin/pricing', async (req, res) => {
   try {
-    let rules = await Pricing.find().sort('order');
-    if (rules.length === 0) {
-      // Seed default rules if empty
-      const defaultRules = [
-        { vehicleType: 'Суудлын машин (Дунд SUV)', basePrice: 80000, pricePerKm: 10000, order: 1 },
-        { vehicleType: 'Том SUV / Pickup', basePrice: 100000, pricePerKm: 15000, order: 2 },
-        { vehicleType: 'Micro автобус / Porter / Bongo', basePrice: 120000, pricePerKm: 20000, order: 3 },
-        { vehicleType: '5 тонн хүртэл ачааны машин', basePrice: 180000, pricePerKm: 25000, order: 4 },
-        { vehicleType: 'Том оврын Truck', basePrice: 250000, pricePerKm: 35000, order: 5 },
-        { vehicleType: 'Bobcat техник', basePrice: 220000, pricePerKm: 30000, order: 6 }
-      ];
-      rules = await Pricing.insertMany(defaultRules);
-    }
+    const rules = await Pricing.find().sort('order');
     res.json(rules);
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -2336,17 +2324,10 @@ router.put('/admin/pricing/:id', async (req, res) => {
 
 // --- ADDITIONAL SERVICES API ---
 
-// Get all additional services (with seeding)
+// Get all additional services
 router.get('/admin/additional-services', async (req, res) => {
   try {
-    let services = await AdditionalService.find();
-    if (services.length === 0) {
-      const defaultServices = [
-        { name: 'Дугуй тавих', price: 30000 },
-        { name: 'Гараж руу оруулах', price: 50000 }
-      ];
-      services = await AdditionalService.insertMany(defaultServices);
-    }
+    const services = await AdditionalService.find();
     res.json(services);
   } catch (err) {
     res.status(500).json({ error: err.message });

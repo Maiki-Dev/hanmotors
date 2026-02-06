@@ -37,6 +37,11 @@ const connectDB = async () => {
     });
     console.log('✅ MongoDB Connected');
     global.OFFLINE_MODE = false;
+
+    // Seed Data on Startup
+    const seedData = require('./utils/seedData');
+    await seedData();
+    
   } catch (err) {
     console.error('❌ MongoDB Connection Error:', err.message);
     // User requested to disable mock mode and use real data only.
