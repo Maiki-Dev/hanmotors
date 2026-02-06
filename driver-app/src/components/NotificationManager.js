@@ -64,7 +64,7 @@ const NotificationManager = ({ driverId }) => {
           body: JSON.stringify({ driverId, token }),
         });
       } catch (error) {
-        console.error('Error registering for push notifications:', error);
+        console.log('Warning: Push Notifications not configured (missing google-services.json):', error.message);
       }
     };
 

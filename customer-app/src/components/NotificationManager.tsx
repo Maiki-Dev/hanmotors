@@ -157,7 +157,7 @@ async function registerForPushNotificationsAsync(userId: string) {
         });
       }
   } catch (error) {
-      console.error('Error getting push token:', error);
+      console.log('Warning: Push Notifications not configured:', error);
   }
 
   return token;
