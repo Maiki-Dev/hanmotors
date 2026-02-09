@@ -36,10 +36,10 @@ const LONGITUDE_DELTA = LATITUDE_DELTA * ASPECT_RATIO;
 type HomeScreenNavigationProp = StackNavigationProp<RootStackParamList, 'Home'>;
 
 const SERVICES = [
-  { id: 'taxi', name: 'Такси', icon: 'car-sport', family: 'Ionicons', color: theme.colors.primary },
-  { id: 'delivery', name: 'Хүргэлт', icon: 'cube', family: 'Ionicons', color: theme.colors.info },
-  { id: 'driver', name: 'Асаалт', icon: 'flash', family: 'Ionicons', color: theme.colors.success },
   { id: 'sos', name: 'SOS', icon: 'construct', family: 'Ionicons', color: theme.colors.error },
+  { id: 'asaalt', name: 'Асаалт', icon: 'flash', family: 'Ionicons', color: theme.colors.success },
+  { id: 'taxi', name: 'Такси', icon: 'car-sport', family: 'Ionicons', color: theme.colors.primary, disabled: true },
+  { id: 'delivery', name: 'Хүргэлт', icon: 'cube', family: 'Ionicons', color: theme.colors.info, disabled: true },
 ];
 
 const INITIAL_DRIVERS: any[] = [];
@@ -55,7 +55,7 @@ export default function HomeScreen() {
   const [showsTraffic, setShowsTraffic] = useState(false); // Default off for cleaner look
   const [mapType, setMapType] = useState<'standard' | 'satellite' | 'hybrid'>('standard');
   const [selectedDriverId, setSelectedDriverId] = useState<string | null>(null);
-  const [activeService, setActiveService] = useState('taxi');
+  const [activeService, setActiveService] = useState('sos');
 
   // User info from Redux
   const user = useSelector((state: any) => state.auth.user) || { name: 'Хэрэглэгч', balance: 0 };
@@ -202,17 +202,23 @@ export default function HomeScreen() {
   };
 
   const handleServicePress = (serviceId: string) => {
+    const service = SERVICES.find(s => s.id === serviceId);
+    if (service?.disabled) {
+        Alert.alert('Мэдэгдэл', 'Удахгүй нээгдэнэ');
+        return;
+    }
+
     setActiveService(serviceId);
     
     // Slight haptic or visual feedback logic here
-    if (serviceId === 'taxi' || serviceId === 'sos') {
+    if (serviceId === 'sos' || serviceId === 'asaalt') {
       // Pre-select service but wait for "Request" action usually, 
       // but for now let's navigate on button press below
     }
   };
 
   const handleRequestRide = () => {
-    if (activeService === 'taxi' || activeService === 'sos') {
+    if (activeService === 'sos' || activeService === 'asaalt') {
       navigation.navigate('RideRequest', { 
         pickup: { 
           latitude: region?.latitude || 0, 
@@ -334,7 +340,8 @@ export default function HomeScreen() {
                         key={service.id} 
                         style={[
                             styles.serviceCard, 
-                            isActive && styles.serviceCardActive
+                            isActive && styles.serviceCardActive,
+                            service.disabled && { opacity: 0.5 }
                         ]}
                         onPress={() => handleServicePress(service.id)}
                       >

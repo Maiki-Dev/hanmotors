@@ -676,7 +676,9 @@ export default function ActiveJobScreen({ route, navigation }) {
                   <User size={24} color="#FFF" />
                </View>
                <View style={styles.customerInfo}>
-                  <Text style={styles.customerName}>{job?.customerName || job?.customer?.name || 'Зочин'}</Text>
+                  <Text style={styles.customerName}>
+                    {job?.customerName || job?.customer?.name || job?.customerPhone || job?.customer?.phone || 'Зочин'}
+                  </Text>
                   <Text style={styles.tripPrice}>₮{(job?.price || 0).toLocaleString()}</Text>
                </View>
                

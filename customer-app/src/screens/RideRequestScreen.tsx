@@ -32,7 +32,8 @@ import {
   Locate,
   Navigation,
   ChevronRight,
-  Map
+  Map,
+  Zap
 } from 'lucide-react-native';
 import MapView, { Marker, PROVIDER_GOOGLE, Polyline } from 'react-native-maps';
 import { GOOGLE_MAPS_APIKEY } from '../config';
@@ -56,9 +57,10 @@ type RideRequestScreenNavigationProp = StackNavigationProp<RootStackParamList, '
 const { width, height } = Dimensions.get('window');
 
 const SERVICES = [
-  { id: 'taxi', label: 'Taxi', icon: Car, basePrice: 1000, pricePerKm: 1500, description: 'Хурдан, тухтай' },
-  { id: 'delivery', label: 'Delivery', icon: Car, basePrice: 5000, pricePerKm: 2000, description: 'Хүргэлт' },
   { id: 'sos', label: 'SOS', icon: Car, basePrice: 2000, pricePerKm: 2000, description: 'Тусламж' },
+  { id: 'asaalt', label: 'Асаалт', icon: Zap, basePrice: 10000, pricePerKm: 0, description: 'Аккумлятор холбох' },
+  { id: 'taxi', label: 'Taxi', icon: Car, basePrice: 1000, pricePerKm: 1500, description: 'Хурдан, тухтай', disabled: true },
+  { id: 'delivery', label: 'Delivery', icon: Car, basePrice: 5000, pricePerKm: 2000, description: 'Хүргэлт', disabled: true },
 ];
 
 const RECENT_PLACES = [
@@ -292,6 +294,36 @@ const RideRequestScreen = () => {
     }
   };
 
+  const submitRideRequest = async () => {
+    setLoading(true);
+    try {
+      const response = await rideService.requestRide({
+        customerId: user!._id,
+        pickup: {
+          address: pickup!.address,
+          lat: pickup!.latitude,
+          lng: pickup!.longitude
+        },
+        dropoff: {
+          address: dropoff!.address,
+          lat: dropoff!.latitude,
+          lng: dropoff!.longitude
+        },
+        vehicleType: selectedService.id,
+        distance: distance
+      });
+      
+      if (response.data) {
+        Alert.alert('Амжилттай', 'Таны захиалга үүслээ. Жолооч хайж байна...');
+        navigation.navigate('TripStatus', { trip: response.data });
+      }
+    } catch (error: any) {
+      Alert.alert('Алдаа', error.response?.data?.message || 'Захиалга үүсгэхэд алдаа гарлаа.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const handleRequestRide = async () => {
     if (!pickup || !dropoff) return;
     
@@ -313,33 +345,17 @@ const RideRequestScreen = () => {
       return;
     }
 
-    setLoading(true);
-    try {
-      const response = await rideService.requestRide({
-        customerId: user._id,
-        pickup: {
-          address: pickup.address,
-          lat: pickup.latitude,
-          lng: pickup.longitude
-        },
-        dropoff: {
-          address: dropoff.address,
-          lat: dropoff.latitude,
-          lng: dropoff.longitude
-        },
-        vehicleType: selectedService.id,
-        distance: distance
-      });
-      
-      if (response.data) {
-        Alert.alert('Амжилттай', 'Таны захиалга үүслээ. Жолооч хайж байна...');
-        navigation.navigate('TripStatus', { trip: response.data });
-      }
-    } catch (error: any) {
-      Alert.alert('Алдаа', error.response?.data?.message || 'Захиалга үүсгэхэд алдаа гарлаа.');
-    } finally {
-      setLoading(false);
-    }
+    Alert.alert(
+      'Захиалга баталгаажуулах',
+      `Таны холбогдох дугаар: ${user.phone}\nЗахиалга өгөх үү?`,
+      [
+        { text: 'Болих', style: 'cancel' },
+        { 
+          text: 'Захиалах', 
+          onPress: submitRideRequest
+        }
+      ]
+    );
   };
 
   // Render Logic
@@ -506,10 +522,20 @@ const RideRequestScreen = () => {
                   return (
                       <TouchableOpacity 
                         key={service.id} 
-                        style={[styles.serviceCard, isSelected && styles.serviceCardSelected]}
-                        onPress={() => setSelectedService(service)}
+                        style={[
+                            styles.serviceCard, 
+                            isSelected && styles.serviceCardSelected,
+                            service.disabled && { opacity: 0.6 }
+                        ]}
+                        onPress={() => {
+                            if (service.disabled) {
+                                Alert.alert('Мэдэгдэл', 'Удахгүй нээгдэнэ');
+                                return;
+                            }
+                            setSelectedService(service);
+                        }}
                       >
-                          <View style={styles.serviceIconWrapper}>
+                          <View style={[styles.serviceIconWrapper, service.disabled && { opacity: 0.5 }]}>
                               <service.icon size={28} color={isSelected ? theme.colors.black : theme.colors.text} />
                           </View>
                           <Text style={[styles.serviceType, isSelected && {color: theme.colors.black}]}>{service.label}</Text>

@@ -1103,7 +1103,7 @@ router.post('/trip/request', async (req, res) => {
                 const role = driver.role || 'taxi'; 
                 let isCompatible = false;
 
-                if (trip.serviceType === 'Tow' || trip.serviceType === 'sos') {
+                if (trip.serviceType === 'Tow' || trip.serviceType === 'sos' || trip.serviceType === 'asaalt') {
                     isCompatible = (vehicleType === 'Tow' || vehicleType === 'SOS' || vehicleType === 'sos' || role === 'tow');
                 } else if (trip.serviceType === 'delivery') {
                     isCompatible = (vehicleType === 'Cargo' || vehicleType === 'Delivery' || role === 'delivery');
@@ -2441,6 +2441,26 @@ router.get('/customer/profile', async (req, res) => {
     const customer = await Customer.findById(id);
     if (!customer) return res.status(404).json({ message: 'Customer not found' });
     
+    res.json(customer);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Update Customer Profile
+router.put('/customer/profile', async (req, res) => {
+  try {
+    const { id, name, email } = req.body;
+    if (!id) return res.status(400).json({ message: 'Customer ID required' });
+
+    const customer = await Customer.findByIdAndUpdate(
+      id,
+      { $set: { name, email } },
+      { new: true }
+    );
+
+    if (!customer) return res.status(404).json({ message: 'Customer not found' });
+
     res.json(customer);
   } catch (err) {
     res.status(500).json({ error: err.message });

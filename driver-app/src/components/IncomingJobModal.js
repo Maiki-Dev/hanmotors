@@ -165,15 +165,17 @@ export const IncomingJobModal = ({ visible, job, onAccept, onDecline, userLocati
             )}
 
             {/* Customer Info (Modern Glass-like Box) */}
-            {job.customerName && (
+            {(job.customerName || job.customerPhone) && (
               <View style={styles.customerBox}>
                 <View style={styles.customerRow}>
                   <View style={styles.customerAvatar}>
                     <User size={16} color={theme.colors.primary} />
                   </View>
-                  <Text style={styles.customerName}>{job.customerName}</Text>
+                  <Text style={styles.customerName}>
+                    {job.customerName || job.customerPhone}
+                  </Text>
                 </View>
-                {job.customerPhone && (
+                {job.customerName && job.customerPhone && (
                   <View style={styles.customerRow}>
                     <View style={styles.customerAvatar}>
                       <Phone size={16} color={theme.colors.textSecondary} />

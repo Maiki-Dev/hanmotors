@@ -68,7 +68,8 @@ const authSlice = createSlice({
       .addCase(verifyOtp.fulfilled, (state, action) => {
         state.isLoading = false;
         state.isAuthenticated = true;
-        state.user = action.payload.user;
+        // Backend returns { customer: ... }, handle both user/customer keys
+        state.user = action.payload.user || action.payload.customer;
         state.token = action.payload.token;
       })
       .addCase(verifyOtp.rejected, (state, action) => {

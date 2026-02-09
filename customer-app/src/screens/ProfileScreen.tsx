@@ -18,6 +18,10 @@ const ProfileScreen = () => {
   const [loading, setLoading] = useState(false);
   const [modalVisible, setModalVisible] = useState(false);
   const [topUpAmount, setTopUpAmount] = useState('');
+  
+  const [editModalVisible, setEditModalVisible] = useState(false);
+  const [editName, setEditName] = useState('');
+  const [editEmail, setEditEmail] = useState('');
 
   useEffect(() => {
     fetchProfile();
@@ -34,6 +38,25 @@ const ProfileScreen = () => {
       console.log('Error fetching profile', error);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const openEditModal = () => {
+    setEditName(profile?.name || user?.name || '');
+    setEditEmail(profile?.email || user?.email || '');
+    setEditModalVisible(true);
+  };
+
+  const handleUpdateProfile = async () => {
+    if (!user?._id) return;
+    
+    try {
+        await customerService.updateProfile(user._id, { name: editName, email: editEmail });
+        Alert.alert('Амжилттай', 'Мэдээлэл шинэчлэгдлээ');
+        setEditModalVisible(false);
+        fetchProfile();
+    } catch (error: any) {
+        Alert.alert('Алдаа', error.response?.data?.message || 'Мэдээлэл шинэчлэхэд алдаа гарлаа');
     }
   };
 
@@ -116,7 +139,7 @@ const ProfileScreen = () => {
                   <User size={40} color={theme.colors.text} />
                 </View>
               </LinearGradient>
-              <TouchableOpacity style={styles.editIcon}>
+              <TouchableOpacity style={styles.editIcon} onPress={openEditModal}>
                 <BlurView intensity={50} tint="dark" style={styles.editIconBlur}>
                   <Edit3 size={14} color={theme.colors.text} />
                 </BlurView>
@@ -159,7 +182,7 @@ const ProfileScreen = () => {
           <View style={styles.section}>
             <Text style={styles.sectionTitle}>Хувийн тохиргоо</Text>
             <BlurView intensity={30} tint="dark" style={styles.menuContainer}>
-              {renderMenuItem(<User size={20} color={theme.colors.primary} />, 'Хувийн мэдээлэл засах', theme.colors.primary)}
+              {renderMenuItem(<User size={20} color={theme.colors.primary} />, 'Хувийн мэдээлэл засах', theme.colors.primary, false, openEditModal)}
               {renderMenuItem(<Shield size={20} color="#4CAF50" />, 'Нууцлал ба Аюулгүй байдал', '#4CAF50')}
               {renderMenuItem(<Settings size={20} color="#9C27B0" />, 'Тохиргоо', '#9C27B0', true)}
             </BlurView>
@@ -176,6 +199,65 @@ const ProfileScreen = () => {
           <Text style={styles.versionText}>Хувилбар 1.0.0</Text>
         </ScrollView>
       </SafeAreaView>
+
+      <Modal
+        animationType="fade"
+        transparent={true}
+        visible={editModalVisible}
+        onRequestClose={() => setEditModalVisible(false)}
+      >
+        <BlurView intensity={20} tint="dark" style={styles.modalContainer}>
+          <BlurView intensity={80} tint="dark" style={styles.modalContent}>
+            <TouchableOpacity 
+              style={styles.closeButton} 
+              onPress={() => setEditModalVisible(false)}
+            >
+              <X size={20} color={theme.colors.textSecondary} />
+            </TouchableOpacity>
+            
+            <View style={styles.modalIconContainer}>
+              <User size={32} color={theme.colors.primary} />
+            </View>
+            
+            <Text style={styles.modalTitle}>Мэдээлэл засах</Text>
+            
+            <Text style={styles.inputLabel}>Нэр</Text>
+            <TextInput
+              style={styles.input}
+              placeholder="Таны нэр"
+              placeholderTextColor={theme.colors.textSecondary}
+              value={editName}
+              onChangeText={setEditName}
+            />
+
+            <Text style={styles.inputLabel}>И-мэйл</Text>
+            <TextInput
+              style={styles.input}
+              placeholder="name@example.com"
+              placeholderTextColor={theme.colors.textSecondary}
+              value={editEmail}
+              onChangeText={setEditEmail}
+              keyboardType="email-address"
+              autoCapitalize="none"
+            />
+            
+            <TouchableOpacity 
+              style={styles.confirmButton}
+              onPress={handleUpdateProfile}
+              activeOpacity={0.8}
+            >
+              <LinearGradient
+                colors={[theme.colors.primary, '#f5ba31']}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 0 }}
+                style={styles.gradientButton}
+              >
+                <Text style={styles.confirmButtonText}>Хадгалах</Text>
+              </LinearGradient>
+            </TouchableOpacity>
+          </BlurView>
+        </BlurView>
+      </Modal>
 
       <Modal
         animationType="fade"
@@ -428,6 +510,13 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: theme.colors.textSecondary,
     marginBottom: 24,
+  },
+  inputLabel: {
+    alignSelf: 'flex-start',
+    color: theme.colors.textSecondary,
+    marginBottom: 8,
+    marginLeft: 4,
+    fontSize: 14,
   },
   input: {
     width: '100%',

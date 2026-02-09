@@ -15,6 +15,7 @@ export const authService = {
 
 export const customerService = {
   getProfile: (id: string) => api.get('/customer/profile', { params: { id } }),
+  updateProfile: (id: string, data: { name?: string; email?: string }) => api.put('/customer/profile', { id, ...data }),
   topUpWallet: (customerId: string, amount: number) => api.post('/customer/wallet/topup', { customerId, amount }),
 };
 
