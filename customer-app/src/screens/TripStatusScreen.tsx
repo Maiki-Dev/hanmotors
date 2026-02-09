@@ -33,6 +33,7 @@ const TripStatusScreen = () => {
   // Bottom Sheet Animations
   const panY = useRef(new Animated.Value(0)).current;
   const [sheetExpanded, setSheetExpanded] = useState(false);
+  const isCancelling = useRef(false);
 
   const panResponder = useRef(
     PanResponder.create({
@@ -105,13 +106,15 @@ const TripStatusScreen = () => {
         ])
       ).start();
     } else if (trip?.status === 'cancelled') {
-        Alert.alert('Аялал цуцлагдлаа', 'Жолооч эсвэл систем аяллыг цуцалсан байна.', [
-            { text: 'ОК', onPress: () => navigation.navigate('HomeTab') }
-        ]);
-        const timer = setTimeout(() => {
-            navigation.navigate('HomeTab');
-        }, 3000);
-        return () => clearTimeout(timer);
+        if (!isCancelling.current) {
+            Alert.alert('Аялал цуцлагдлаа', 'Жолооч эсвэл систем аяллыг цуцалсан байна.', [
+                { text: 'ОК', onPress: () => navigation.navigate('HomeTab') }
+            ]);
+            const timer = setTimeout(() => {
+                navigation.navigate('HomeTab');
+            }, 3000);
+            return () => clearTimeout(timer);
+        }
     }
   }, [trip?.status]);
 
@@ -245,10 +248,12 @@ const TripStatusScreen = () => {
           text: 'Тийм, цуцлах', 
           style: 'destructive',
           onPress: async () => {
+            isCancelling.current = true;
             try {
               await rideService.cancelTrip(trip._id);
               navigation.navigate('HomeTab');
             } catch (error) {
+              isCancelling.current = false;
               Alert.alert('Алдаа', 'Аялал цуцлахад алдаа гарлаа');
             }
           }
@@ -442,7 +447,7 @@ const TripStatusScreen = () => {
                 <Polyline
                     coordinates={routeCoordinates}
                     strokeWidth={5}
-                    strokeColor={theme.colors.primary}
+                    strokeColor="#FFD700"
                 />
             ) : (
                 <Polyline
@@ -451,7 +456,7 @@ const TripStatusScreen = () => {
                         { latitude: trip.dropoffLocation.lat, longitude: trip.dropoffLocation.lng }
                     ]}
                     strokeWidth={5}
-                    strokeColor={theme.colors.primary}
+                    strokeColor="#FFD700"
                     lineDashPattern={[10, 10]}
                 />
             )}

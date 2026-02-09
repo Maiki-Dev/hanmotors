@@ -18,6 +18,7 @@ import {
   DropdownMenuTrigger,
 } from "../components/ui/dropdown-menu";
 import { Avatar, AvatarFallback, AvatarImage } from "../components/ui/avatar";
+import { useToast } from '../context/ToastContext';
 
 const DriverManagement = () => {
   const [drivers, setDrivers] = useState([]);
@@ -27,7 +28,8 @@ const DriverManagement = () => {
   const [isAddOpen, setIsAddOpen] = useState(false);
   const [isDeleteOpen, setIsDeleteOpen] = useState(false);
   const [isDetailOpen, setIsDetailOpen] = useState(false);
-  const [formData, setFormData] = useState({ 
+  const { toast } = useToast();
+  const [formData, setFormData] = useState({  
     firstName: '', 
     lastName: '', 
     phone: '', 
@@ -47,7 +49,6 @@ const DriverManagement = () => {
     role: 'taxi',
     vehicle: { plateNumber: '', model: '', color: '', year: '' }
   });
-  const [error, setError] = useState(null);
 
   useEffect(() => {
     const fetchDrivers = async () => {
@@ -91,17 +92,29 @@ const DriverManagement = () => {
 
   const handleCreate = async () => {
     try {
-      setError(null);
       if (!addFormData.firstName || !addFormData.lastName || !addFormData.phone || !addFormData.email) {
-        setError("Бүх талбарыг бөглөнө үү.");
+        toast({
+          title: "Анхааруулга",
+          description: "Бүх талбарыг бөглөнө үү.",
+          status: "warning"
+        });
         return;
       }
       const newDriver = await driverService.createDriver(addFormData);
       setDrivers(prev => [newDriver, ...prev]);
       setIsAddOpen(false);
+      toast({
+        title: "Амжилттай",
+        description: "Шинэ жолооч амжилттай нэмэгдлээ",
+        status: "success"
+      });
     } catch (error) {
       console.error("Failed to create driver", error);
-      setError("Жолооч нэмэхэд алдаа гарлаа. " + (error.response?.data?.message || error.message));
+      toast({
+        title: "Алдаа",
+        description: "Жолооч нэмэхэд алдаа гарлаа. " + (error.response?.data?.message || error.message),
+        status: "error"
+      });
     }
   };
 
@@ -141,7 +154,6 @@ const DriverManagement = () => {
 
   const handleVerify = async () => {
     try {
-      setError(null);
       // Approve all documents and activate driver
       const updates = {
         status: 'active',
@@ -157,33 +169,58 @@ const DriverManagement = () => {
       const updatedDriver = await driverService.updateDriver(selectedDriver._id, updates);
       setDrivers(prev => prev.map(d => d._id === updatedDriver._id ? updatedDriver : d));
       setSelectedDriver(updatedDriver); 
+      toast({
+        title: "Амжилттай",
+        description: "Жолооч баталгаажлаа",
+        status: "success"
+      });
     } catch (error) {
       console.error("Failed to verify driver", error);
-      setError("Баталгаажуулахад алдаа гарлаа. " + (error.response?.data?.message || error.message));
+      toast({
+        title: "Алдаа",
+        description: "Баталгаажуулахад алдаа гарлаа. " + (error.response?.data?.message || error.message),
+        status: "error"
+      });
     }
   };
 
   const handleSave = async () => {
     try {
-      setError(null);
       const updatedDriver = await driverService.updateDriver(selectedDriver._id, formData);
       setDrivers(prev => prev.map(d => d._id === updatedDriver._id ? updatedDriver : d));
       setIsEditOpen(false);
+      toast({
+        title: "Амжилттай",
+        description: "Жолоочийн мэдээлэл шинэчлэгдлээ",
+        status: "success"
+      });
     } catch (error) {
       console.error("Failed to update driver", error);
-      setError("Хадгалахад алдаа гарлаа. " + (error.response?.data?.message || error.message));
+      toast({
+        title: "Алдаа",
+        description: "Хадгалахад алдаа гарлаа. " + (error.response?.data?.message || error.message),
+        status: "error"
+      });
     }
   };
 
   const handleConfirmDelete = async () => {
     try {
-      setError(null);
       await driverService.deleteDriver(selectedDriver._id);
       setDrivers(prev => prev.filter(d => d._id !== selectedDriver._id));
       setIsDeleteOpen(false);
+      toast({
+        title: "Амжилттай",
+        description: "Жолооч устгагдлаа",
+        status: "success"
+      });
     } catch (error) {
       console.error("Failed to delete driver", error);
-      setError("Устгахад алдаа гарлаа. " + (error.response?.data?.message || error.message));
+      toast({
+        title: "Алдаа",
+        description: "Устгахад алдаа гарлаа. " + (error.response?.data?.message || error.message),
+        status: "error"
+      });
     }
   };
 
@@ -288,11 +325,6 @@ const DriverManagement = () => {
             <DialogTitle>Шинэ жолооч нэмэх</DialogTitle>
           </DialogHeader>
           <div className="flex-1 overflow-y-auto pr-2">
-            {error && (
-              <div className="bg-destructive/15 text-destructive text-sm p-3 rounded-md mb-4">
-                {error}
-              </div>
-            )}
             <div className="grid gap-4 py-4">
               <div className="grid grid-cols-2 gap-4">
               <div className="grid gap-2">

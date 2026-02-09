@@ -12,6 +12,7 @@ import { Bell, Lock, User, Mail, Save, ShieldCheck, CheckCircle, XCircle, Edit, 
 import { useAuth } from '../context/AuthContext';
 import { supabase } from '../lib/supabase';
 import { uploadToCloudinary } from '../lib/cloudinary';
+import { useToast } from '../context/ToastContext';
 import {
   Dialog,
   DialogContent,
@@ -23,6 +24,7 @@ import {
 
 const Settings = () => {
   const { user, profile: authProfile, refreshProfile } = useAuth();
+  const { toast } = useToast();
   const [activeTab, setActiveTab] = useState("profile");
   
   // Profile State
@@ -118,10 +120,18 @@ const Settings = () => {
       // Update local state and context
       setProfile({ ...profile, avatar_url: publicUrl });
       refreshProfile();
-      alert('Зураг амжилттай шинэчлэгдлээ!');
+      toast({
+        title: "Амжилттай",
+        description: "Зураг амжилттай шинэчлэгдлээ!",
+        status: "success"
+      });
       
     } catch (error) {
-      alert('Error uploading avatar: ' + error.message);
+      toast({
+        title: "Алдаа",
+        description: "Зураг хуулахад алдаа гарлаа: " + error.message,
+        status: "error"
+      });
     } finally {
       setUploading(false);
       if (fileInputRef.current) {
@@ -146,26 +156,46 @@ const Settings = () => {
         .eq('id', user.id);
 
       if (error) throw error;
-      alert('Мэдээлэл амжилттай хадгалагдлаа!');
+      toast({
+        title: "Амжилттай",
+        description: "Мэдээлэл амжилттай хадгалагдлаа!",
+        status: "success"
+      });
       refreshProfile();
     } catch (error) {
-      alert('Алдаа: ' + error.message);
+      toast({
+        title: "Алдаа",
+        description: "Алдаа: " + error.message,
+        status: "error"
+      });
     }
   };
 
   const handleSavePassword = async () => {
     if (password.new !== password.confirm) {
-      alert('Шинэ нууц үг таарахгүй байна!');
+      toast({
+        title: "Анхааруулга",
+        description: "Шинэ нууц үг таарахгүй байна!",
+        status: "warning"
+      });
       return;
     }
     
     try {
       const { error } = await supabase.auth.updateUser({ password: password.new });
       if (error) throw error;
-      alert('Нууц үг амжилттай солигдлоо!');
+      toast({
+        title: "Амжилттай",
+        description: "Нууц үг амжилттай солигдлоо!",
+        status: "success"
+      });
       setPassword({ new: '', confirm: '' });
     } catch (error) {
-      alert('Алдаа: ' + error.message);
+      toast({
+        title: "Алдаа",
+        description: "Алдаа: " + error.message,
+        status: "error"
+      });
     }
   };
 
@@ -219,11 +249,19 @@ const Settings = () => {
 
       if (error) throw error;
       
-      alert('Хэрэглэгчийн мэдээлэл шинэчлэгдлээ!');
+      toast({
+        title: "Амжилттай",
+        description: "Хэрэглэгчийн мэдээлэл шинэчлэгдлээ!",
+        status: "success"
+      });
       setIsEditOpen(false);
       fetchAdminUsers();
     } catch (error) {
-      alert('Алдаа: ' + error.message);
+      toast({
+        title: "Алдаа",
+        description: "Алдаа: " + error.message,
+        status: "error"
+      });
     }
   };
 

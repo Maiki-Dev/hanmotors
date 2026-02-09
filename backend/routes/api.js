@@ -1011,6 +1011,40 @@ router.delete('/admin/driver/:id', async (req, res) => {
   }
 });
 
+// --- CUSTOMER MANAGEMENT ---
+
+// Get All Customers
+router.get('/admin/customers', async (req, res) => {
+    try {
+        const customers = await Customer.find().sort({ createdAt: -1 });
+        res.json(customers);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// Update Customer
+router.put('/admin/customers/:id', async (req, res) => {
+    try {
+        const customer = await Customer.findByIdAndUpdate(req.params.id, req.body, { new: true });
+        if (!customer) return res.status(404).json({ message: 'Customer not found' });
+        res.json(customer);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// Delete Customer
+router.delete('/admin/customers/:id', async (req, res) => {
+    try {
+        const customer = await Customer.findByIdAndDelete(req.params.id);
+        if (!customer) return res.status(404).json({ message: 'Customer not found' });
+        res.json({ message: 'Customer deleted successfully' });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
 router.get('/admin/trips', async (req, res) => {
   try {
     const trips = await Trip.find().populate('driver', 'name phone').sort({ createdAt: -1 });

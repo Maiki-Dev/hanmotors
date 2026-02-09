@@ -7,12 +7,12 @@ import {
   Dimensions,
   Platform,
   StatusBar,
-  SafeAreaView,
   ScrollView,
   Image,
   Alert,
   TextInput,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import MapView, { Marker, PROVIDER_GOOGLE, Region } from 'react-native-maps';
 import * as Location from 'expo-location';
 import { Ionicons, MaterialIcons, Feather, FontAwesome5 } from '@expo/vector-icons';

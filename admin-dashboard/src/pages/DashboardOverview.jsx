@@ -8,8 +8,10 @@ import { Overview } from "../components/overview";
 import { RecentSales } from "../components/recent-sales";
 import api from '../services/api';
 import * as XLSX from 'xlsx';
+import { useToast } from '../context/ToastContext';
 
 const DashboardOverview = () => {
+  const { toast } = useToast();
   const [activeTab, setActiveTab] = useState("overview");
   
   // Date State (Default: Current Month)
@@ -106,9 +108,18 @@ const DashboardOverview = () => {
 
       // Save file
       XLSX.writeFile(wb, `HanMotors_Report_${startDate}_${endDate}.xlsx`);
+      toast({
+        title: "Амжилттай",
+        description: "Тайлан амжилттай татагдлаа",
+        status: "success"
+      });
     } catch (error) {
       console.error("Export failed", error);
-      alert("Тайлан татахад алдаа гарлаа.");
+      toast({
+        title: "Алдаа",
+        description: "Тайлан татахад алдаа гарлаа.",
+        status: "error"
+      });
     }
   };
 

@@ -66,6 +66,7 @@ import {
 } from "../components/ui/dropdown-menu";
 import api, { socket } from '../services/api';
 import { cn } from "../lib/utils";
+import { useToast } from '../context/ToastContext';
 
 const fetchAddress = async (lat, lng) => {
     try {
@@ -113,6 +114,7 @@ const TripManagement = () => {
   const [vehicleTypes, setVehicleTypes] = useState([]);
   const [additionalServices, setAdditionalServices] = useState([]);
   const [loading, setLoading] = useState(true);
+  const { toast } = useToast();
   
   // Socket Listeners
   useEffect(() => {
@@ -304,6 +306,11 @@ const TripManagement = () => {
       setAdditionalServices(servicesRes.data);
     } catch (error) {
       console.error("Error fetching data:", error);
+      toast({
+        title: "Алдаа",
+        description: "Өгөгдөл татахад алдаа гарлаа",
+        status: "error"
+      });
     } finally {
       setLoading(false);
     }
@@ -349,9 +356,18 @@ const TripManagement = () => {
         customerName: '',
         customerPhone: ''
       });
+      toast({
+        title: "Амжилттай",
+        description: "Шинэ дуудлага бүртгэгдлээ",
+        status: "success"
+      });
     } catch (error) {
       console.error("Error creating trip:", error);
-      alert("Алдаа гарлаа: " + error.message);
+      toast({
+        title: "Алдаа",
+        description: "Дуудлага үүсгэхэд алдаа гарлаа: " + error.message,
+        status: "error"
+      });
     }
   };
 
@@ -370,10 +386,18 @@ const TripManagement = () => {
       setIsEditOpen(false);
       setEditingTrip(null);
       fetchData();
-      alert("Амжилттай хадгалагдлаа!");
+      toast({
+        title: "Амжилттай",
+        description: "Дуудлага амжилттай хадгалагдлаа",
+        status: "success"
+      });
     } catch (error) {
       console.error("Error updating trip:", error);
-      alert("Алдаа гарлаа: " + error.message);
+      toast({
+        title: "Алдаа",
+        description: "Алдаа гарлаа: " + error.message,
+        status: "error"
+      });
     }
   };
 
@@ -381,10 +405,18 @@ const TripManagement = () => {
     try {
       await api.put(`/trip/${tripId}`, { status: newStatus });
       fetchData();
-      // No alert needed for quick status change unless error
+      toast({
+        title: "Амжилттай",
+        description: `Дуудлагын төлөв ${newStatus} болж өөрчлөгдлөө`,
+        status: "success"
+      });
     } catch (error) {
       console.error("Error changing status:", error);
-      alert("Төлөв өөрчлөхөд алдаа гарлаа: " + error.message);
+      toast({
+        title: "Алдаа",
+        description: "Төлөв өөрчлөхөд алдаа гарлаа: " + error.message,
+        status: "error"
+      });
     }
   };
 
@@ -394,10 +426,18 @@ const TripManagement = () => {
     try {
       await api.delete(`/trip/${tripId}`);
       fetchData();
-      alert("Дуудлага устгагдлаа!");
+      toast({
+        title: "Амжилттай",
+        description: "Дуудлага устгагдлаа",
+        status: "success"
+      });
     } catch (error) {
       console.error("Error deleting trip:", error);
-      alert("Алдаа гарлаа: " + error.message);
+      toast({
+        title: "Алдаа",
+        description: "Алдаа гарлаа: " + error.message,
+        status: "error"
+      });
     }
   };
 
@@ -417,10 +457,18 @@ const TripManagement = () => {
       setSelectedTrip(null);
       setSelectedDriverId('');
       fetchData();
-      alert("Жолоочид хуваарилагдлаа!");
+      toast({
+        title: "Амжилттай",
+        description: "Жолоочид хуваарилагдлаа",
+        status: "success"
+      });
     } catch (error) {
       console.error("Error assigning driver:", error);
-      alert("Алдаа гарлаа: " + error.message);
+      toast({
+        title: "Алдаа",
+        description: "Алдаа гарлаа: " + error.message,
+        status: "error"
+      });
     }
   };
 

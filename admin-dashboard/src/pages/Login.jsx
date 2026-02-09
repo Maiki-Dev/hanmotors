@@ -8,18 +8,18 @@ import { Label } from "../components/ui/label";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "../components/ui/card";
 import { AlertCircle } from "lucide-react";
 import logo from "../assets/logo.png";
+import { useToast } from '../context/ToastContext';
 
 export default function Login() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState(null);
+  const { toast } = useToast();
   const navigate = useNavigate();
 
   const handleLogin = async (e) => {
     e.preventDefault();
     setLoading(true);
-    setError(null);
 
     try {
       const { data, error } = await supabase.auth.signInWithPassword({
@@ -32,9 +32,18 @@ export default function Login() {
       // Check if user is approved
       // We can check the profile here or rely on the AuthContext redirecting if not approved
       // For now, let's just navigate to home, and App.jsx will handle protection
+      toast({
+        title: "Амжилттай",
+        description: "Системд амжилттай нэвтэрлээ",
+        status: "success"
+      });
       navigate('/');
     } catch (err) {
-      setError(err.message);
+      toast({
+        title: "Нэвтрэх алдаа",
+        description: err.message,
+        status: "error"
+      });
     } finally {
       setLoading(false);
     }
@@ -73,12 +82,6 @@ export default function Login() {
                 required
               />
             </div>
-            {error && (
-              <div className="bg-red-50 text-red-600 p-3 rounded-md flex items-center gap-2 text-sm">
-                <AlertCircle size={16} />
-                {error}
-              </div>
-            )}
             <Button type="submit" className="w-full" disabled={loading}>
               {loading ? 'Уншиж байна...' : 'Нэвтрэх'}
             </Button>

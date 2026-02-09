@@ -9,10 +9,12 @@ import { Badge } from '../components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../components/ui/tabs';
 import { Edit2, Calculator, Save, X, Truck, CheckCircle2, Plus } from 'lucide-react';
 import api from '../services/api';
+import { useToast } from '../context/ToastContext';
 
 const PricingRules = () => {
   const [pricingRules, setPricingRules] = useState([]);
   const [loading, setLoading] = useState(false);
+  const { toast } = useToast();
   
   // Edit State
   const [editingRule, setEditingRule] = useState(null);
@@ -45,6 +47,11 @@ const PricingRules = () => {
       if (res.data.length > 0) setCalcVehicle(res.data[0]);
     } catch (error) {
       console.error('Error fetching pricing:', error);
+      toast({
+        title: "Алдаа",
+        description: "Тарифын мэдээлэл авахад алдаа гарлаа",
+        status: "error"
+      });
     } finally {
       setLoading(false);
     }
@@ -56,6 +63,11 @@ const PricingRules = () => {
       setAdditionalServices(res.data);
     } catch (error) {
       console.error('Error fetching additional services:', error);
+      toast({
+        title: "Алдаа",
+        description: "Нэмэлт үйлчилгээний мэдээлэл авахад алдаа гарлаа",
+        status: "error"
+      });
     }
   };
 
@@ -76,8 +88,18 @@ const PricingRules = () => {
       });
       setIsEditOpen(false);
       fetchPricing();
+      toast({
+        title: "Амжилттай",
+        description: "Тариф шинэчлэгдлээ",
+        status: "success"
+      });
     } catch (error) {
       console.error('Error updating pricing:', error);
+      toast({
+        title: "Алдаа",
+        description: "Тариф шинэчлэхэд алдаа гарлаа",
+        status: "error"
+      });
     }
   };
 
@@ -90,8 +112,18 @@ const PricingRules = () => {
       setIsAddServiceOpen(false);
       fetchAdditionalServices();
       setServiceForm({ name: '', price: '' });
+      toast({
+        title: "Амжилттай",
+        description: "Нэмэлт үйлчилгээ нэмэгдлээ",
+        status: "success"
+      });
     } catch (error) {
       console.error('Error adding service:', error);
+      toast({
+        title: "Алдаа",
+        description: "Нэмэлт үйлчилгээ нэмэхэд алдаа гарлаа",
+        status: "error"
+      });
     }
   };
 
@@ -111,8 +143,18 @@ const PricingRules = () => {
       fetchAdditionalServices();
       setEditingService(null);
       setServiceForm({ name: '', price: '' });
+      toast({
+        title: "Амжилттай",
+        description: "Нэмэлт үйлчилгээ шинэчлэгдлээ",
+        status: "success"
+      });
     } catch (error) {
       console.error('Error updating service:', error);
+      toast({
+        title: "Алдаа",
+        description: "Нэмэлт үйлчилгээ шинэчлэхэд алдаа гарлаа",
+        status: "error"
+      });
     }
   };
 
@@ -121,8 +163,18 @@ const PricingRules = () => {
     try {
       await api.delete(`/admin/additional-services/${id}`);
       fetchAdditionalServices();
+      toast({
+        title: "Амжилттай",
+        description: "Нэмэлт үйлчилгээ устгагдлаа",
+        status: "success"
+      });
     } catch (error) {
       console.error('Error deleting service:', error);
+      toast({
+        title: "Алдаа",
+        description: "Нэмэлт үйлчилгээ устгахад алдаа гарлаа",
+        status: "error"
+      });
     }
   };
 

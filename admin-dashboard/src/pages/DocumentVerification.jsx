@@ -7,12 +7,14 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, Di
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "../components/ui/tabs";
 import { Eye, Check, X, FileText, Car, Shield } from 'lucide-react';
 import api from '../services/api';
+import { useToast } from '../context/ToastContext';
 
 const DocumentVerification = () => {
   const [drivers, setDrivers] = useState([]);
   const [selectedDriver, setSelectedDriver] = useState(null);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [activeTab, setActiveTab] = useState('license');
+  const { toast } = useToast();
 
   const fetchDocuments = async () => {
     try {
@@ -60,8 +62,18 @@ const DocumentVerification = () => {
       }
       
       fetchDocuments();
+      toast({
+        title: "Амжилттай",
+        description: "Баримт бичгийн төлөв шинэчлэгдлээ",
+        status: "success"
+      });
     } catch (error) {
       console.error('Error updating status:', error);
+      toast({
+        title: "Алдаа",
+        description: "Төлөв шинэчлэхэд алдаа гарлаа",
+        status: "error"
+      });
     }
   };
 

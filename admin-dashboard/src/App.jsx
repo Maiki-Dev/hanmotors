@@ -14,7 +14,9 @@ import PaymentsReport from './pages/PaymentsReport';
 import DocumentVerification from './pages/DocumentVerification';
 import SettingsPage from './pages/Settings';
 import Login from './pages/Login';
+import UserManagement from './pages/UserManagement';
 import { AuthProvider, useAuth } from './context/AuthContext';
+import { ToastProvider } from './context/ToastContext';
 import ProtectedRoute from './components/ProtectedRoute';
 
 import {
@@ -32,6 +34,7 @@ const Sidebar = ({ className, onClose }) => {
   
   const menuItems = [
     { icon: LayoutDashboard, label: 'Ерөнхий самбар', path: '/' },
+    { icon: Users, label: 'Хэрэглэгчид', path: '/users' },
     { icon: Calculator, label: 'Тарифын тохиргоо', path: '/pricing' },
     { icon: Users, label: 'Жолоочийн удирдлага', path: '/drivers' },
     { icon: Truck, label: 'Дуудлагын хүсэлтүүд', path: '/requests' },
@@ -176,19 +179,22 @@ const DashboardLayout = () => {
 function App() {
   return (
     <AuthProvider>
-      <Routes>
-        <Route path="/login" element={<Login />} />
-        
-        <Route element={<ProtectedRoute><DashboardLayout /></ProtectedRoute>}>
-          <Route path="/" element={<DashboardOverview />} />
-          <Route path="/drivers" element={<DriverManagement />} />
-          <Route path="/requests" element={<TripManagement />} />
-          <Route path="/pricing" element={<PricingRules />} />
-          <Route path="/payments" element={<PaymentsReport />} />
-          <Route path="/verification" element={<DocumentVerification />} />
-          <Route path="/settings" element={<SettingsPage />} />
-        </Route>
-      </Routes>
+      <ToastProvider>
+        <Routes>
+          <Route path="/login" element={<Login />} />
+          
+          <Route element={<ProtectedRoute><DashboardLayout /></ProtectedRoute>}>
+            <Route path="/" element={<DashboardOverview />} />
+            <Route path="/drivers" element={<DriverManagement />} />
+            <Route path="/users" element={<UserManagement />} />
+            <Route path="/requests" element={<TripManagement />} />
+            <Route path="/pricing" element={<PricingRules />} />
+            <Route path="/payments" element={<PaymentsReport />} />
+            <Route path="/verification" element={<DocumentVerification />} />
+            <Route path="/settings" element={<SettingsPage />} />
+          </Route>
+        </Routes>
+      </ToastProvider>
     </AuthProvider>
   );
 }

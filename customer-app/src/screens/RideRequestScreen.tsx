@@ -12,7 +12,6 @@ import {
   TextInput,
   FlatList,
   Modal,
-  SafeAreaView,
   StatusBar
 } from 'react-native';
 import { theme } from '../constants/theme';
@@ -43,7 +42,7 @@ import { useSelector, useDispatch } from 'react-redux';
 import { RootState } from '../store';
 import { logout } from '../store/slices/authSlice';
 import { GooglePlacesAutocomplete } from 'react-native-google-places-autocomplete';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useSafeAreaInsets, SafeAreaView } from 'react-native-safe-area-context';
 import * as Location from 'expo-location';
 import { initSocket } from '../services/socket';
 import { BlurView } from 'expo-blur';
@@ -483,7 +482,7 @@ const RideRequestScreen = () => {
               {pickup && <Marker coordinate={pickup} title="Авах цэг" pinColor={theme.colors.success} />}
               {dropoff && <Marker coordinate={dropoff} title="Очих цэг" pinColor={theme.colors.error} />}
               {routeCoordinates.length > 0 && (
-                  <Polyline coordinates={routeCoordinates} strokeWidth={4} strokeColor={theme.colors.primary} />
+                  <Polyline coordinates={routeCoordinates} strokeWidth={4} strokeColor="#FFD700" />
               )}
                {drivers.map(driver => (
                    <AnimatedDriverMarker key={driver.id} driver={driver} />
@@ -655,6 +654,13 @@ const styles = StyleSheet.create({
     fontSize: 16,
     flex: 1,
     padding: 0,
+    includeFontPadding: false,
+    textAlignVertical: 'center',
+    ...Platform.select({
+      android: {
+        fontFamily: 'sans-serif',
+      },
+    }),
   },
   mapIconButton: {
     padding: 8,
