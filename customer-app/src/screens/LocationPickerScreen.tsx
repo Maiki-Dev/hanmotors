@@ -3,6 +3,7 @@ import { View, StyleSheet, TouchableOpacity, Text, Dimensions, ActivityIndicator
 import MapView, { PROVIDER_GOOGLE, Region } from 'react-native-maps';
 import * as Location from 'expo-location';
 import { theme } from '../constants/theme';
+import { mapStyle } from '../constants/mapStyle';
 import { ArrowLeft, MapPin } from 'lucide-react-native';
 import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
 import { StackNavigationProp } from '@react-navigation/stack';
@@ -45,12 +46,14 @@ const LocationPickerScreen = () => {
       let { status } = await Location.requestForegroundPermissionsAsync();
       if (status !== 'granted') return;
 
-      let location = await Location.getCurrentPositionAsync({});
+      let location = await Location.getCurrentPositionAsync({
+        accuracy: Location.Accuracy.Highest,
+      });
       const newRegion = {
         latitude: location.coords.latitude,
         longitude: location.coords.longitude,
-        latitudeDelta: 0.01,
-        longitudeDelta: 0.01,
+        latitudeDelta: 0.005,
+        longitudeDelta: 0.005,
       };
       setRegion(newRegion);
       mapRef.current?.animateToRegion(newRegion, 1000);
@@ -73,20 +76,39 @@ const LocationPickerScreen = () => {
   const fetchAddress = async (lat: number, lon: number) => {
     setLoading(true);
     try {
-      // Use Google Geocoding API if available, or OpenStreetMap as fallback
-      // Using Google Maps API for consistency with other screens
       const url = `https://maps.googleapis.com/maps/api/geocode/json?latlng=${lat},${lon}&key=${GOOGLE_MAPS_APIKEY}&language=mn`;
       const response = await fetch(url);
       const data = await response.json();
       
       if (data.results && data.results.length > 0) {
-        setAddress(data.results[0].formatted_address);
+        // Try to find a specific address (street_address, route, or premise)
+        const specificResult = data.results.find((r: any) => 
+            r.types.includes('street_address') || 
+            r.types.includes('route') || 
+            r.types.includes('premise') ||
+            r.types.includes('point_of_interest')
+        );
+
+        const bestResult = specificResult || data.results[0];
+        let formattedAddr = bestResult.formatted_address;
+
+        // Clean up address if it contains redundant country/city info for local context
+        // e.g. "Peace Avenue, Ulaanbaatar, Mongolia" -> "Peace Avenue" if we want to be concise, 
+        // but for now let's just use the full one but ensure it's specific.
+        // If the result is just "Ulaanbaatar", try to find a sublocality or neighborhood
+        if (formattedAddr === 'Ulaanbaatar' || formattedAddr === 'Ulan Bator') {
+             const subLocality = data.results.find((r: any) => r.types.includes('sublocality') || r.types.includes('neighborhood'));
+             if (subLocality) formattedAddr = subLocality.formatted_address;
+        }
+
+        setAddress(formattedAddr);
       } else {
-         // Fallback to nominatim if google fails or no key
-         const osmResponse = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lon}`);
+         const osmResponse = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lon}&accept-language=mn`);
          const osmData = await osmResponse.json();
          if (osmData && osmData.display_name) {
-             setAddress(osmData.display_name);
+             // Take the first part of the OSM display name for brevity if it's too long
+             const parts = osmData.display_name.split(',');
+             setAddress(parts.slice(0, 3).join(', '));
          }
       }
     } catch (error) {
@@ -119,10 +141,13 @@ const LocationPickerScreen = () => {
         ref={mapRef}
         provider={PROVIDER_GOOGLE}
         style={styles.map}
+        customMapStyle={mapStyle}
         initialRegion={region}
         onRegionChange={onRegionChange}
         onRegionChangeComplete={onRegionChangeComplete}
         userInterfaceStyle="dark"
+        showsUserLocation={true}
+        showsMyLocationButton={false}
       />
       
       {/* Center Marker */}
@@ -131,10 +156,13 @@ const LocationPickerScreen = () => {
       </View>
 
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}>
-          <ArrowLeft color={theme.colors.text} size={24} />
-        </TouchableOpacity>
-        <Text style={styles.headerTitle}>Байршил сонгох</Text>
+        <BlurView intensity={80} tint="dark" style={StyleSheet.absoluteFill} />
+        <View style={styles.headerContent}>
+            <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}>
+            <ArrowLeft color={theme.colors.text} size={24} />
+            </TouchableOpacity>
+            <Text style={styles.headerTitle}>Байршил сонгох</Text>
+        </View>
       </View>
 
       <View style={styles.footer}>
@@ -170,26 +198,34 @@ const styles = StyleSheet.create({
   header: {
     position: 'absolute',
     top: 50,
-    left: 0,
-    right: 0,
+    left: 20,
+    right: 20,
+    height: 60,
+    borderRadius: 30,
+    overflow: 'hidden',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.1)',
+    zIndex: 10,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.3,
+    shadowRadius: 20,
+    elevation: 10,
+  },
+  headerContent: {
+    flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: theme.layout.screenPadding,
-    zIndex: 10,
+    paddingHorizontal: 20,
   },
   backButton: {
-    padding: 8,
+    padding: 4,
     marginRight: 16,
-    backgroundColor: 'rgba(0,0,0,0.5)',
-    borderRadius: 20,
   },
   headerTitle: {
-    fontSize: 20,
-    fontWeight: 'bold',
+    fontSize: 16,
+    fontWeight: '600',
     color: '#FFF',
-    textShadowColor: 'rgba(0, 0, 0, 0.75)',
-    textShadowOffset: {width: -1, height: 1},
-    textShadowRadius: 10
   },
   markerFixed: {
     left: '50%',

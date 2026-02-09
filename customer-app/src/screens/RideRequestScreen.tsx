@@ -38,8 +38,9 @@ import MapView, { Marker, PROVIDER_GOOGLE, Polyline } from 'react-native-maps';
 import { GOOGLE_MAPS_APIKEY } from '../config';
 import { rideService, customerService } from '../services/api';
 import { mapService, decodePolyline } from '../services/mapService';
-import { useSelector } from 'react-redux';
+import { useSelector, useDispatch } from 'react-redux';
 import { RootState } from '../store';
+import { logout } from '../store/slices/authSlice';
 import { GooglePlacesAutocomplete } from 'react-native-google-places-autocomplete';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as Location from 'expo-location';
@@ -80,6 +81,7 @@ const SUGGESTED_PLACES = [
 const RideRequestScreen = () => {
   const route = useRoute<RideRequestScreenRouteProp>();
   const navigation = useNavigation<RideRequestScreenNavigationProp>();
+  const dispatch = useDispatch();
   const user = useSelector((state: RootState) => state.auth.user);
   const insets = useSafeAreaInsets();
   const mapRef = useRef<MapView>(null);
@@ -294,7 +296,20 @@ const RideRequestScreen = () => {
     if (!pickup || !dropoff) return;
     
     if (!user) {
-      Alert.alert('Алдаа', 'Та нэвтрэх шаардлагатай');
+      Alert.alert(
+        'Нэвтрэх шаардлагатай',
+        'Та захиалга өгөхийн тулд системд нэвтэрнэ үү.',
+        [
+          { text: 'Буцах', style: 'cancel' },
+          { 
+            text: 'Нэвтрэх', 
+            onPress: () => {
+              // Dispatch logout to reset auth state and trigger navigation to AuthStack
+              dispatch(logout());
+            }
+          }
+        ]
+      );
       return;
     }
 
@@ -498,10 +513,7 @@ const RideRequestScreen = () => {
                               <service.icon size={28} color={isSelected ? theme.colors.black : theme.colors.text} />
                           </View>
                           <Text style={[styles.serviceType, isSelected && {color: theme.colors.black}]}>{service.label}</Text>
-                          <Text style={[styles.servicePrice, isSelected && {color: theme.colors.black}]}>
-                              {/* Simple Estimate Logic */}
-                              {Math.round((service.basePrice + (distance * service.pricePerKm)) / 100) * 100}₮
-                          </Text>
+                          {/* Price removed as per request */}
                       </TouchableOpacity>
                   );
               })}
@@ -509,7 +521,7 @@ const RideRequestScreen = () => {
 
           <View style={styles.paymentRow}>
               <View style={styles.paymentMethod}>
-                  <Text style={styles.paymentText}>Бэлнээр</Text>
+                  <Text style={styles.paymentText}>Төлбөр</Text>
               </View>
               <Text style={styles.finalPrice}>{price}₮</Text>
           </View>

@@ -26,6 +26,7 @@ import { AnimatedDriverMarker } from '../components/AnimatedDriverMarker';
 import { initSocket } from '../services/socket';
 import { LOCATION_TASK_NAME } from '../services/LocationTask';
 import { mapStyle } from '../constants/mapStyle';
+import { GOOGLE_MAPS_APIKEY } from '../config';
 
 const { width, height } = Dimensions.get('window');
 const ASPECT_RATIO = width / height;
@@ -141,14 +142,57 @@ export default function HomeScreen() {
 
   const fetchAddress = async (lat: number, long: number) => {
     try {
-      const result = await Location.reverseGeocodeAsync({ latitude: lat, longitude: long });
-      if (result.length > 0) {
-        const addr = result[0];
-        const addressName = `${addr.street || ''} ${addr.name || ''}`.trim() || 'Тодорхойгүй хаяг';
-        setAddress(addressName);
+      // Use Google Geocoding API for more accurate/specific "real" place names
+      const url = `https://maps.googleapis.com/maps/api/geocode/json?latlng=${lat},${long}&key=${GOOGLE_MAPS_APIKEY}&language=mn`;
+      const response = await fetch(url);
+      const data = await response.json();
+      
+      if (data.results && data.results.length > 0) {
+        // Prioritize specific address types like street_address, premise, or point_of_interest
+        const specificResult = data.results.find((r: any) => 
+            r.types.includes('street_address') || 
+            r.types.includes('route') || 
+            r.types.includes('premise') ||
+            r.types.includes('point_of_interest') ||
+            r.types.includes('establishment')
+        );
+
+        const bestResult = specificResult || data.results[0];
+        let formattedAddr = bestResult.formatted_address;
+
+        // Clean up: If address is too generic (e.g. just City name), try to find a neighborhood
+        if (formattedAddr === 'Ulaanbaatar' || formattedAddr === 'Ulan Bator') {
+             const subLocality = data.results.find((r: any) => r.types.includes('sublocality') || r.types.includes('neighborhood'));
+             if (subLocality) formattedAddr = subLocality.formatted_address;
+        }
+        
+        // Remove "Mongolia" or "Ulaanbaatar" suffix if it makes it too long, but keep it if short
+        // For now, let's keep the full specific address as requested "real gazriin nershil"
+        setAddress(formattedAddr);
+      } else {
+        // Fallback to Expo Reverse Geocode if Google fails
+        const result = await Location.reverseGeocodeAsync({ latitude: lat, longitude: long });
+        if (result.length > 0) {
+            const addr = result[0];
+            const addressName = `${addr.street || ''} ${addr.name || ''}`.trim() || 'Тодорхойгүй хаяг';
+            setAddress(addressName);
+        }
       }
     } catch (error) {
-      setAddress('Тодорхойгүй байршил');
+      console.log('Error fetching address:', error);
+      // Fallback on error
+      try {
+        const result = await Location.reverseGeocodeAsync({ latitude: lat, longitude: long });
+        if (result.length > 0) {
+            const addr = result[0];
+            const addressName = `${addr.street || ''} ${addr.name || ''}`.trim() || 'Тодорхойгүй хаяг';
+            setAddress(addressName);
+        } else {
+            setAddress('Тодорхойгүй байршил');
+        }
+      } catch (e) {
+          setAddress('Тодорхойгүй байршил');
+      }
     }
   };
 
