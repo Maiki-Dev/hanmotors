@@ -32,7 +32,6 @@
       }
     },
     "android": {
-      "googleServicesFile": "./google-services.json",
       "package": "com.hanmotors.driver",
       "adaptiveIcon": {
         "foregroundImage": "./assets/icon.png",
@@ -60,6 +59,12 @@
       "favicon": "./assets/favicon.png"
     },
     "plugins": [
+      [
+        "react-native-onesignal",
+        {
+          "mode": "development"
+        }
+      ],
       "expo-notifications",
       [
         "expo-location",

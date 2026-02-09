@@ -1,10 +1,11 @@
 import React, { useEffect, useRef } from 'react';
-import { Platform } from 'react-native';
+import { Platform, Alert } from 'react-native';
 import * as Notifications from 'expo-notifications';
+import { LogLevel, OneSignal } from 'react-native-onesignal';
 import { io } from 'socket.io-client';
 import { API_URL } from '../config';
 
-// Configure notifications
+// Configure local notifications (kept for Socket events)
 Notifications.setNotificationHandler({
   handleNotification: async () => ({
     shouldShowBanner: true,
@@ -20,57 +21,62 @@ const NotificationManager = ({ driverId }) => {
   useEffect(() => {
     if (!driverId) return;
 
-    // Register for push notifications
-    const registerForPushNotifications = async () => {
-      try {
-        if (Platform.OS === 'android') {
-          await Notifications.setNotificationChannelAsync('default', {
-            name: 'default',
-            importance: Notifications.AndroidImportance.MAX,
-            vibrationPattern: [0, 250, 250, 250],
-            lightColor: '#FF231F7C',
-          });
-        }
+    // --- OneSignal Initialization ---
+    // TODO: Replace with your actual OneSignal App ID
+    OneSignal.initialize("YOUR_ONESIGNAL_APP_ID");
+    
+    // Optional: Enable debug logs
+    OneSignal.Debug.setLogLevel(LogLevel.VERBOSE);
 
-        const { status: existingStatus } = await Notifications.getPermissionsAsync();
-        let finalStatus = existingStatus;
-        if (existingStatus !== 'granted') {
-          const { status } = await Notifications.requestPermissionsAsync({
-            ios: {
-              allowAlert: true,
-              allowBadge: true,
-              allowSound: true,
-            },
-          });
-          finalStatus = status;
-        }
+    // Request Permission
+    OneSignal.Notifications.requestPermission(true);
 
-        if (finalStatus !== 'granted') {
-          console.log('Push notification permission denied');
-          return;
-        }
-
-        // Get Expo Push Token
-        const tokenData = await Notifications.getExpoPushTokenAsync({
-            projectId: '82d34329-fe87-437d-a5ac-744a6b1fd487'
-        });
-        const token = tokenData.data;
-        console.log('Expo Push Token:', token);
-
-        // Send token to backend
-        await fetch(`${API_URL}/api/driver/push-token`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ driverId, token }),
-        });
-      } catch (error) {
-        console.log('Warning: Push Notifications not configured (missing google-services.json):', error.message);
+    // Listener for subscription changes (getting the Player ID)
+    const handleSubscriptionChange = (event) => {
+      console.log("OneSignal Subscription changed:", event);
+      if (event.current.id) {
+        sendTokenToBackend(event.current.id);
       }
     };
 
-    registerForPushNotifications();
+    OneSignal.User.pushSubscription.addEventListener('change', handleSubscriptionChange);
 
-    // Connect Socket
+    // Initial check
+    const currentId = OneSignal.User.pushSubscription.getPushSubscriptionId();
+    if (currentId) {
+      console.log("OneSignal ID:", currentId);
+      sendTokenToBackend(currentId);
+    }
+
+    // Login user in OneSignal (Optional, but good for tracking)
+    OneSignal.login(driverId);
+
+    return () => {
+      // Cleanup
+      // Note: OneSignal listeners might not have a simple remove in some versions, 
+      // but usually we can ignore or use removeEventListener if available.
+    };
+  }, [driverId]);
+
+  const sendTokenToBackend = async (token) => {
+    try {
+      // We send 'token' but it's actually OneSignal Player ID now.
+      // Backend should be updated to handle this as 'oneSignalId' or similar.
+      await fetch(`${API_URL}/api/driver/push-token`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ driverId, token, type: 'onesignal' }),
+      });
+      console.log('OneSignal ID sent to backend');
+    } catch (error) {
+      console.log('Error sending OneSignal ID:', error);
+    }
+  };
+
+  useEffect(() => {
+    if (!driverId) return;
+
+    // Connect Socket (Keep this for In-App Real-time alerts)
     socketRef.current = io(API_URL, {
       transports: ['websocket', 'polling'],
       reconnection: true,
@@ -81,6 +87,7 @@ const NotificationManager = ({ driverId }) => {
 
     // Listeners
     socketRef.current.on('newJobRequest', async (tripData) => {
+      // Local Notification for immediate alert
       await Notifications.scheduleNotificationAsync({
         content: {
           title: "🔔 Шинэ дуудлага!",
@@ -99,20 +106,17 @@ const NotificationManager = ({ driverId }) => {
           title: "Аялал цуцлагдлаа",
           body: "Захиалагч аяллаа цуцаллаа.",
           sound: true,
-          priority: Notifications.AndroidNotificationPriority.MAX,
         },
         trigger: null,
       });
     });
 
     return () => {
-      if (socketRef.current) {
-        socketRef.current.disconnect();
-      }
+      if (socketRef.current) socketRef.current.disconnect();
     };
   }, [driverId]);
 
-  return null; // Invisible component
+  return null;
 };
 
 export default NotificationManager;
