@@ -1,7 +1,7 @@
 import React, { useEffect, useRef } from 'react';
 import { Platform, Alert } from 'react-native';
 import * as Notifications from 'expo-notifications';
-import { LogLevel, OneSignal } from 'react-native-onesignal';
+// import { LogLevel, OneSignal } from 'react-native-onesignal'; // Commented out for Expo Go
 import { io } from 'socket.io-client';
 import { API_URL } from '../config';
 
@@ -21,7 +21,8 @@ const NotificationManager = ({ driverId }) => {
   useEffect(() => {
     if (!driverId) return;
 
-    // --- OneSignal Initialization ---
+    // --- OneSignal Initialization (Commented out for Expo Go) ---
+    /*
     // App ID from user
     OneSignal.initialize("3b1bace3-c9a5-4ce5-9046-ad6606bdfd1b");
     
@@ -47,9 +48,12 @@ const NotificationManager = ({ driverId }) => {
       console.log("OneSignal ID:", currentId);
       sendTokenToBackend(currentId);
     }
+    */
 
+    /*
     // Login user in OneSignal (Optional, but good for tracking)
     OneSignal.login(driverId);
+    */
 
     return () => {
       // Cleanup

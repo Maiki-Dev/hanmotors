@@ -74,11 +74,14 @@ export default function WalletScreen({ navigation, route }) {
         setQpayInvoice(data);
         setQpayVisible(true);
       } else {
-        Alert.alert('Алдаа', data.message || 'QPay нэхэмжлэх үүсгэхэд алдаа гарлаа.');
+        const errorMessage = data.details 
+          ? `${data.message}\n\n${typeof data.details === 'object' ? JSON.stringify(data.details) : data.details}`
+          : (data.message || 'QPay нэхэмжлэх үүсгэхэд алдаа гарлаа.');
+        Alert.alert('Алдаа', errorMessage);
       }
     } catch (error) {
       console.error(error);
-      Alert.alert('Алдаа', 'Сүлжээний алдаа');
+      Alert.alert('Алдаа', `Сүлжээний алдаа: ${error.message}`);
     } finally {
       setLoading(false);
     }

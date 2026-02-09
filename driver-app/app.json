@@ -60,16 +60,16 @@
     },
     "plugins": [
       [
-        "react-native-onesignal",
+        "onesignal-expo-plugin",
         {
           "mode": "development"
         }
       ],
-      "expo-notifications",
       [
         "expo-location",
         {
           "locationAlwaysAndWhenInUsePermission": "This app needs access to your location to track your trip and calculate fares even when the app is in the background.",
+          "locationAlwaysPermission": "This app needs access to your location to track your trip and calculate fares even when the app is in the background.",
           "locationWhenInUsePermission": "This app needs access to your location to show available jobs nearby.",
           "isAndroidBackgroundLocationEnabled": true
         }
