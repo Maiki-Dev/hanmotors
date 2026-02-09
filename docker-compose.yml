@@ -69,3 +69,6 @@ services:
 networks:
   khanmotors-network:
     driver: bridge
+
+volumes:
+  mongo_data:
