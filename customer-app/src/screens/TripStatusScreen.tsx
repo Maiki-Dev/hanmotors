@@ -1,19 +1,20 @@
 import React, { useEffect, useState, useRef } from 'react';
-import { View, Text, StyleSheet, Image, TouchableOpacity, Alert, ActivityIndicator, Dimensions, Platform, Animated, Linking } from 'react-native';
+import { View, Text, StyleSheet, Image, TouchableOpacity, Alert, ActivityIndicator, Dimensions, Platform, Animated, Linking, PanResponder, ScrollView, TextInput, StatusBar } from 'react-native';
 import MapView, { Marker, Polyline, PROVIDER_GOOGLE } from 'react-native-maps';
-import MapViewDirections from 'react-native-maps-directions';
 import { useRoute, useNavigation } from '@react-navigation/native';
 import { theme } from '../constants/theme';
-import { Phone, MessageCircle, Star, Shield, ArrowLeft, MapPin, User, Navigation, X } from 'lucide-react-native';
+import { Phone, MessageCircle, Star, Shield, ArrowLeft, MapPin, User, X, Zap, Circle, Clock } from 'lucide-react-native';
 import { socket } from '../services/socket';
-import { GOOGLE_MAPS_APIKEY } from '../config';
 import { rideService } from '../services/api';
 import { useSelector } from 'react-redux';
 import { RootState } from '../store';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { mapStyle } from '../constants/mapStyle';
+import { BlurView } from 'expo-blur';
 
 const { width, height } = Dimensions.get('window');
+const BOTTOM_SHEET_MIN_HEIGHT = 350;
+const BOTTOM_SHEET_MAX_HEIGHT = height * 0.8;
 
 const TripStatusScreen = () => {
   const route = useRoute<any>();
@@ -24,10 +25,68 @@ const TripStatusScreen = () => {
   
   const [trip, setTrip] = useState(route.params?.trip);
   const [driverLocation, setDriverLocation] = useState<any>(null);
-  const [routeError, setRouteError] = useState(false);
+  const [routeCoordinates, setRouteCoordinates] = useState<any[]>([]);
   
   // Animation for pulsing effect
   const pulseAnim = useRef(new Animated.Value(1)).current;
+
+  // Bottom Sheet Animations
+  const panY = useRef(new Animated.Value(0)).current;
+  const [sheetExpanded, setSheetExpanded] = useState(false);
+
+  const panResponder = useRef(
+    PanResponder.create({
+      onMoveShouldSetPanResponder: (_, gestureState) => {
+        return Math.abs(gestureState.dy) > 10;
+      },
+      onPanResponderMove: (_, gestureState) => {
+        if (sheetExpanded) {
+            // If expanded, allow dragging down (positive dy)
+            if (gestureState.dy > 0) {
+                panY.setValue(gestureState.dy);
+            }
+        } else {
+            // If collapsed, allow dragging up (negative dy)
+            if (gestureState.dy < 0) {
+                panY.setValue(gestureState.dy);
+            }
+        }
+      },
+      onPanResponderRelease: (_, gestureState) => {
+        if (sheetExpanded) {
+            // If dragging down significantly, collapse
+            if (gestureState.dy > 100) {
+                collapseSheet();
+            } else {
+                expandSheet();
+            }
+        } else {
+            // If dragging up significantly, expand
+            if (gestureState.dy < -100) {
+                expandSheet();
+            } else {
+                collapseSheet();
+            }
+        }
+      }
+    })
+  ).current;
+
+  const expandSheet = () => {
+    Animated.spring(panY, {
+      toValue: -(BOTTOM_SHEET_MAX_HEIGHT - BOTTOM_SHEET_MIN_HEIGHT),
+      useNativeDriver: false,
+      friction: 8
+    }).start(() => setSheetExpanded(true));
+  };
+
+  const collapseSheet = () => {
+    Animated.spring(panY, {
+      toValue: 0,
+      useNativeDriver: false,
+      friction: 8
+    }).start(() => setSheetExpanded(false));
+  };
 
   useEffect(() => {
     if (trip?.status === 'pending') {
@@ -46,16 +105,12 @@ const TripStatusScreen = () => {
         ])
       ).start();
     } else if (trip?.status === 'cancelled') {
-        // Auto navigate home if cancelled
         Alert.alert('Аялал цуцлагдлаа', 'Жолооч эсвэл систем аяллыг цуцалсан байна.', [
             { text: 'ОК', onPress: () => navigation.navigate('HomeTab') }
         ]);
-        
-        // Fallback navigation after delay in case alert is ignored or fails
         const timer = setTimeout(() => {
             navigation.navigate('HomeTab');
         }, 3000);
-        
         return () => clearTimeout(timer);
     }
   }, [trip?.status]);
@@ -105,7 +160,6 @@ const TripStatusScreen = () => {
     const handleTripStarted = (data: any) => {
         if (data.tripId === trip._id) {
             setTrip((prev: any) => ({ ...prev, status: 'in_progress' }));
-            // Optionally force fetch latest details
             fetchTripDetails();
         }
     };
@@ -127,9 +181,33 @@ const TripStatusScreen = () => {
     };
   }, [trip, user]);
 
+  // OSRM Route Fetching
+  useEffect(() => {
+    if (trip?.pickupLocation && trip?.dropoffLocation) {
+        const fetchRoute = async () => {
+            try {
+                // Using OSRM public demo server
+                const response = await fetch(
+                    `http://router.project-osrm.org/route/v1/driving/${trip.pickupLocation.lng},${trip.pickupLocation.lat};${trip.dropoffLocation.lng},${trip.dropoffLocation.lat}?overview=full&geometries=geojson`
+                );
+                const result = await response.json();
+                if (result.code === 'Ok' && result.routes.length) {
+                    const points = result.routes[0].geometry.coordinates.map((arr: number[]) => ({
+                        latitude: arr[1],
+                        longitude: arr[0]
+                    }));
+                    setRouteCoordinates(points);
+                }
+            } catch (error) {
+                console.error("OSRM Route fetch error:", error);
+            }
+        };
+        fetchRoute();
+    }
+  }, [trip?.pickupLocation, trip?.dropoffLocation]);
+
   useEffect(() => {
     if (trip && mapRef.current) {
-        // Fit to markers
         const coordinates = [
             { latitude: trip.pickupLocation.lat, longitude: trip.pickupLocation.lng },
             { latitude: trip.dropoffLocation.lat, longitude: trip.dropoffLocation.lng }
@@ -140,7 +218,7 @@ const TripStatusScreen = () => {
         }
 
         mapRef.current.fitToCoordinates(coordinates, {
-            edgePadding: { top: 100, right: 50, bottom: 350, left: 50 },
+            edgePadding: { top: 100, right: 50, bottom: BOTTOM_SHEET_MIN_HEIGHT + 50, left: 50 },
             animated: true,
         });
     }
@@ -149,7 +227,7 @@ const TripStatusScreen = () => {
   const getStatusMessage = () => {
     switch (trip.status) {
       case 'pending': return 'Жолооч хайж байна...';
-      case 'accepted': return 'Жолооч тань руу ирж байна';
+      case 'accepted': return 'Жолооч тань руу ирж байна ...';
       case 'in_progress': return 'Аялал эхэллээ';
       case 'completed': return 'Аялал дууслаа';
       case 'cancelled': return 'Аялал цуцлагдлаа';
@@ -185,7 +263,7 @@ const TripStatusScreen = () => {
         <View style={styles.searchingContainer}>
             <Animated.View style={[styles.searchingAnimation, { transform: [{ scale: pulseAnim }] }]}>
                 <View style={styles.radarCircle}>
-                   <ActivityIndicator size="large" color={theme.colors.primary} />
+                   <ActivityIndicator size="large" color={theme.colors.text} />
                 </View>
             </Animated.View>
             <Text style={styles.searchingText}>Ойр хавьд жолооч хайж байна...</Text>
@@ -198,79 +276,113 @@ const TripStatusScreen = () => {
     }
 
     const driverName = trip.driver?.name || "Жолооч";
-    const vehicleInfo = trip.driver?.vehicle ? `${trip.driver.vehicle.color} ${trip.driver.vehicle.model}` : "Машин";
+    const vehicleColor = trip.driver?.vehicle?.color || "Хар";
+    const vehicleModel = trip.driver?.vehicle?.model || "Toyota Prius";
     const plateNumber = trip.driver?.vehicle?.plateNumber || "---";
 
     return (
-      <View style={styles.driverInfoContainer}>
-        {/* Driver Profile Header */}
-        <View style={styles.driverHeader}>
-            <View style={styles.driverAvatarContainer}>
-                <View style={styles.avatarPlaceholder}>
-                    <User size={30} color={theme.colors.textSecondary} />
-                </View>
-                {/* <Image source={{ uri: driverAvatarUrl }} style={styles.driverAvatar} /> */}
-            </View>
-            <View style={styles.driverDetails}>
-                <Text style={styles.driverName}>{driverName}</Text>
-                <View style={styles.ratingRow}>
-                    <Star size={14} color="#FFD700" fill="#FFD700" />
-                    <Text style={styles.ratingText}>4.9</Text>
-                    <Text style={styles.tripCount}>• 1,240 аялал</Text>
-                </View>
-            </View>
-            <View style={styles.vehiclePlateContainer}>
-                <Text style={styles.vehicleModel}>{vehicleInfo}</Text>
-                <View style={styles.plateBox}>
-                    <Text style={styles.plateText}>{plateNumber}</Text>
-                </View>
+      <View style={styles.driverContent}>
+        
+        {/* Header Status */}
+        <View style={styles.statusHeader}>
+            <View style={styles.dragIndicator} />
+            <Text style={styles.statusTitle}>{getStatusMessage()}</Text>
+            <View style={styles.timeContainer}>
+                <Clock size={12} color={theme.colors.textSecondary} style={{marginRight: 4}} />
+                <Text style={styles.statusTime}>1 мин 8 сек • 313м</Text>
             </View>
         </View>
 
-        <View style={styles.divider} />
+        {/* Car & Driver Card */}
+        <View style={styles.driverCard}>
+             <View style={styles.vehicleRow}>
+                <View>
+                    <View style={{flexDirection: 'row', alignItems: 'center'}}>
+                        <View style={[styles.colorDot, {backgroundColor: theme.colors.primary}]} />
+                        <Text style={styles.vehicleText}>{vehicleColor}</Text>
+                    </View>
+                    <Text style={styles.vehicleModelText}>{vehicleModel}</Text>
+                </View>
+                <View style={styles.plateContainer}>
+                    <Text style={styles.plateNumber}>{plateNumber}</Text>
+                </View>
+             </View>
 
-        {/* Action Buttons */}
-        <View style={styles.actionsContainer}>
-            <TouchableOpacity 
-                style={styles.actionButton}
-                onPress={() => {
-                    const phone = trip.driver?.phone;
-                    if (phone) {
-                        Linking.openURL(`tel:${phone}`);
-                    } else {
-                        Alert.alert('Мэдээлэл', 'Жолоочийн утасны дугаар олдсонгүй');
-                    }
-                }}
-            >
-                <View style={[styles.actionIconCircle, { backgroundColor: '#E8F5E9' }]}>
-                    <Phone size={24} color="#2E7D32" />
+             <View style={styles.divider} />
+
+             <View style={styles.driverProfileRow}>
+                 <View style={styles.driverAvatarContainer}>
+                    <Text style={styles.driverInitials}>{driverName.charAt(0)}</Text>
+                 </View>
+                 <View style={styles.driverNameContainer}>
+                    <Text style={styles.driverName}>{driverName}</Text>
+                    <View style={styles.ratingContainer}>
+                        <Star size={14} color="#FFD700" fill="#FFD700" />
+                        <Text style={styles.ratingText}>5.0</Text>
+                    </View>
+                 </View>
+                 
+                 <View style={styles.actionButtons}>
+                    <TouchableOpacity style={styles.roundButton} onPress={() => {
+                        const phone = trip.driver?.phone;
+                        if(phone) Linking.openURL(`tel:${phone}`);
+                    }}>
+                        <Phone size={20} color={theme.colors.text} />
+                    </TouchableOpacity>
+                    <TouchableOpacity style={[styles.roundButton, {backgroundColor: theme.colors.surfaceLight}]}>
+                         <MessageCircle size={20} color={theme.colors.text} />
+                    </TouchableOpacity>
+                 </View>
+             </View>
+
+             <View style={styles.messageInputContainer}>
+                <View style={styles.messageInputWrapper}>
+                    <MessageCircle size={20} color={theme.colors.textSecondary} />
+                    <TextInput 
+                        placeholder="Жолооч руу зурвас бичих ..." 
+                        placeholderTextColor={theme.colors.textSecondary}
+                        style={styles.messageInput} 
+                        editable={false} 
+                    />
                 </View>
-                <Text style={styles.actionLabel}>Залгах</Text>
-            </TouchableOpacity>
+             </View>
+        </View>
+
+        {/* Trip Details (Visible when expanded) */}
+        <View style={styles.tripDetailsContainer}>
+            <Text style={styles.sectionTitle}>Миний аялал</Text>
             
-            <TouchableOpacity 
-                style={styles.actionButton}
-                onPress={() => {
-                    const phone = trip.driver?.phone;
-                    if (phone) {
-                        Linking.openURL(`sms:${phone}`);
-                    } else {
-                        Alert.alert('Мэдээлэл', 'Жолоочийн утасны дугаар олдсонгүй');
-                    }
-                }}
-            >
-                <View style={[styles.actionIconCircle, { backgroundColor: '#E3F2FD' }]}>
-                    <MessageCircle size={24} color="#1565C0" />
+            <View style={styles.timelineContainer}>
+                <View style={styles.locationRow}>
+                    <View style={styles.locationIconContainer}>
+                        <View style={[styles.locationDot, { backgroundColor: theme.colors.success }]} />
+                        <View style={styles.verticalLine} />
+                    </View>
+                    <View style={styles.locationTextContainer}>
+                        <Text style={styles.locationLabel}>Суух хаяг</Text>
+                        <Text style={styles.locationValue} numberOfLines={1}>{trip.pickupLocation.address}</Text>
+                    </View>
                 </View>
-                <Text style={styles.actionLabel}>Зурвас</Text>
-            </TouchableOpacity>
+
+                <View style={styles.locationRow}>
+                     <View style={styles.locationIconContainer}>
+                         <View style={[styles.locationDot, { backgroundColor: theme.colors.error }]} />
+                    </View>
+                    <View style={styles.locationTextContainer}>
+                        <Text style={styles.locationLabel}>Буух хаяг</Text>
+                        <Text style={styles.locationValue} numberOfLines={1}>{trip.dropoffLocation.address}</Text>
+                    </View>
+                </View>
+            </View>
             
-            <TouchableOpacity style={[styles.actionButton, { opacity: 0.5 }]}>
-                <View style={[styles.actionIconCircle, { backgroundColor: '#FFF3E0' }]}>
-                    <Shield size={24} color="#EF6C00" />
+            <View style={{marginTop: 20}}>
+                <Text style={styles.sectionTitle}>Төлбөр</Text>
+                <View style={styles.paymentRow}>
+                    <Text style={styles.paymentLabel}>Нийт төлбөр</Text>
+                    <Text style={styles.paymentValue}>{trip.price}₮</Text>
                 </View>
-                <Text style={styles.actionLabel}>Тусламж</Text>
-            </TouchableOpacity>
+            </View>
+
         </View>
       </View>
     );
@@ -278,7 +390,8 @@ const TripStatusScreen = () => {
 
   return (
     <View style={styles.container}>
-        {/* Header Back Button */}
+        <StatusBar barStyle="dark-content" backgroundColor="transparent" translucent />
+        
         <View style={[styles.header, { top: insets.top }]}>
             <TouchableOpacity onPress={() => navigation.navigate('HomeTab')} style={styles.backButton}>
                 <ArrowLeft color={theme.colors.text} size={24} />
@@ -289,7 +402,7 @@ const TripStatusScreen = () => {
             ref={mapRef}
             provider={PROVIDER_GOOGLE}
             style={styles.map}
-            customMapStyle={mapStyle}
+            // customMapStyle={mapStyle}
             showsTraffic={true}
             initialRegion={{
                 latitude: trip.pickupLocation.lat,
@@ -298,7 +411,6 @@ const TripStatusScreen = () => {
                 longitudeDelta: 0.05,
             }}
         >
-            {/* Pickup Marker */}
             <Marker coordinate={{ latitude: trip.pickupLocation.lat, longitude: trip.pickupLocation.lng }}>
                 <View style={styles.markerContainer}>
                     <View style={[styles.markerIcon, { backgroundColor: theme.colors.success }]}>
@@ -307,16 +419,14 @@ const TripStatusScreen = () => {
                 </View>
             </Marker>
             
-            {/* Dropoff Marker */}
             <Marker coordinate={{ latitude: trip.dropoffLocation.lat, longitude: trip.dropoffLocation.lng }}>
                 <View style={styles.markerContainer}>
-                    <View style={[styles.markerIcon, { backgroundColor: theme.colors.primary }]}>
-                        <MapPin color="black" size={20} />
+                    <View style={[styles.markerIcon, { backgroundColor: theme.colors.error }]}>
+                        <MapPin color="white" size={20} />
                     </View>
                 </View>
             </Marker>
 
-            {/* Driver Marker */}
             {driverLocation && (
                  <Marker coordinate={{ latitude: driverLocation.lat, longitude: driverLocation.lng }}>
                      <View style={styles.driverMarker}>
@@ -328,18 +438,11 @@ const TripStatusScreen = () => {
                  </Marker>
             )}
 
-            {!routeError ? (
-                <MapViewDirections
-                    origin={{ latitude: trip.pickupLocation.lat, longitude: trip.pickupLocation.lng }}
-                    destination={{ latitude: trip.dropoffLocation.lat, longitude: trip.dropoffLocation.lng }}
-                    apikey={GOOGLE_MAPS_APIKEY}
+            {routeCoordinates.length > 0 ? (
+                <Polyline
+                    coordinates={routeCoordinates}
                     strokeWidth={5}
                     strokeColor={theme.colors.primary}
-                    lineDashPattern={[0]}
-                    onError={(errorMessage) => {
-                        console.log('MapViewDirections Error:', errorMessage);
-                        setRouteError(true);
-                    }}
                 />
             ) : (
                 <Polyline
@@ -349,23 +452,30 @@ const TripStatusScreen = () => {
                     ]}
                     strokeWidth={5}
                     strokeColor={theme.colors.primary}
-                    lineDashPattern={[0]}
+                    lineDashPattern={[10, 10]}
                 />
             )}
         </MapView>
 
-        {/* Bottom Sheet */}
-        <View style={[styles.bottomSheet, { paddingBottom: insets.bottom + 80 }]}>
-            <View style={styles.dragIndicator} />
-            <Text style={styles.statusTitle}>{getStatusMessage()}</Text>
-            
-            {/* Progress Bar (Visual only) */}
-            <View style={styles.progressBarBg}>
-                <View style={[styles.progressBarFill, { width: trip.status === 'in_progress' ? '60%' : trip.status === 'accepted' ? '30%' : '10%' }]} />
-            </View>
-
-            {renderDriverInfo()}
-        </View>
+        <Animated.View 
+            style={[
+                styles.bottomSheetContainer, 
+                { 
+                    height: BOTTOM_SHEET_MAX_HEIGHT,
+                    transform: [{ translateY: panY }]
+                }
+            ]}
+            {...panResponder.panHandlers}
+        >
+            <BlurView intensity={90} tint="dark" style={StyleSheet.absoluteFill} />
+            <ScrollView 
+                contentContainerStyle={styles.bottomSheetBlur}
+                scrollEnabled={sheetExpanded}
+                showsVerticalScrollIndicator={false}
+            >
+                {renderDriverInfo()}
+            </ScrollView>
+        </Animated.View>
     </View>
   );
 };
@@ -381,32 +491,43 @@ const styles = StyleSheet.create({
     zIndex: 10,
   },
   backButton: {
-    width: 40,
-    height: 40,
+    width: 44,
+    height: 44,
     backgroundColor: theme.colors.surface,
-    borderRadius: 20,
+    borderRadius: 22,
     justifyContent: 'center',
     alignItems: 'center',
+    elevation: 3,
     shadowColor: "#000",
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
     shadowRadius: 4,
-    elevation: 3,
+    borderWidth: 1,
+    borderColor: theme.colors.border,
   },
   map: {
     flex: 1,
   },
-  bottomSheet: {
-    backgroundColor: theme.colors.surface,
+  bottomSheetContainer: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
     borderTopLeftRadius: 24,
     borderTopRightRadius: 24,
-    padding: 20,
+    overflow: 'hidden',
     shadowColor: "#000",
     shadowOffset: { width: 0, height: -5 },
-    shadowOpacity: 0.1,
-    shadowRadius: 10,
-    elevation: 10,
-    marginTop: -30,
+    shadowOpacity: 0.3,
+    shadowRadius: 15,
+    elevation: 20,
+    backgroundColor: 'transparent',
+  },
+  bottomSheetBlur: {
+    flex: 1,
+    paddingHorizontal: 20,
+    paddingTop: 10,
+    paddingBottom: Platform.OS === 'ios' ? 110 : 100, // Increased to clear floating tab bar
   },
   dragIndicator: {
     width: 40,
@@ -414,186 +535,273 @@ const styles = StyleSheet.create({
     backgroundColor: theme.colors.border,
     borderRadius: 2,
     alignSelf: 'center',
+    marginBottom: 15,
+  },
+  statusHeader: {
+    alignItems: 'center',
     marginBottom: 20,
   },
   statusTitle: {
-    fontSize: 20,
-    fontWeight: 'bold',
+    fontSize: 18,
+    fontWeight: '700',
     color: theme.colors.text,
-    marginBottom: 15,
-    textAlign: 'center',
+    marginBottom: 4,
   },
-  progressBarBg: {
-    height: 6,
-    backgroundColor: theme.colors.surfaceLight,
-    borderRadius: 3,
-    marginBottom: 20,
-    overflow: 'hidden',
-  },
-  progressBarFill: {
-    height: '100%',
-    backgroundColor: theme.colors.primary,
-    borderRadius: 3,
-  },
-  searchingContainer: {
-    alignItems: 'center',
-    paddingVertical: 20,
-  },
-  searchingAnimation: {
-    marginBottom: 30,
-    marginTop: 10,
-  },
-  radarCircle: {
-    width: 80,
-    height: 80,
-    borderRadius: 40,
-    backgroundColor: 'rgba(255, 215, 0, 0.1)',
-    justifyContent: 'center',
-    alignItems: 'center',
-    borderWidth: 1,
-    borderColor: theme.colors.primary,
-  },
-  searchingText: {
-    fontSize: 16,
-    color: theme.colors.textSecondary,
-    marginBottom: 30,
-    fontWeight: '500',
-  },
-  cancelButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingVertical: 12,
-    paddingHorizontal: 24,
-    backgroundColor: theme.colors.surfaceLight,
-    borderRadius: 30,
-  },
-  cancelText: {
-    color: theme.colors.error,
-    fontWeight: '600',
-    fontSize: 16,
-  },
-  driverInfoContainer: {
-    marginTop: 10,
-  },
-  driverHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 24,
-  },
-  driverAvatarContainer: {
-    marginRight: 16,
-  },
-  avatarPlaceholder: {
-    width: 64,
-    height: 64,
-    borderRadius: 32,
-    backgroundColor: theme.colors.surfaceLight,
-    justifyContent: 'center',
-    alignItems: 'center',
-    borderWidth: 2,
-    borderColor: theme.colors.primary,
-  },
-  driverDetails: {
-    flex: 1,
-  },
-  driverName: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    color: theme.colors.text,
-    marginBottom: 6,
-  },
-  ratingRow: {
+  timeContainer: {
     flexDirection: 'row',
     alignItems: 'center',
   },
-  ratingText: {
-    marginLeft: 4,
-    fontSize: 14,
-    fontWeight: 'bold',
-    color: theme.colors.text,
-  },
-  tripCount: {
-    marginLeft: 6,
+  statusTime: {
     fontSize: 14,
     color: theme.colors.textSecondary,
   },
-  vehiclePlateContainer: {
-    alignItems: 'flex-end',
+  driverContent: {
+    width: '100%',
+    paddingBottom: 20,
   },
-  vehicleModel: {
-    fontSize: 14,
-    color: theme.colors.textSecondary,
-    marginBottom: 8,
-    fontWeight: '500',
+  driverCard: {
+      backgroundColor: theme.colors.surfaceLight,
+      borderRadius: 16,
+      padding: 16,
+      borderWidth: 1,
+      borderColor: theme.colors.border,
   },
-  plateBox: {
-    backgroundColor: '#fff',
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 4,
-    borderWidth: 2,
-    borderColor: theme.colors.text,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.2,
-    shadowRadius: 2,
-    elevation: 2,
+  vehicleRow: {
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      alignItems: 'center',
+      marginBottom: 16,
   },
-  plateText: {
-    fontSize: 16,
-    fontWeight: 'bold',
-    color: theme.colors.text,
-    letterSpacing: 1,
+  colorDot: {
+      width: 12,
+      height: 12,
+      borderRadius: 6,
+      marginRight: 8,
+  },
+  vehicleText: {
+      fontSize: 14,
+      color: theme.colors.text,
+      fontWeight: '600',
+  },
+  vehicleModelText: {
+      fontSize: 16,
+      fontWeight: 'bold',
+      color: theme.colors.text,
+      marginTop: 2,
+  },
+  plateContainer: {
+      backgroundColor: theme.colors.surface,
+      paddingHorizontal: 8,
+      paddingVertical: 4,
+      borderRadius: 4,
+      borderWidth: 1,
+      borderColor: theme.colors.border,
+  },
+  plateNumber: {
+      fontSize: 14,
+      fontWeight: 'bold',
+      color: theme.colors.text,
   },
   divider: {
-    height: 1,
-    backgroundColor: theme.colors.surfaceLight,
-    marginBottom: 24,
+      height: 1,
+      backgroundColor: theme.colors.border,
+      marginVertical: 16,
   },
-  actionsContainer: {
-    flexDirection: 'row',
-    justifyContent: 'space-around',
+  driverProfileRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
   },
-  actionButton: {
-    alignItems: 'center',
+  driverAvatarContainer: {
+      width: 48,
+      height: 48,
+      borderRadius: 24,
+      backgroundColor: theme.colors.primaryLight,
+      justifyContent: 'center',
+      alignItems: 'center',
+      marginRight: 12,
   },
-  actionIconCircle: {
-    width: 56,
-    height: 56,
-    borderRadius: 28,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginBottom: 10,
+  driverInitials: {
+      fontSize: 18,
+      fontWeight: 'bold',
+      color: theme.colors.primaryDark,
   },
-  actionLabel: {
-    fontSize: 12,
-    color: theme.colors.textSecondary,
-    fontWeight: '500',
+  driverNameContainer: {
+      flex: 1,
+  },
+  driverName: {
+      fontSize: 16,
+      fontWeight: 'bold',
+      color: theme.colors.text,
+      marginBottom: 4,
+  },
+  ratingContainer: {
+      flexDirection: 'row',
+      alignItems: 'center',
+  },
+  ratingText: {
+      fontSize: 14,
+      fontWeight: '600',
+      color: theme.colors.text,
+      marginLeft: 4,
+  },
+  actionButtons: {
+      flexDirection: 'row',
+  },
+  roundButton: {
+      width: 40,
+      height: 40,
+      borderRadius: 20,
+      backgroundColor: theme.colors.primary,
+      justifyContent: 'center',
+      alignItems: 'center',
+      marginLeft: 12,
+  },
+  messageInputContainer: {
+      marginTop: 16,
+  },
+  messageInputWrapper: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      backgroundColor: theme.colors.surface,
+      borderRadius: 12,
+      paddingHorizontal: 12,
+      paddingVertical: 10,
+      borderWidth: 1,
+      borderColor: theme.colors.border,
+  },
+  messageInput: {
+      flex: 1,
+      marginLeft: 10,
+      color: theme.colors.text,
+      fontSize: 14,
+  },
+  tripDetailsContainer: {
+      marginTop: 24,
+      paddingHorizontal: 4,
+  },
+  sectionTitle: {
+      fontSize: 16,
+      fontWeight: 'bold',
+      color: theme.colors.text,
+      marginBottom: 16,
+  },
+  timelineContainer: {
+      borderLeftWidth: 2,
+      borderLeftColor: theme.colors.border,
+      marginLeft: 7,
+      paddingLeft: 20,
+      paddingVertical: 4,
+  },
+  locationRow: {
+      marginBottom: 24,
+  },
+  locationIconContainer: {
+      position: 'absolute',
+      left: -27,
+      top: 0,
+      alignItems: 'center',
+  },
+  locationDot: {
+      width: 14,
+      height: 14,
+      borderRadius: 7,
+      borderWidth: 2,
+      borderColor: theme.colors.surface,
+  },
+  verticalLine: {
+      width: 2,
+      height: 30,
+      backgroundColor: theme.colors.border,
+      marginTop: 4,
+  },
+  locationTextContainer: {
+      flex: 1,
+  },
+  locationLabel: {
+      fontSize: 12,
+      color: theme.colors.textSecondary,
+      marginBottom: 2,
+  },
+  locationValue: {
+      fontSize: 14,
+      color: theme.colors.text,
+      fontWeight: '500',
+  },
+  paymentRow: {
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      alignItems: 'center',
+      backgroundColor: theme.colors.surfaceLight,
+      padding: 16,
+      borderRadius: 12,
+      marginTop: 8,
+  },
+  paymentLabel: {
+      fontSize: 14,
+      color: theme.colors.text,
+  },
+  paymentValue: {
+      fontSize: 18,
+      fontWeight: 'bold',
+      color: theme.colors.primaryDark,
+  },
+  searchingContainer: {
+      alignItems: 'center',
+      paddingVertical: 40,
+  },
+  searchingAnimation: {
+      width: 100,
+      height: 100,
+      justifyContent: 'center',
+      alignItems: 'center',
+      marginBottom: 20,
+  },
+  radarCircle: {
+      width: 60,
+      height: 60,
+      borderRadius: 30,
+      backgroundColor: theme.colors.primaryLight,
+      justifyContent: 'center',
+      alignItems: 'center',
+  },
+  searchingText: {
+      fontSize: 16,
+      color: theme.colors.text,
+      marginBottom: 20,
+      fontWeight: '500',
+  },
+  cancelButton: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      paddingHorizontal: 20,
+      paddingVertical: 10,
+      borderRadius: 20,
+      backgroundColor: theme.colors.surfaceLight,
+      borderWidth: 1,
+      borderColor: theme.colors.error,
+  },
+  cancelText: {
+      color: theme.colors.error,
+      fontWeight: '600',
   },
   markerContainer: {
-    alignItems: 'center',
-    justifyContent: 'center',
+    padding: 4,
   },
   markerIcon: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderWidth: 2,
-    borderColor: 'white',
+    padding: 8,
+    borderRadius: 20,
+    elevation: 4,
     shadowColor: "#000",
     shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.3,
-    shadowRadius: 3,
-    elevation: 5,
+    shadowOpacity: 0.25,
+    shadowRadius: 3.84,
   },
   driverMarker: {
-    width: 40,
-    height: 40,
-  }
+    width: 50,
+    height: 50,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
 });
-
-// Local mapStyle definition removed (using import from constants)
 
 export default TripStatusScreen;

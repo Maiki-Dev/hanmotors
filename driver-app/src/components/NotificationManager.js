@@ -1,10 +1,29 @@
 import React, { useEffect, useRef } from 'react';
 import { Platform, Alert } from 'react-native';
 import * as Notifications from 'expo-notifications';
-import { LogLevel, OneSignal } from 'react-native-onesignal'; 
+// import { LogLevel, OneSignal } from 'react-native-onesignal'; 
 import { io } from 'socket.io-client';
 import { useNavigation } from '@react-navigation/native';
+import Constants from 'expo-constants'; // Import Constants
 import { API_URL } from '../config';
+
+// Temporary Fix for Expo Go:
+// If we import OneSignal at top level, it crashes immediately because native module is missing.
+// We need to require it conditionally or mock it.
+
+let OneSignal;
+let LogLevel;
+
+try {
+  if (Constants.executionEnvironment !== 'storeClient') {
+     const OneSignalPackage = require('react-native-onesignal');
+     OneSignal = OneSignalPackage.OneSignal;
+     LogLevel = OneSignalPackage.LogLevel;
+  }
+} catch (e) {
+  console.log('OneSignal import failed (likely in Expo Go)', e);
+}
+
 
 // Configure local notifications (kept for Socket events)
 Notifications.setNotificationHandler({
@@ -22,6 +41,14 @@ const NotificationManager = ({ driverId }) => {
 
   useEffect(() => {
     if (!driverId) return;
+
+    // Check if running in Expo Go
+    const isExpoGo = Constants.executionEnvironment === 'storeClient';
+    
+    if (isExpoGo || !OneSignal) {
+        console.log('Running in Expo Go - OneSignal disabled');
+        return;
+    }
 
     // --- OneSignal Initialization ---
     
@@ -102,10 +129,19 @@ const NotificationManager = ({ driverId }) => {
       autoConnect: true,
     });
 
-    socketRef.current.emit('driverJoin', driverId);
+    const socket = socketRef.current;
+    
+    const joinRoom = () => {
+        if (driverId) {
+             socket.emit('driverJoin', driverId);
+        }
+    };
+    
+    socket.on('connect', joinRoom);
+    if (socket.connected) joinRoom();
 
     // Listeners
-    socketRef.current.on('newJobRequest', async (tripData) => {
+    socket.on('newJobRequest', async (tripData) => {
       // Local Notification for immediate alert
       await Notifications.scheduleNotificationAsync({
         content: {

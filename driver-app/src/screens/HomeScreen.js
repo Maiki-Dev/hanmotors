@@ -413,16 +413,47 @@ export default function HomeScreen({ navigation, route }) {
       autoConnect: true,
     });
 
+    const socket = socketRef.current;
+
+    const joinAndSync = () => {
+      if (driverId) {
+        socket.emit('driverJoin', driverId);
+        // Resync status and location
+        if (isOnlineRef.current && driverLocation) {
+             const vehicle = driverInfoRef.current?.vehicle || {};
+             socket.emit('driverLocationUpdated', {
+                driverId,
+                location: { 
+                  lat: driverLocation.latitude, 
+                  lng: driverLocation.longitude,
+                  heading: driverLocation.heading || 0,
+                  plateNumber: vehicle.plateNumber,
+                  vehicleModel: vehicle.model,
+                  vehicleColor: vehicle.color,
+                  isTowing: services.towing
+                }
+              });
+             socket.emit('driverStatusUpdate', { driverId, isOnline: true });
+        }
+      }
+    };
+
+    socket.on('connect', joinAndSync);
+    
     if (driverId) {
-      socketRef.current.emit('driverJoin', driverId);
+      if (socket.connected) {
+         joinAndSync();
+      } else {
+         // It will be handled by 'connect' event
+      }
     }
 
     // Listen for other drivers
-    socketRef.current.on('allDriverLocations', (locations) => {
+    socket.on('allDriverLocations', (locations) => {
       setOtherDrivers(locations);
     });
 
-    socketRef.current.on('driverLocationUpdated', ({ driverId: updatedDriverId, location }) => {
+    socket.on('driverLocationUpdated', ({ driverId: updatedDriverId, location }) => {
       if (updatedDriverId === driverId) return; // Ignore self
       setOtherDrivers(prev => ({
         ...prev,
@@ -430,22 +461,22 @@ export default function HomeScreen({ navigation, route }) {
       }));
     });
 
-    socketRef.current.on('walletUpdated', ({ balance }) => {
+    socket.on('walletUpdated', ({ balance }) => {
       setWalletBalance(balance);
     });
 
-    socketRef.current.on('requestAssigned', (tripData) => {
+    socket.on('requestAssigned', (tripData) => {
       setIncomingRequest(tripData);
     });
 
-    socketRef.current.on('newJobRequest', async (tripData) => {
+    socket.on('newJobRequest', async (tripData) => {
       if (isOnlineRef.current) {
         setIncomingRequest(tripData);
         // Notification is now handled by NotificationManager
       }
     });
 
-    socketRef.current.on('jobTaken', ({ tripId, driverId: takenByDriverId }) => {
+    socket.on('jobTaken', ({ tripId, driverId: takenByDriverId }) => {
       setIncomingRequest(current => {
         if (current && current._id === tripId) {
           // If I am the one who took it, don't show the alert
@@ -461,7 +492,7 @@ export default function HomeScreen({ navigation, route }) {
     });
 
     // Sync trip status updates coming from Admin or Backend
-    socketRef.current.on('jobUpdated', (trip) => {
+    socket.on('jobUpdated', (trip) => {
       try {
         const tripDriverId = typeof trip.driver === 'string' ? trip.driver : (trip.driver?._id || trip.driver?.id);
         if (String(tripDriverId) !== String(driverId)) return;

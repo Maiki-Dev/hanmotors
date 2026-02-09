@@ -10,6 +10,17 @@ export type RootStackParamList = {
       longitude: number;
     };
     serviceType?: string;
+    selectedLocation?: {
+        address: string;
+        lat: number;
+        lng: number;
+    };
+    locationType?: string;
+  };
+  LocationPicker: {
+    initialLocation?: { lat: number; lng: number };
+    returnScreen: string;
+    type: string;
   };
   TripStatus: { trip: any };
   RideHistory: undefined;

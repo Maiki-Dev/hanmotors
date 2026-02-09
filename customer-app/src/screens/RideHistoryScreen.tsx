@@ -6,6 +6,8 @@ import { useSelector } from 'react-redux';
 import { RootState } from '../store';
 import { MapPin, Calendar, Clock, ChevronRight, History } from 'lucide-react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { LinearGradient } from 'expo-linear-gradient';
+import { BlurView } from 'expo-blur';
 
 const RideHistoryScreen = () => {
   const [trips, setTrips] = useState([]);
@@ -42,8 +44,8 @@ const RideHistoryScreen = () => {
 
   const getStatusColor = (status: string) => {
     switch (status) {
-      case 'completed': return theme.colors.success;
-      case 'cancelled': return theme.colors.error;
+      case 'completed': return '#4CAF50';
+      case 'cancelled': return '#F44336';
       case 'in_progress': return theme.colors.primary;
       default: return theme.colors.textSecondary;
     }
@@ -59,74 +61,95 @@ const RideHistoryScreen = () => {
   };
 
   const renderItem = ({ item }: { item: any }) => (
-    <TouchableOpacity style={styles.card}>
-      <View style={styles.cardHeader}>
-        <View style={styles.dateContainer}>
-          <Calendar size={14} color={theme.colors.textSecondary} /> 
-          <Text style={styles.dateText}>
-            {new Date(item.createdAt).toLocaleDateString()}
-          </Text>
-          <Text style={styles.timeText}>
-            {new Date(item.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-          </Text>
+    <TouchableOpacity activeOpacity={0.8} style={styles.cardWrapper}>
+      <BlurView intensity={20} tint="dark" style={StyleSheet.absoluteFill} />
+      <View style={styles.card}>
+        <View style={styles.cardHeader}>
+          <View style={styles.dateContainer}>
+            <Calendar size={14} color={theme.colors.textSecondary} /> 
+            <Text style={styles.dateText}>
+              {new Date(item.createdAt).toLocaleDateString()}
+            </Text>
+            <Text style={styles.timeText}>
+              {new Date(item.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+            </Text>
+          </View>
+          <View style={[styles.statusBadge, { backgroundColor: getStatusBgColor(item.status) }]}>
+            <Text style={[styles.statusText, { color: getStatusColor(item.status) }]}>
+              {getStatusLabel(item.status)}
+            </Text>
+          </View>
         </View>
-        <View style={[styles.statusBadge, { backgroundColor: getStatusBgColor(item.status) }]}>
-          <Text style={[styles.statusText, { color: getStatusColor(item.status) }]}>
-            {getStatusLabel(item.status)}
-          </Text>
-        </View>
-      </View>
 
-      <View style={styles.locationsContainer}>
-        <View style={styles.locationRow}>
-          <View style={[styles.dot, { backgroundColor: theme.colors.success }]} />
-          <Text style={styles.address} numberOfLines={1}>{item.pickupLocation?.address || 'Авах цэг'}</Text>
+        <View style={styles.locationsContainer}>
+          <View style={styles.locationRow}>
+            <View style={[styles.dot, { backgroundColor: '#4CAF50' }]} />
+            <Text style={styles.address} numberOfLines={1}>{item.pickupLocation?.address || 'Авах цэг'}</Text>
+          </View>
+          
+          <View style={styles.connector} />
+          
+          <View style={styles.locationRow}>
+            <View style={[styles.dot, { backgroundColor: theme.colors.error }]} />
+            <Text style={styles.address} numberOfLines={1}>{item.dropoffLocation?.address || 'Хүргэх цэг'}</Text>
+          </View>
         </View>
-        
-        <View style={styles.connector} />
-        
-        <View style={styles.locationRow}>
-          <View style={[styles.dot, { backgroundColor: theme.colors.error }]} />
-          <Text style={styles.address} numberOfLines={1}>{item.dropoffLocation?.address || 'Хүргэх цэг'}</Text>
-        </View>
-      </View>
 
-      <View style={styles.footer}>
-        <Text style={styles.price}>{item.price?.toLocaleString()}₮</Text>
-        <View style={styles.detailsButton}>
-          <Text style={styles.detailsText}>Дэлгэрэнгүй</Text>
-          <ChevronRight color={theme.colors.textSecondary} size={16} />
+        <View style={styles.footer}>
+          <Text style={styles.price}>{item.price?.toLocaleString()}₮</Text>
+          <View style={styles.detailsButton}>
+            <Text style={styles.detailsText}>Дэлгэрэнгүй</Text>
+            <ChevronRight color={theme.colors.textSecondary} size={16} />
+          </View>
         </View>
       </View>
     </TouchableOpacity>
   );
 
   return (
-    <View style={[styles.container, { paddingTop: insets.top }]}>
-      <StatusBar barStyle="dark-content" backgroundColor={theme.colors.background} />
-      <View style={styles.header}>
-        <Text style={styles.title}>Миний аялалууд</Text>
-      </View>
-
-      <FlatList
-        data={trips}
-        renderItem={renderItem}
-        keyExtractor={(item: any) => item._id}
-        contentContainerStyle={styles.list}
-        showsVerticalScrollIndicator={false}
-        refreshControl={
-          <RefreshControl refreshing={loading} onRefresh={fetchHistory} tintColor={theme.colors.primary} />
-        }
-        ListEmptyComponent={
-          <View style={styles.emptyContainer}>
-            <View style={styles.emptyIconBox}>
-              <History size={40} color={theme.colors.textSecondary} />
-            </View>
-            <Text style={styles.emptyText}>Аялал хийгээгүй байна</Text>
-            <Text style={styles.emptySubText}>Таны хийсэн аялалууд энд харагдах болно</Text>
-          </View>
-        }
+    <View style={styles.container}>
+      <StatusBar barStyle="light-content" backgroundColor="transparent" translucent />
+      
+      <LinearGradient
+        colors={[theme.colors.background, '#1a2138', '#0f1322']}
+        style={StyleSheet.absoluteFill}
       />
+      
+      {/* Decorative Orbs */}
+      <View style={[styles.orb, styles.orb1, { backgroundColor: theme.colors.primary }]} />
+      <View style={[styles.orb, styles.orb2, { backgroundColor: theme.colors.secondary }]} />
+      
+      <View style={[styles.content, { paddingTop: insets.top }]}>
+        <View style={styles.header}>
+          <Text style={styles.title}>Миний аялалууд</Text>
+        </View>
+
+        <FlatList
+          data={trips}
+          renderItem={renderItem}
+          keyExtractor={(item: any) => item._id}
+          contentContainerStyle={styles.list}
+          showsVerticalScrollIndicator={false}
+          refreshControl={
+            <RefreshControl 
+              refreshing={loading} 
+              onRefresh={fetchHistory} 
+              tintColor={theme.colors.primary} 
+              progressBackgroundColor={theme.colors.surface}
+              colors={[theme.colors.primary]}
+            />
+          }
+          ListEmptyComponent={
+            <View style={styles.emptyContainer}>
+              <View style={styles.emptyIconBox}>
+                <History size={40} color={theme.colors.textSecondary} />
+              </View>
+              <Text style={styles.emptyText}>Аялал хийгээгүй байна</Text>
+              <Text style={styles.emptySubText}>Таны хийсэн аялалууд энд харагдах болно</Text>
+            </View>
+          }
+        />
+      </View>
     </View>
   );
 };
@@ -136,10 +159,29 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: theme.colors.background,
   },
+  orb: {
+    position: 'absolute',
+    borderRadius: 150,
+    opacity: 0.15,
+  },
+  orb1: {
+    width: 300,
+    height: 300,
+    top: -50,
+    left: -100,
+  },
+  orb2: {
+    width: 200,
+    height: 200,
+    bottom: 100,
+    right: -50,
+  },
+  content: {
+    flex: 1,
+  },
   header: {
-    paddingHorizontal: theme.spacing.l,
-    paddingVertical: theme.spacing.m,
-    backgroundColor: theme.colors.background,
+    paddingHorizontal: 20,
+    paddingVertical: 20,
   },
   title: {
     fontSize: 28,
@@ -147,21 +189,24 @@ const styles = StyleSheet.create({
     color: theme.colors.text,
   },
   list: {
-    padding: theme.spacing.m,
+    padding: 20,
     paddingBottom: 100,
   },
-  card: {
-    backgroundColor: theme.colors.surface,
-    borderRadius: 16,
-    padding: theme.spacing.m,
-    marginBottom: theme.spacing.m,
+  cardWrapper: {
+    marginBottom: 20,
+    borderRadius: 24,
+    overflow: 'hidden',
     shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 4,
+  },
+  card: {
+    padding: 20,
+    backgroundColor: 'transparent',
     borderWidth: 1,
-    borderColor: 'rgba(0,0,0,0.05)',
+    borderColor: 'rgba(255,255,255,0.1)',
   },
   cardHeader: {
     flexDirection: 'row',
@@ -185,9 +230,9 @@ const styles = StyleSheet.create({
     marginLeft: 8,
   },
   statusBadge: {
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 12,
   },
   statusText: {
     fontSize: 12,
@@ -199,12 +244,12 @@ const styles = StyleSheet.create({
   locationRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginVertical: 2,
+    marginVertical: 4,
   },
   dot: {
-    width: 10,
-    height: 10,
-    borderRadius: 5,
+    width: 12,
+    height: 12,
+    borderRadius: 6,
     marginRight: 12,
   },
   address: {
@@ -213,10 +258,10 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   connector: {
-    height: 16,
-    borderLeftWidth: 1,
+    height: 20,
+    borderLeftWidth: 2,
     borderLeftColor: theme.colors.border,
-    marginLeft: 4.5,
+    marginLeft: 5,
     marginVertical: 2,
     borderStyle: 'dashed',
   },
@@ -226,22 +271,27 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginTop: 8,
     borderTopWidth: 1,
-    borderTopColor: theme.colors.surfaceLight,
-    paddingTop: 12,
+    borderTopColor: theme.colors.border,
+    paddingTop: 16,
   },
   price: {
-    fontSize: 18,
+    fontSize: 20,
     fontWeight: 'bold',
     color: theme.colors.primary,
   },
   detailsButton: {
     flexDirection: 'row',
     alignItems: 'center',
+    backgroundColor: theme.colors.surfaceLight,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 16,
   },
   detailsText: {
     fontSize: 14,
     color: theme.colors.textSecondary,
     marginRight: 4,
+    fontWeight: '500',
   },
   emptyContainer: {
     alignItems: 'center',
@@ -256,6 +306,8 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     marginBottom: 16,
+    borderWidth: 1,
+    borderColor: theme.colors.border,
   },
   emptyText: {
     fontSize: 18,

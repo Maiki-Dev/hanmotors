@@ -11,10 +11,11 @@ import {
   ScrollView,
   Image,
   Alert,
+  TextInput,
 } from 'react-native';
 import MapView, { Marker, PROVIDER_GOOGLE, Region } from 'react-native-maps';
 import * as Location from 'expo-location';
-import { Ionicons, MaterialIcons, MaterialCommunityIcons } from '@expo/vector-icons';
+import { Ionicons, MaterialIcons, Feather, FontAwesome5 } from '@expo/vector-icons';
 import { BlurView } from 'expo-blur';
 import { useNavigation } from '@react-navigation/native';
 import { StackNavigationProp } from '@react-navigation/stack';
@@ -34,13 +35,12 @@ const LONGITUDE_DELTA = LATITUDE_DELTA * ASPECT_RATIO;
 type HomeScreenNavigationProp = StackNavigationProp<RootStackParamList, 'Home'>;
 
 const SERVICES = [
-  { id: 'sos', name: 'SOS', icon: 'build', family: 'Ionicons', color: '#ef4444' },
-  { id: 'taxi', name: 'Такси', icon: 'car', family: 'Ionicons', color: '#fbbf24', maintenance: true },
-  { id: 'delivery', name: 'Хүргэлт', icon: 'cube', family: 'Ionicons', color: '#f97316', maintenance: true },
-  { id: 'driver', name: 'Асаалт', icon: 'flash', family: 'Ionicons', color: '#3b82f6', maintenance: true },
+  { id: 'taxi', name: 'Такси', icon: 'car-sport', family: 'Ionicons', color: theme.colors.primary },
+  { id: 'delivery', name: 'Хүргэлт', icon: 'cube', family: 'Ionicons', color: theme.colors.info },
+  { id: 'driver', name: 'Асаалт', icon: 'flash', family: 'Ionicons', color: theme.colors.success },
+  { id: 'sos', name: 'SOS', icon: 'construct', family: 'Ionicons', color: theme.colors.error },
 ];
 
-// Mock Nearby Drivers
 const INITIAL_DRIVERS: any[] = [];
 
 export default function HomeScreen() {
@@ -51,29 +51,13 @@ export default function HomeScreen() {
   const [region, setRegion] = useState<Region | null>(null);
   const [isMapReady, setIsMapReady] = useState(false);
   const [drivers, setDrivers] = useState(INITIAL_DRIVERS);
-  const [showsTraffic, setShowsTraffic] = useState(true);
+  const [showsTraffic, setShowsTraffic] = useState(false); // Default off for cleaner look
   const [mapType, setMapType] = useState<'standard' | 'satellite' | 'hybrid'>('standard');
   const [selectedDriverId, setSelectedDriverId] = useState<string | null>(null);
+  const [activeService, setActiveService] = useState('taxi');
 
-  const [isDragging, setIsDragging] = useState(false);
-
-  // User info from Redux (mock if not available)
+  // User info from Redux
   const user = useSelector((state: any) => state.auth.user) || { name: 'Хэрэглэгч', balance: 0 };
-
-  // Simulate Driver Movement (Mock) - DISABLED for Real WebSocket
-  /*
-  useEffect(() => {
-    const interval = setInterval(() => {
-      setDrivers(prevDrivers => prevDrivers.map(d => ({
-        ...d,
-        lat: d.lat + (Math.random() - 0.5) * 0.0002,
-        lng: d.lng + (Math.random() - 0.5) * 0.0002,
-        heading: d.heading + (Math.random() - 0.5) * 10
-      })));
-    }, 2000);
-    return () => clearInterval(interval);
-  }, []);
-  */
 
   useEffect(() => {
     let subscription: Location.LocationSubscription | null = null;
@@ -83,25 +67,6 @@ export default function HomeScreen() {
       if (status !== 'granted') {
         setAddress('Байршлын эрх өгөгдөөгүй байна');
         return;
-      }
-
-      // Request background permissions
-      try {
-        const { status: bgStatus } = await Location.requestBackgroundPermissionsAsync();
-        if (bgStatus === 'granted') {
-          await Location.startLocationUpdatesAsync(LOCATION_TASK_NAME, {
-            accuracy: Location.Accuracy.Balanced,
-            distanceInterval: 10,
-            deferredUpdatesInterval: 5000,
-            foregroundService: {
-              notificationTitle: "HanMotors",
-              notificationBody: "Байршил ашиглаж байна...",
-              notificationColor: "#fbbf24"
-            }
-          });
-        }
-      } catch (err) {
-        console.log("Background location permission denied or error:", err);
       }
 
       // Initial location
@@ -116,7 +81,6 @@ export default function HomeScreen() {
       };
       setRegion(initialRegion);
       
-      // Initial address fetch
       fetchAddress(location.coords.latitude, location.coords.longitude);
 
       // Real-time tracking
@@ -139,31 +103,11 @@ export default function HomeScreen() {
     };
   }, []);
 
-  // Camera Follow Mode
+  // Socket Integration
   useEffect(() => {
-    if (selectedDriverId && mapRef.current) {
-      const driver = drivers.find(d => d.id === selectedDriverId);
-      if (driver) {
-        mapRef.current.animateCamera({
-          center: { latitude: driver.lat, longitude: driver.lng },
-          heading: driver.heading,
-          zoom: 17,
-          pitch: 0,
-        }, { duration: 1000 });
-      }
-    }
-  }, [drivers, selectedDriverId]);
-
-  // Real-time Driver Tracking (Socket.io Integration)
-  useEffect(() => {
-    // 1. Initialize Socket Connection
-    // Passing user info if needed, or just connecting
     const socket = initSocket(user?.id || user?._id);
 
-    // 2. Listen for Real-time Location Updates
-    // Listen for initial bulk drivers data
     socket.on('allDriverLocations', (locations: Record<string, any>) => {
-       // locations is { driverId: { lat, lng, ... }, ... }
        const driversList = Object.keys(locations).map(id => ({
          id,
          ...locations[id]
@@ -171,38 +115,27 @@ export default function HomeScreen() {
        setDrivers(driversList);
     });
 
-    // data structure: { driverId, location: { lat, lng, heading, ... } }
     socket.on('driverLocationUpdated', (data: { driverId: string, location: any }) => {
-      // console.log('Driver update received:', data); // Debug
-      
       setDrivers(prev => {
         const driverIndex = prev.findIndex(d => d.id === data.driverId);
-        
         if (driverIndex >= 0) {
-          // Update existing driver
-          // AnimatedDriverMarker handles smooth transition via props update
           const newDrivers = [...prev];
-          newDrivers[driverIndex] = {
-             ...newDrivers[driverIndex],
-             ...data.location
-          };
+          newDrivers[driverIndex] = { ...newDrivers[driverIndex], ...data.location };
           return newDrivers;
         } else {
-          // Add new driver found in the vicinity only if online (implicit since they are emitting)
           return [...prev, { id: data.driverId, ...data.location }];
         }
       });
     });
 
-    // Handle driver disconnect/offline (Optional: if server emits 'driverDisconnected')
     socket.on('driverDisconnected', (data: { driverId: string }) => {
         setDrivers(prev => prev.filter(d => d.id !== data.driverId));
     });
 
-    // 3. Cleanup listeners on unmount
     return () => { 
       socket.off('driverLocationUpdated'); 
       socket.off('driverDisconnected');
+      socket.off('allDriverLocations');
     };
   }, []);
 
@@ -215,87 +148,90 @@ export default function HomeScreen() {
         setAddress(addressName);
       }
     } catch (error) {
-      console.log('Error fetching address:', error);
       setAddress('Тодорхойгүй байршил');
     }
   };
 
-  const onRegionChange = () => {
-    setIsDragging(true);
-    if (selectedDriverId) setSelectedDriverId(null);
-  };
-
   const onRegionChangeComplete = (newRegion: Region) => {
-    setIsDragging(false);
     setRegion(newRegion);
     fetchAddress(newRegion.latitude, newRegion.longitude);
   };
 
-  const handleMyLocation = () => {
-    if (location && mapRef.current) {
-      const newRegion = {
-        latitude: location.coords.latitude,
-        longitude: location.coords.longitude,
-        latitudeDelta: LATITUDE_DELTA,
-        longitudeDelta: LONGITUDE_DELTA,
-      };
-      mapRef.current.animateToRegion(newRegion, 1000);
-      setRegion(newRegion);
-    }
-  };
-
-  const cycleMapType = () => {
-    if (mapType === 'standard') setMapType('hybrid');
-    else if (mapType === 'hybrid') setMapType('satellite');
-    else setMapType('standard');
-  };
-
   const handleServicePress = (serviceId: string) => {
-    const service = SERVICES.find(s => s.id === serviceId);
+    setActiveService(serviceId);
     
-    if (service?.maintenance) {
-      Alert.alert('Мэдэгдэл', 'Энэ үйлчилгээ одоогоор засвартай байна.');
-      return;
-    }
-
+    // Slight haptic or visual feedback logic here
     if (serviceId === 'taxi' || serviceId === 'sos') {
+      // Pre-select service but wait for "Request" action usually, 
+      // but for now let's navigate on button press below
+    }
+  };
+
+  const handleRequestRide = () => {
+    if (activeService === 'taxi' || activeService === 'sos') {
       navigation.navigate('RideRequest', { 
         pickup: { 
           latitude: region?.latitude || 0, 
           longitude: region?.longitude || 0,
           address: address 
         },
-        serviceType: serviceId
+        serviceType: activeService
       });
     } else {
-      // Handle other services
-      console.log('Service selected:', serviceId);
+        Alert.alert('Мэдэгдэл', 'Энэ үйлчилгээ тун удахгүй нээгдэнэ.');
     }
+  };
+
+  const handleMyLocation = async () => {
+    try {
+      if (!mapRef.current) return;
+
+      const { status } = await Location.requestForegroundPermissionsAsync();
+      if (status !== 'granted') {
+        Alert.alert('Зөвшөөрөл шаардлагатай', 'Байршил ашиглах эрх өгөгдөөгүй байна.');
+        return;
+      }
+
+      const currentLocation = await Location.getCurrentPositionAsync({
+        accuracy: Location.Accuracy.Highest,
+      });
+
+      setLocation(currentLocation);
+      
+      mapRef.current.animateToRegion({
+        latitude: currentLocation.coords.latitude,
+        longitude: currentLocation.coords.longitude,
+        latitudeDelta: LATITUDE_DELTA,
+        longitudeDelta: LONGITUDE_DELTA,
+      });
+    } catch (error) {
+      console.log('Error getting location:', error);
+      Alert.alert('Алдаа', 'Байршил тодорхойлоход алдаа гарлаа.');
+    }
+  };
+
+  const handleProfile = () => {
+    navigation.navigate('Profile');
   };
 
   return (
     <View style={styles.container}>
-      <StatusBar barStyle="light-content" backgroundColor="transparent" translucent />
+      <StatusBar barStyle="dark-content" backgroundColor="transparent" translucent />
       
+      {/* Map Layer */}
       <View style={styles.mapContainer}>
         {region ? (
           <MapView
             ref={mapRef}
             style={styles.map}
             provider={PROVIDER_GOOGLE}
-            customMapStyle={mapType === 'standard' && !showsTraffic ? mapStyle : []}
-            mapType={mapType}
+            customMapStyle={mapStyle}
             initialRegion={region}
             showsUserLocation={true}
             showsMyLocationButton={false}
-            onRegionChange={onRegionChange}
             onRegionChangeComplete={onRegionChangeComplete}
-            showsBuildings={false}
-            showsIndoors={false}
-            onMapReady={() => setIsMapReady(true)}
+            showsCompass={false}
             showsTraffic={showsTraffic}
-            rotateEnabled={false}
-            pitchEnabled={false}
           >
              {drivers.map(driver => (
                <AnimatedDriverMarker 
@@ -306,118 +242,101 @@ export default function HomeScreen() {
              ))}
           </MapView>
         ) : (
-          <View style={[styles.map, styles.loadingContainer]}>
-            <Text style={styles.loadingText}>Ачааллаж байна...</Text>
+          <View style={styles.loadingContainer}>
+            <Text style={{color: theme.colors.textSecondary}}>Газрын зураг ачааллаж байна...</Text>
           </View>
         )}
-        
-        {/* Fixed Center Marker - Generic Yellow Pin */}
-        <View style={styles.markerFixed}>
-          <View style={styles.markerContainer}>
-            {!isDragging && (
-              <TouchableOpacity 
-                style={styles.markerBubble}
-                onPress={() => navigation.navigate('RideRequest', { 
-                  pickup: { 
-                    latitude: region?.latitude || 0, 
-                    longitude: region?.longitude || 0,
-                    address: address 
-                  } 
-                })}
-                activeOpacity={0.9}
-              >
-                 <View style={styles.markerDot} />
-                 <Text style={styles.markerText} numberOfLines={1}>
-                  {address}
-                 </Text>
-                 <Ionicons name="chevron-forward" size={14} color="#6B7280" style={{ marginLeft: 4 }} />
-              </TouchableOpacity>
-            )}
-            
-            {/* Generic Yellow Pin */}
-            <View style={styles.pinContainer}>
-               <Ionicons name="location-sharp" size={48} color={theme.colors.primary} />
-               <View style={styles.pinShadow} />
+      </View>
+
+      {/* Top Floating Header (Glassmorphism) */}
+      <SafeAreaView style={styles.topContainer} pointerEvents="box-none">
+        {/* Search Bar "Where to?" */}
+        <TouchableOpacity style={styles.searchBar} activeOpacity={0.9} onPress={() => handleRequestRide()}>
+            <BlurView intensity={80} tint="dark" style={StyleSheet.absoluteFill} />
+            <View style={styles.searchContent}>
+                <View style={styles.searchIconContainer}>
+                    <View style={styles.greenDot} />
+                </View>
+                <View style={styles.searchTextContainer}>
+                    <Text style={styles.searchLabel}>Одоогийн байршил</Text>
+                    <Text style={styles.searchValue} numberOfLines={1}>{address}</Text>
+                </View>
+                <View style={styles.searchAction}>
+                    <Text style={styles.searchActionText}>Хаашаа явах вэ?</Text>
+                </View>
             </View>
+        </TouchableOpacity>
+      </SafeAreaView>
+
+      {/* Center Pin Indicator */}
+      <View style={styles.centerPinContainer} pointerEvents="none">
+          <FontAwesome5 name="map-marker-alt" size={36} color={theme.colors.primary} style={styles.pinIcon} />
+          <View style={styles.pinShadow} />
+      </View>
+
+      {/* Bottom Service Selector */}
+      <View style={styles.bottomSheet}>
+          <BlurView intensity={90} tint="dark" style={StyleSheet.absoluteFill} />
+          
+          <View style={styles.handleBar} />
+          
+          <Text style={styles.serviceTitle}>Үйлчилгээ сонгох</Text>
+          
+          <View style={styles.servicesGrid}>
+              {SERVICES.map((service) => {
+                  const isActive = activeService === service.id;
+                  return (
+                      <TouchableOpacity 
+                        key={service.id} 
+                        style={[
+                            styles.serviceCard, 
+                            isActive && styles.serviceCardActive
+                        ]}
+                        onPress={() => handleServicePress(service.id)}
+                      >
+                          <View style={[
+                              styles.iconCircle, 
+                              isActive && { backgroundColor: theme.colors.primary }
+                          ]}>
+                              <Ionicons 
+                                name={service.icon as any} 
+                                size={24} 
+                                color={isActive ? theme.colors.black : theme.colors.text} 
+                              />
+                          </View>
+                          <Text style={[
+                              styles.serviceName, 
+                              isActive && { color: theme.colors.primary, fontWeight: '700' }
+                          ]}>{service.name}</Text>
+                      </TouchableOpacity>
+                  );
+              })}
           </View>
-        </View>
 
-        {/* Map Controls */}
-        <View style={styles.mapControls}>
-          <TouchableOpacity 
-            style={styles.controlButton} 
-            onPress={cycleMapType}
-            activeOpacity={0.8}
-          >
-            <Ionicons name="layers" size={24} color="#FFFFFF" />
+          <TouchableOpacity style={styles.actionButton} onPress={handleRequestRide}>
+              <Text style={styles.actionButtonText}>Захиалах</Text>
+              <Ionicons name="arrow-forward" size={20} color={theme.colors.black} />
           </TouchableOpacity>
+      </View>
 
-          <TouchableOpacity 
-            style={styles.controlButton} 
-            onPress={handleMyLocation}
-            activeOpacity={0.8}
-          >
-            <Ionicons name="locate" size={24} color="#FFFFFF" />
-          </TouchableOpacity>
+      {/* Traffic Button */}
+      <TouchableOpacity 
+        style={styles.trafficButton} 
+        onPress={() => setShowsTraffic(!showsTraffic)}
+      >
+        <MaterialIcons name="traffic" size={24} color={showsTraffic ? theme.colors.primary : theme.colors.text} />
+      </TouchableOpacity>
 
-          <TouchableOpacity 
-            style={[styles.controlButton, showsTraffic && styles.activeControlButton]} 
-            onPress={() => setShowsTraffic(!showsTraffic)}
-            activeOpacity={0.8}
-          >
-            <MaterialIcons name="traffic" size={24} color={showsTraffic ? theme.colors.primary : "#FFFFFF"} />
-          </TouchableOpacity>
-        </View>
-
-        {/* Bottom Sheet - Glassmorphism */}
-        <BlurView intensity={40} tint="dark" style={styles.bottomSheet}>
-           {/* Address Input */}
-           <TouchableOpacity 
-             style={styles.addressInputContainer}
-             onPress={() => navigation.navigate('RideRequest', { 
-               pickup: { 
-                 latitude: region?.latitude || 0, 
-                 longitude: region?.longitude || 0,
-                 address: address 
-               } 
-             })}
-           >
-             <View style={styles.addressIconWrapper}>
-               <View style={styles.greenDot} />
-             </View>
-             <View style={styles.addressTextContainer}>
-               <Text style={styles.addressLabel}>Суух хаяг</Text>
-               <Text style={styles.addressValue} numberOfLines={1}>
-                 {address !== 'Байршил тодорхойлж байна...' ? address : 'Хаанаас авах вэ?'}
-               </Text>
-             </View>
-             <View style={styles.searchIconWrapper}>
-                <Ionicons name="search" size={20} color={theme.colors.textSecondary} />
-             </View>
-           </TouchableOpacity>
-
-           {/* Services Grid */}
-           <View style={styles.servicesGrid}>
-             {SERVICES.map((service) => (
-               <TouchableOpacity 
-                 key={service.id} 
-                 style={[styles.serviceItem, service.maintenance && { opacity: 0.5 }]}
-                 onPress={() => handleServicePress(service.id)}
-                 activeOpacity={0.7}
-               >
-                 <View style={styles.serviceIconContainer}>
-                   <Ionicons name={service.icon as any} size={24} color={theme.colors.primary} />
-                 </View>
-                 <Text style={styles.serviceName}>{service.name}</Text>
-               </TouchableOpacity>
-             ))}
-           </View>
-        </BlurView>
- 
-       </View>
-     </View>
-   );
- }
+      {/* My Location Button */}
+      <TouchableOpacity 
+        style={styles.myLocationButton} 
+        onPress={handleMyLocation}
+      >
+        <MaterialIcons name="my-location" size={24} color={theme.colors.text} />
+      </TouchableOpacity>
+    </View>
+  );
+}
 
 const styles = StyleSheet.create({
   container: {
@@ -426,200 +345,238 @@ const styles = StyleSheet.create({
   },
   mapContainer: {
     flex: 1,
-    position: 'relative',
+    overflow: 'hidden',
+    // borderRadius: theme.borderRadius.xl, // Optional: if we want rounded map corners at bottom
   },
   map: {
     width: '100%',
-    height: '100%',
+    height: '110%', // Oversize slightly to hide google logo if needed
   },
   loadingContainer: {
+    flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
     backgroundColor: theme.colors.background,
   },
-  loadingText: {
-    color: theme.colors.textSecondary,
-    marginTop: 10,
+  
+  // Top Header
+  topContainer: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    paddingHorizontal: 20,
+    paddingTop: Platform.OS === 'android' ? (StatusBar.currentHeight || 0) + 10 : 10,
+    alignItems: 'center',
   },
   
-  // FIXED CENTER MARKER
-  markerFixed: {
-    position: 'absolute',
-    top: '50%',
-    left: '50%',
-    zIndex: 10,
-  },
-  markerContainer: {
-    width: 48,
-    height: 48,
-    marginLeft: -24,
-    marginTop: -48, // Anchor bottom to center
-    alignItems: 'center',
-  },
-  markerBubble: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#000000', // Pure black for pill
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-    borderRadius: 24,
-    marginBottom: 12,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
-    elevation: 6,
-    position: 'absolute',
-    bottom: 50,
-    alignSelf: 'center',
-    minWidth: 140,
-    justifyContent: 'center',
-    zIndex: 20,
-  },
-  markerDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    backgroundColor: theme.colors.primary,
-    marginRight: 10,
-  },
-  markerText: {
-    color: '#FFFFFF',
-    fontSize: 14,
-    fontWeight: '600',
-    maxWidth: 180,
-    marginRight: 4,
-  },
-  pinContainer: {
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  pinShadow: {
-    width: 16,
-    height: 4,
-    backgroundColor: 'rgba(0,0,0,0.3)',
-    borderRadius: 2,
-    marginTop: -4,
-  },
-
-  // MAP CONTROLS
-  mapControls: {
-    position: 'absolute',
-    right: 16,
-    bottom: 300, // Above bottom sheet
-    alignItems: 'center',
-    zIndex: 5,
-  },
-  controlButton: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    backgroundColor: '#000000', // Pure black
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginBottom: 12,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.25,
-    shadowRadius: 4,
-    elevation: 5,
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.1)',
-  },
-  activeControlButton: {
-    backgroundColor: '#121212',
-    borderWidth: 1,
-    borderColor: theme.colors.primary,
-  },
-
-  // BOTTOM SHEET
-  bottomSheet: {
-    position: 'absolute',
-    bottom: 120, // Leave space for floating nav (70px + 25px margin + buffer)
-    left: 16,
-    right: 16,
-    borderRadius: theme.borderRadius.xl,
-    padding: 16,
+  // Search Bar (Glassmorphic Pill)
+  searchBar: {
+    width: '100%',
+    maxWidth: 400,
+    backgroundColor: 'transparent',
+    borderRadius: 30,
     overflow: 'hidden',
     borderWidth: 1,
-    borderColor: theme.colors.glassBorder,
-    backgroundColor: 'rgba(0,0,0,0.85)', // Force black glass look
+    borderColor: 'rgba(255,255,255,0.1)',
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.3,
+    shadowRadius: 20,
+    elevation: 10,
   },
-  
-  // ADDRESS INPUT
-  addressInputContainer: {
+  searchContent: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#121212', // Darker surface
-    borderRadius: theme.borderRadius.l,
-    padding: 12,
-    marginBottom: 20,
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.05)',
+    padding: 16,
   },
-  addressIconWrapper: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    backgroundColor: 'rgba(34, 197, 94, 0.15)', // Green tint
-    justifyContent: 'center',
-    alignItems: 'center',
+  searchIconContainer: {
     marginRight: 12,
   },
   greenDot: {
     width: 10,
     height: 10,
     borderRadius: 5,
-    backgroundColor: '#22c55e',
+    backgroundColor: theme.colors.success,
     borderWidth: 2,
-    borderColor: '#FFFFFF',
+    borderColor: 'rgba(255,255,255,0.2)', // Outline effect
+    shadowColor: theme.colors.success,
+    shadowOpacity: 0.5,
+    shadowRadius: 4,
   },
-  addressTextContainer: {
+  searchTextContainer: {
     flex: 1,
   },
-  addressLabel: {
+  searchLabel: {
+    fontSize: 10,
     color: theme.colors.textSecondary,
-    fontSize: 12,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
     marginBottom: 2,
   },
-  addressValue: {
-    color: '#FFFFFF',
-    fontSize: 15,
+  searchValue: {
+    fontSize: 14,
+    color: theme.colors.text,
     fontWeight: '600',
   },
-  searchIconWrapper: {
-    width: 36,
-    height: 36,
-    borderRadius: 12,
-    backgroundColor: theme.colors.background,
-    justifyContent: 'center',
-    alignItems: 'center',
+  searchAction: {
+    backgroundColor: 'rgba(255,255,255,0.1)',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 15,
+  },
+  searchActionText: {
+    fontSize: 12,
+    color: theme.colors.primary,
+    fontWeight: '600',
   },
 
-  // SERVICES GRID
+  // Center Pin
+  centerPinContainer: {
+    position: 'absolute',
+    top: '50%',
+    left: '50%',
+    alignItems: 'center',
+    justifyContent: 'flex-end', // Align bottom of content to center? No, let's use margin
+    marginLeft: -18, // Half of width (36/2)
+    marginTop: -36, // Full height to put tip at center
+    zIndex: 10,
+  },
+  pinIcon: {
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.5,
+    shadowRadius: 4,
+    elevation: 5,
+  },
+  pinShadow: {
+    width: 10,
+    height: 4,
+    backgroundColor: 'rgba(0,0,0,0.3)',
+    borderRadius: 2,
+    marginTop: 2,
+  },
+
+  // Bottom Sheet
+  bottomSheet: {
+    position: 'absolute',
+    bottom: 100, // Lift above floating tab bar
+    left: 20,
+    right: 20,
+    backgroundColor: 'transparent',
+    borderRadius: 30,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.1)',
+    padding: 20,
+    paddingBottom: 20,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.3,
+    shadowRadius: 20,
+    elevation: 20,
+    overflow: 'hidden',
+  },
+  handleBar: {
+    width: 40,
+    height: 4,
+    backgroundColor: theme.colors.textTertiary,
+    borderRadius: 2,
+    alignSelf: 'center',
+    marginBottom: 20,
+    opacity: 0.3,
+    display: 'none', // Hide handle bar for floating card look
+  },
+  serviceTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: theme.colors.text,
+    marginBottom: 16,
+  },
   servicesGrid: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    paddingHorizontal: 4,
+    marginBottom: 24,
   },
-  serviceItem: {
+  serviceCard: {
     alignItems: 'center',
-    width: (width - 64) / 5, // 5 items distributed
+    width: (width - 40) / 4 - 8,
   },
-  serviceIconContainer: {
-    width: 48,
-    height: 48,
-    borderRadius: 16,
+  serviceCardActive: {
+    // scale transform could go here
+  },
+  iconCircle: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
     backgroundColor: theme.colors.surfaceLight,
     justifyContent: 'center',
     alignItems: 'center',
     marginBottom: 8,
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.05)',
+    borderColor: theme.colors.glassBorder,
   },
   serviceName: {
-    color: '#FFFFFF',
-    fontSize: 11,
-    textAlign: 'center',
+    fontSize: 12,
+    color: theme.colors.textSecondary,
+    fontWeight: '500',
+  },
+  actionButton: {
+    backgroundColor: theme.colors.primary,
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingVertical: 16,
+    borderRadius: theme.borderRadius.l,
+    shadowColor: theme.colors.primary,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.4,
+    shadowRadius: 8,
+    elevation: 8,
+  },
+  actionButtonText: {
+    color: theme.colors.black,
+    fontSize: 16,
+    fontWeight: '700',
+    marginRight: 8,
+  },
+
+  // Traffic Button
+  trafficButton: {
+    position: 'absolute',
+    bottom: 350, // Aligned with myLocationButton
+    right: 80, // Left of myLocationButton
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: theme.colors.surface,
+    justifyContent: 'center',
+    alignItems: 'center',
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.3,
+    shadowRadius: 4,
+    elevation: 5,
+    borderWidth: 1,
+    borderColor: theme.colors.glassBorder,
+  },
+
+  // My Location Button
+  myLocationButton: {
+    position: 'absolute',
+    bottom: 350, // Raised higher (was 280)
+    right: 20,
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: theme.colors.surface,
+    justifyContent: 'center',
+    alignItems: 'center',
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.3,
+    shadowRadius: 4,
+    elevation: 5,
+    borderWidth: 1,
+    borderColor: theme.colors.glassBorder,
   },
 });

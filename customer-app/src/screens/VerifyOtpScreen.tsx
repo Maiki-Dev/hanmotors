@@ -1,106 +1,152 @@
-import React, { useState } from 'react';
-import { View, Text, TextInput, TouchableOpacity, StyleSheet, Alert, ActivityIndicator, KeyboardAvoidingView, Platform } from 'react-native';
-import { theme } from '../constants/theme';
-import { authService } from '../services/api';
+import React, { useState, useEffect } from 'react';
+import {
+  View,
+  Text,
+  StyleSheet,
+  TextInput,
+  TouchableOpacity,
+  Alert,
+  ActivityIndicator,
+  KeyboardAvoidingView,
+  Platform,
+  Dimensions,
+  SafeAreaView
+} from 'react-native';
+import { useDispatch, useSelector } from 'react-redux';
+import { verifyOtp } from '../store/slices/authSlice';
+import { RootState, AppDispatch } from '../store';
 import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
-import { StackNavigationProp } from '@react-navigation/stack';
-import { useDispatch } from 'react-redux';
-import { setCredentials } from '../store/slices/authSlice';
-import { Lock, ArrowLeft } from 'lucide-react-native';
+import { theme } from '../constants/theme';
+import { LinearGradient } from 'expo-linear-gradient';
+import { BlurView } from 'expo-blur';
+import { ArrowLeft, CheckCircle, ShieldCheck } from 'lucide-react-native';
+
+const { width, height } = Dimensions.get('window');
 
 type RootStackParamList = {
-  Login: undefined;
   VerifyOtp: { phone: string };
-  Home: undefined;
 };
 
 type VerifyOtpScreenRouteProp = RouteProp<RootStackParamList, 'VerifyOtp'>;
-type VerifyOtpScreenNavigationProp = StackNavigationProp<RootStackParamList, 'VerifyOtp'>;
-
-import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const VerifyOtpScreen = () => {
   const [otp, setOtp] = useState('');
-  const [loading, setLoading] = useState(false);
+  const dispatch = useDispatch<AppDispatch>();
+  const navigation = useNavigation<any>();
   const route = useRoute<VerifyOtpScreenRouteProp>();
-  const navigation = useNavigation<VerifyOtpScreenNavigationProp>();
-  const dispatch = useDispatch();
-  const { phone } = route.params;
+  const { phone } = route.params || {};
+  const { isLoading: loading, error, isAuthenticated } = useSelector((state: RootState) => state.auth);
+
+  useEffect(() => {
+    if (isAuthenticated) {
+      // Navigate to Home or handle successful login
+    }
+  }, [isAuthenticated, navigation]);
 
   const handleVerify = async () => {
-    if (!otp) {
-      Alert.alert('Алдаа', 'Баталгаажуулах кодыг оруулна уу');
+    if (otp.length !== 4) {
+      Alert.alert('Аллоо', '4 оронтой код оруулна уу');
       return;
     }
-
-    setLoading(true);
+    
     try {
-      const response = await authService.verifyOtp(phone, otp);
-      const { customer, token } = response.data;
-      
-      await AsyncStorage.setItem('customer_id', customer._id);
-      dispatch(setCredentials({ user: customer, token }));
-      
-      // Navigation will be handled by the AppNavigator based on auth state
-    } catch (error: any) {
-      Alert.alert('Алдаа', error.response?.data?.message || 'Код буруу байна');
-    } finally {
-      setLoading(false);
+      await dispatch(verifyOtp({ phone, otp })).unwrap();
+      // Navigation is handled by auth state change or in the thunk
+    } catch (err: any) {
+      Alert.alert('Алдаа', (typeof err === 'string' ? err : err?.message) || 'Баталгаажуулалт амжилтгүй боллоо');
     }
-  };
-
-  const handleResend = () => {
-    // Implement resend logic here
-    Alert.alert('Мэдэгдэл', 'Код дахин илгээгдлээ');
   };
 
   return (
     <View style={styles.container}>
-      <TouchableOpacity style={styles.backButton} onPress={() => navigation.goBack()}>
-        <ArrowLeft size={24} color={theme.colors.text} />
-      </TouchableOpacity>
+      <LinearGradient
+        colors={[theme.colors.background, '#1a2138', '#0f1322']}
+        style={StyleSheet.absoluteFill}
+      />
+      
+      {/* Decorative background elements */}
+      <LinearGradient
+        colors={[theme.colors.primary, 'transparent']}
+        style={[styles.orb, styles.orb1]}
+        start={{ x: 0, y: 0 }}
+        end={{ x: 1, y: 1 }}
+      />
+      <LinearGradient
+        colors={[theme.colors.secondary, 'transparent']}
+        style={[styles.orb, styles.orb2]}
+        start={{ x: 0, y: 0 }}
+        end={{ x: 1, y: 1 }}
+      />
 
-      <View style={styles.header}>
-        <View style={styles.iconBox}>
-          <Lock size={40} color={theme.colors.black} />
-        </View>
-        <Text style={styles.title}>Баталгаажуулах</Text>
-        <Text style={styles.subtitle}>{phone} дугаарт илгээсэн 4 оронтой кодыг оруулна уу</Text>
-      </View>
-
-      <KeyboardAvoidingView 
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-        style={styles.content}
-      >
-        <View style={styles.inputContainer}>
-          <TextInput
-            style={styles.input}
-            placeholder="0000"
-            placeholderTextColor={theme.colors.textSecondary}
-            keyboardType="number-pad"
-            maxLength={4}
-            value={otp}
-            onChangeText={setOtp}
-            autoFocus
-          />
-        </View>
-
-        <TouchableOpacity 
-          style={styles.button} 
-          onPress={handleVerify}
-          disabled={loading}
+      <SafeAreaView style={styles.safeArea}>
+        <KeyboardAvoidingView
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+          style={styles.keyboardView}
         >
-          {loading ? (
-            <ActivityIndicator color={theme.colors.black} />
-          ) : (
-            <Text style={styles.buttonText}>Баталгаажуулах</Text>
-          )}
-        </TouchableOpacity>
+          <View style={styles.header}>
+            <TouchableOpacity 
+              style={styles.backButton} 
+              onPress={() => navigation.goBack()}
+            >
+              <BlurView intensity={30} tint="dark" style={styles.backButtonBlur}>
+                <ArrowLeft size={24} color={theme.colors.text} />
+              </BlurView>
+            </TouchableOpacity>
+          </View>
 
-        <TouchableOpacity style={styles.resendButton} onPress={handleResend}>
-          <Text style={styles.resendText}>Код дахин илгээх</Text>
-        </TouchableOpacity>
-      </KeyboardAvoidingView>
+          <View style={styles.contentContainer}>
+            <BlurView intensity={30} tint="dark" style={styles.glassCard}>
+              <View style={styles.iconContainer}>
+                <ShieldCheck size={48} color={theme.colors.primary} />
+              </View>
+              
+              <Text style={styles.title}>Баталгаажуулах</Text>
+              <Text style={styles.subtitle}>
+                {phone} дугаар руу илгээсэн 4 оронтой кодыг оруулна уу
+              </Text>
+
+              <View style={styles.inputContainer}>
+                <TextInput
+                  style={styles.input}
+                  placeholder="0000"
+                  placeholderTextColor={theme.colors.textSecondary}
+                  keyboardType="number-pad"
+                  maxLength={4}
+                  value={otp}
+                  onChangeText={setOtp}
+                  autoFocus
+                  selectionColor={theme.colors.primary}
+                />
+              </View>
+
+              <TouchableOpacity 
+                style={styles.verifyButton} 
+                onPress={handleVerify}
+                disabled={loading}
+                activeOpacity={0.8}
+              >
+                {loading ? (
+                  <ActivityIndicator color={theme.colors.black} />
+                ) : (
+                  <LinearGradient
+                    colors={[theme.colors.primary, '#f5ba31']}
+                    start={{ x: 0, y: 0 }}
+                    end={{ x: 1, y: 0 }}
+                    style={styles.gradientButton}
+                  >
+                    <Text style={styles.verifyButtonText}>Баталгаажуулах</Text>
+                    <CheckCircle size={20} color={theme.colors.black} style={styles.buttonIcon} />
+                  </LinearGradient>
+                )}
+              </TouchableOpacity>
+
+              <TouchableOpacity style={styles.resendButton}>
+                <Text style={styles.resendText}>Код ирээгүй юу? Дахин илгээх</Text>
+              </TouchableOpacity>
+            </BlurView>
+          </View>
+        </KeyboardAvoidingView>
+      </SafeAreaView>
     </View>
   );
 };
@@ -109,90 +155,135 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: theme.colors.background,
-    padding: theme.spacing.l,
   },
-  backButton: {
-    marginTop: 40,
-    marginBottom: 20,
-    width: 40,
-    height: 40,
-    justifyContent: 'center',
-    alignItems: 'flex-start',
-  },
-  header: {
-    alignItems: 'center',
-    marginBottom: 40,
-  },
-  iconBox: {
-    width: 80,
-    height: 80,
-    backgroundColor: theme.colors.primary,
-    borderRadius: 20,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginBottom: 24,
-    shadowColor: theme.colors.primary,
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
-    elevation: 4,
-  },
-  title: {
-    fontSize: 28,
-    fontWeight: 'bold',
-    color: theme.colors.text,
-    marginBottom: 12,
-  },
-  subtitle: {
-    fontSize: 16,
-    color: theme.colors.textSecondary,
-    textAlign: 'center',
-    paddingHorizontal: 20,
-    lineHeight: 24,
-  },
-  content: {
+  safeArea: {
     flex: 1,
   },
-  inputContainer: {
-    marginBottom: 30,
+  keyboardView: {
+    flex: 1,
+  },
+  orb: {
+    position: 'absolute',
+    borderRadius: 150,
+    opacity: 0.15,
+  },
+  orb1: {
+    width: 300,
+    height: 300,
+    top: -50,
+    left: -100,
+  },
+  orb2: {
+    width: 250,
+    height: 250,
+    bottom: 100,
+    right: -50,
+  },
+  header: {
+    paddingHorizontal: 20,
+    paddingTop: 20,
+  },
+  backButton: {
+    borderRadius: 20,
+    overflow: 'hidden',
+    width: 40,
+    height: 40,
+  },
+  backButtonBlur: {
+    flex: 1,
+    justifyContent: 'center',
     alignItems: 'center',
   },
-  input: {
-    fontSize: 32,
+  contentContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    paddingHorizontal: 20,
+  },
+  glassCard: {
+    borderRadius: 24,
+    padding: 30,
+    overflow: 'hidden',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.1)',
+    alignItems: 'center',
+  },
+  iconContainer: {
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    backgroundColor: 'rgba(255, 204, 0, 0.1)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 20,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 204, 0, 0.3)',
+  },
+  title: {
+    fontSize: 24,
     fontWeight: 'bold',
     color: theme.colors.text,
-    letterSpacing: 16,
+    marginBottom: 10,
     textAlign: 'center',
-    width: '100%',
-    paddingVertical: 10,
-    borderBottomWidth: 2,
-    borderBottomColor: theme.colors.border,
   },
-  button: {
-    backgroundColor: theme.colors.primary,
+  subtitle: {
+    fontSize: 14,
+    color: theme.colors.textSecondary,
+    marginBottom: 30,
+    textAlign: 'center',
+    lineHeight: 20,
+  },
+  inputContainer: {
+    width: '100%',
+    marginBottom: 30,
+  },
+  input: {
+    width: '100%',
+    height: 60,
+    backgroundColor: 'rgba(0, 0, 0, 0.3)',
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.1)',
+    color: theme.colors.text,
+    fontSize: 32,
+    fontWeight: 'bold',
+    textAlign: 'center',
+    letterSpacing: 10,
+  },
+  verifyButton: {
+    width: '100%',
     height: 56,
     borderRadius: 16,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: 24,
+    overflow: 'hidden',
+    marginBottom: 20,
     shadowColor: theme.colors.primary,
-    shadowOffset: { width: 0, height: 4 },
+    shadowOffset: {
+      width: 0,
+      height: 4,
+    },
     shadowOpacity: 0.3,
     shadowRadius: 8,
-    elevation: 4,
+    elevation: 8,
   },
-  buttonText: {
+  gradientButton: {
+    flex: 1,
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  verifyButtonText: {
     fontSize: 18,
     fontWeight: 'bold',
     color: theme.colors.black,
   },
+  buttonIcon: {
+    marginLeft: 10,
+  },
   resendButton: {
-    alignItems: 'center',
     padding: 10,
   },
   resendText: {
-    fontSize: 16,
     color: theme.colors.primary,
+    fontSize: 14,
     fontWeight: '600',
   },
 });
