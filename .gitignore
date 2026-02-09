@@ -16,3 +16,5 @@ ios/Pods/
 java/
 jdk-17.zip
 mongo-data/
+google-services.json
+GoogleService-Info.plist
