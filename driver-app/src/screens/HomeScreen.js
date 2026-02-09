@@ -74,8 +74,20 @@ export default function HomeScreen({ navigation, route }) {
   const [otherDrivers, setOtherDrivers] = useState({}); // Stores locations of other drivers
   const socketRef = useRef(null);
   const isOnlineRef = useRef(isOnline);
+  const driverLocationRef = useRef(null); // Ref for location to access in socket callbacks
+  const servicesRef = useRef(services); // Ref for services
   const driverInfoRef = useRef(null); // Store driver info for socket
   const mapRef = useRef(null);
+
+  // Sync driverLocation to Ref
+  useEffect(() => {
+    driverLocationRef.current = driverLocation;
+  }, [driverLocation]);
+
+  // Sync services to Ref
+  useEffect(() => {
+    servicesRef.current = services;
+  }, [services]);
   const [mapMode, setMapMode] = useState('dark'); // Default to dark
   const [showsTraffic, setShowsTraffic] = useState(true);
   const [isMapReady, setIsMapReady] = useState(false);
@@ -419,18 +431,20 @@ export default function HomeScreen({ navigation, route }) {
       if (driverId) {
         socket.emit('driverJoin', driverId);
         // Resync status and location
-        if (isOnlineRef.current && driverLocation) {
+        // Use Refs to get latest state without closure staleness
+        const currentLoc = driverLocationRef.current;
+        if (isOnlineRef.current && currentLoc) {
              const vehicle = driverInfoRef.current?.vehicle || {};
              socket.emit('driverLocationUpdated', {
                 driverId,
                 location: { 
-                  lat: driverLocation.latitude, 
-                  lng: driverLocation.longitude,
-                  heading: driverLocation.heading || 0,
+                  lat: currentLoc.latitude, 
+                  lng: currentLoc.longitude,
+                  heading: currentLoc.heading || 0,
                   plateNumber: vehicle.plateNumber,
                   vehicleModel: vehicle.model,
                   vehicleColor: vehicle.color,
-                  isTowing: services.towing
+                  isTowing: servicesRef.current.towing
                 }
               });
              socket.emit('driverStatusUpdate', { driverId, isOnline: true });
@@ -470,9 +484,12 @@ export default function HomeScreen({ navigation, route }) {
     });
 
     socket.on('newJobRequest', async (tripData) => {
+      console.log('Received newJobRequest via socket:', tripData._id);
       if (isOnlineRef.current) {
         setIncomingRequest(tripData);
         // Notification is now handled by NotificationManager
+      } else {
+        console.log('Ignoring newJobRequest because driver is OFFLINE');
       }
     });
 

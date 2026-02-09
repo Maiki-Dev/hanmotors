@@ -1111,7 +1111,8 @@ router.post('/trip/request', async (req, res) => {
     let matchedDrivers = 0;
     const nearbyDriverIds = [];
 
-    console.log(`[Trip Request] Finding drivers near ${pickupLat}, ${pickupLng} within 5km...`);
+    console.log(`[Trip Request] Finding drivers near ${pickupLat}, ${pickupLng} within 10km...`);
+    console.log(`[Trip Request] Total drivers with location: ${Object.keys(driverLocations).length}`);
 
     // 1. Identify drivers within range
     Object.keys(driverLocations).forEach(driverId => {
@@ -1121,11 +1122,16 @@ router.post('/trip/request', async (req, res) => {
          const dLng = loc.longitude || loc.lng;
          
          const dist = getDistance(pickupLat, pickupLng, dLat, dLng);
+         // Log distance for debugging
+         // console.log(`Driver ${driverId} distance: ${dist}km`);
+         
          if (dist <= 10) { // Increased to 10km
             nearbyDriverIds.push(driverId);
          }
       }
     });
+
+    console.log(`[Trip Request] Found ${nearbyDriverIds.length} drivers in range.`);
 
     // 2. Filter drivers by Vehicle Type and Dispatch
     if (nearbyDriverIds.length > 0) {
@@ -1146,7 +1152,7 @@ router.post('/trip/request', async (req, res) => {
                 }
 
                 if (isCompatible) {
-                    console.log(` -> Match: Driver ${driver._id} (${vehicleType}/${role}) is compatible.`);
+                    console.log(` -> Match: Driver ${driver._id} (${vehicleType}/${role}) is compatible. Emitting newJobRequest...`);
                     io.to(`driver_${driver._id}`).emit('newJobRequest', trip);
                     matchedDrivers++;
 
@@ -1158,11 +1164,17 @@ router.post('/trip/request', async (req, res) => {
                             { tripId: trip._id }
                         );
                     }
+                } else {
+                    console.log(` -> Skip: Driver ${driver._id} (${vehicleType}/${role}) incompatible with ${trip.serviceType}`);
                 }
             });
         } catch (err) {
             console.error("Error filtering drivers by role:", err);
         }
+    } else {
+        console.log("[Trip Request] No drivers found in range. Checking online drivers count...");
+        const onlineCount = await Driver.countDocuments({ isOnline: true });
+        console.log(`[Trip Request] DB says ${onlineCount} drivers are online.`);
     }
 
     // Always notify admin
@@ -1217,6 +1229,7 @@ router.post('/trip/:id/confirm-payment', async (req, res) => {
     const nearbyDriverIds = [];
 
     console.log(`[Trip Paid] Finding drivers near ${pickupLat}, ${pickupLng} within 10km...`);
+    console.log(`[Trip Paid] Total drivers with location: ${Object.keys(driverLocations).length}`);
 
     // 1. Identify drivers within range
     Object.keys(driverLocations).forEach(driverId => {
@@ -1231,6 +1244,8 @@ router.post('/trip/:id/confirm-payment', async (req, res) => {
          }
       }
     });
+
+    console.log(`[Trip Paid] Found ${nearbyDriverIds.length} drivers in range.`);
 
     // 2. Filter drivers by Vehicle Type and Dispatch
     if (nearbyDriverIds.length > 0) {
@@ -1255,7 +1270,7 @@ router.post('/trip/:id/confirm-payment', async (req, res) => {
                 }
 
                 if (isCompatible) {
-                    console.log(` -> Match: Driver ${driver._id} (${vehicleType}/${role}) is compatible.`);
+                    console.log(` -> Match: Driver ${driver._id} (${vehicleType}/${role}) is compatible. Emitting newJobRequest...`);
                     io.to(`driver_${driver._id}`).emit('newJobRequest', trip);
                     matchedDrivers++;
 
@@ -1268,11 +1283,15 @@ router.post('/trip/:id/confirm-payment', async (req, res) => {
                             { tripId: trip._id }
                         );
                     }
+                } else {
+                    console.log(` -> Skip: Driver ${driver._id} (${vehicleType}/${role}) incompatible with ${trip.serviceType}`);
                 }
             });
         } catch (err) {
             console.error("Error filtering drivers by role:", err);
         }
+    } else {
+        console.log("[Trip Paid] No drivers found in range.");
     }
 
     console.log(`[Trip Paid] Sent to ${matchedDrivers} drivers.`);
