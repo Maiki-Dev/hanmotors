@@ -1358,7 +1358,8 @@ router.post('/trip/:id/cancel', async (req, res) => {
       });
     } else {
         // If no driver assigned yet, we should also emit to remove it from available jobs
-        io.emit('jobCancelled', { tripId: req.params.id });
+        // Use to('drivers_room') to avoid sending to customers (prevent duplicate notifications)
+        io.to('drivers_room').to('admin_room').emit('jobCancelled', { tripId: req.params.id });
     }
 
     // Notify customer
