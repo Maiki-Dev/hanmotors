@@ -17,6 +17,13 @@ export const driverService = {
         const response = await api.post('/driver/register', data);
         return response.data;
     },
+    addCredit: async (id, amount) => {
+        const response = await api.post(`/driver/${id}/wallet/recharge`, { 
+            amount, 
+            method: 'Admin' 
+        });
+        return response.data;
+    },
     // Keep this if needed for specific status toggle, or just use updateDriver
     updateStatus: async (id, status) => {
         const response = await api.put(`/admin/driver/${id}`, { status });

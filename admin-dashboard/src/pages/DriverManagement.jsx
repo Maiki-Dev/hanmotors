@@ -5,7 +5,7 @@ import { Input } from "../components/ui/input";
 import { Label } from "../components/ui/label";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "../components/ui/table";
 import { Badge } from "../components/ui/badge";
-import { Plus, Search, Pencil, Trash2, MoreHorizontal, Eye, CheckCircle, User, Phone, Mail, Lock, Car } from 'lucide-react';
+import { Plus, Search, Pencil, Trash2, MoreHorizontal, Eye, CheckCircle, User, Phone, Mail, Lock, Car, Wallet } from 'lucide-react';
 import { driverService } from '../services/driverService';
 import { socket } from '../services/api';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "../components/ui/dialog";
@@ -28,6 +28,8 @@ const DriverManagement = () => {
   const [isAddOpen, setIsAddOpen] = useState(false);
   const [isDeleteOpen, setIsDeleteOpen] = useState(false);
   const [isDetailOpen, setIsDetailOpen] = useState(false);
+  const [isCreditOpen, setIsCreditOpen] = useState(false);
+  const [creditAmount, setCreditAmount] = useState('');
   const { toast } = useToast();
   const [formData, setFormData] = useState({  
     firstName: '', 
@@ -224,6 +226,52 @@ const DriverManagement = () => {
     }
   };
 
+  const handleCreditClick = (driver) => {
+    setSelectedDriver(driver);
+    setCreditAmount('');
+    setIsCreditOpen(true);
+  };
+
+  const handleAddCredit = async () => {
+    if (!creditAmount || isNaN(Number(creditAmount)) || Number(creditAmount) <= 0) {
+      toast({
+        title: "Анхааруулга",
+        description: "Зөв дүн оруулна уу.",
+        status: "warning"
+      });
+      return;
+    }
+
+    try {
+      const updatedWallet = await driverService.addCredit(selectedDriver._id || selectedDriver.id, Number(creditAmount));
+      
+      // Update local state
+      setDrivers(prev => prev.map(d => 
+        (d._id || d.id) === (selectedDriver._id || selectedDriver.id) 
+          ? { ...d, wallet: updatedWallet } 
+          : d
+      ));
+
+      // Also update selectedDriver if it matches
+      if (selectedDriver && ((selectedDriver._id || selectedDriver.id) === (selectedDriver._id || selectedDriver.id))) {
+          setSelectedDriver(prev => ({ ...prev, wallet: updatedWallet }));
+      }
+
+      setIsCreditOpen(false);
+      toast({
+        title: "Амжилттай",
+        description: "Данс амжилттай цэнэглэгдлээ.",
+        status: "success"
+      });
+    } catch (error) {
+      toast({
+        title: "Алдаа",
+        description: "Данс цэнэглэхэд алдаа гарлаа.",
+        status: "error"
+      });
+    }
+  };
+
   const getStatusBadge = (status, isOnline) => {
     if (isOnline) return <Badge className="bg-green-500 hover:bg-green-600">Online</Badge>;
     switch (status) {
@@ -300,6 +348,10 @@ const DriverManagement = () => {
                         <DropdownMenuSeparator />
                         <DropdownMenuItem onClick={() => navigator.clipboard.writeText(driver._id || driver.id)}>
                           ID хуулах
+                        </DropdownMenuItem>
+                        <DropdownMenuSeparator />
+                        <DropdownMenuItem onClick={() => handleCreditClick(driver)}>
+                          <Wallet className="mr-2 h-4 w-4" /> Данс цэнэглэх
                         </DropdownMenuItem>
                         <DropdownMenuSeparator />
                         <DropdownMenuItem onClick={() => handleEditClick(driver)}>
@@ -753,9 +805,23 @@ const DriverManagement = () => {
                  <div className="space-y-2 border rounded-md p-4 bg-muted/20">
                     <div className="flex justify-between items-center mb-2">
                        <h4 className="font-semibold text-sm text-muted-foreground uppercase">Данс & Төлбөр</h4>
-                       <Badge variant="outline" className="text-primary border-primary">
-                         {selectedDriver.wallet?.balance?.toLocaleString() || 0}₮
-                       </Badge>
+                       <div className="flex items-center gap-2">
+                         <Badge variant="outline" className="text-primary border-primary">
+                           {selectedDriver.wallet?.balance?.toLocaleString() || 0}₮
+                         </Badge>
+                         <Button 
+                           variant="ghost" 
+                           size="icon" 
+                           className="h-6 w-6" 
+                           onClick={() => {
+                             setCreditAmount('');
+                             setIsCreditOpen(true);
+                           }}
+                           title="Данс цэнэглэх"
+                         >
+                           <Plus className="h-4 w-4" />
+                         </Button>
+                       </div>
                     </div>
                     
                     <div className="space-y-2">
@@ -891,6 +957,34 @@ const DriverManagement = () => {
                   </Button>
                 )}
              </div>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Credit Top-up Dialog */}
+      <Dialog open={isCreditOpen} onOpenChange={setIsCreditOpen}>
+        <DialogContent className="sm:max-w-[425px]">
+          <DialogHeader>
+            <DialogTitle>Данс цэнэглэх</DialogTitle>
+            <DialogDescription>
+              {selectedDriver?.name} жолоочийн дансыг цэнэглэх
+            </DialogDescription>
+          </DialogHeader>
+          <div className="grid gap-4 py-4">
+            <div className="grid gap-2">
+              <Label htmlFor="amount">Дүн (₮)</Label>
+              <Input
+                id="amount"
+                type="number"
+                value={creditAmount}
+                onChange={(e) => setCreditAmount(e.target.value)}
+                placeholder="0"
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setIsCreditOpen(false)}>Болих</Button>
+            <Button onClick={handleAddCredit}>Цэнэглэх</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
