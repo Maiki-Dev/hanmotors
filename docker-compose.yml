@@ -33,6 +33,8 @@ services:
       - PORT=5000
       - NODE_ENV=production
       - NODE_OPTIONS=--max-old-space-size=460
+      - ONESIGNAL_APP_ID=${ONESIGNAL_APP_ID}
+      - ONESIGNAL_REST_API_KEY=${ONESIGNAL_REST_API_KEY}
     depends_on:
       - mongo
     networks:

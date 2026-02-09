@@ -18,7 +18,7 @@ const sendPushNotification = async (pushToken, title, body, data) => {
   
   try {
       await axios.post('https://onesignal.com/api/v1/notifications', {
-          app_id: "3b1bace3-c9a5-4ce5-9046-ad6606bdfd1b",
+          app_id: process.env.ONESIGNAL_APP_ID,
           include_player_ids: [pushToken],
           headings: { en: title },
           contents: { en: body },
@@ -26,7 +26,7 @@ const sendPushNotification = async (pushToken, title, body, data) => {
       }, {
           headers: {
               'Content-Type': 'application/json',
-              'Authorization': 'Basic os_v2_app_hmn2zy6juvgolecgvvtanpp5dp2fxqtumfaebrvbxzmemtcacdcjasm3eq26g2t3yuemucrawtvmiaip575kslcqiqvvtfevhszy2hy'
+              'Authorization': `Basic ${process.env.ONESIGNAL_REST_API_KEY}`
           }
       });
       console.log('OneSignal notification sent');
