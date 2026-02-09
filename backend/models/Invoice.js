@@ -8,8 +8,11 @@ const invoiceSchema = new mongoose.Schema({
   },
   driverId: {
     type: mongoose.Schema.Types.ObjectId,
-    ref: 'Driver',
-    required: true
+    ref: 'Driver'
+  },
+  customerId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Customer'
   },
   amount: {
     type: Number,

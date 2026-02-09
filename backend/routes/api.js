@@ -1886,29 +1886,48 @@ router.post('/driver/:id/wallet/recharge', async (req, res) => {
 
 router.post('/payment/qpay/create-invoice', async (req, res) => {
   try {
-    const { driverId, amount } = req.body;
+    const { driverId, customerId, amount } = req.body;
     
-    if (!driverId || !amount) {
-      return res.status(400).json({ message: 'Driver ID and amount are required' });
+    if ((!driverId && !customerId) || !amount) {
+      return res.status(400).json({ message: 'Driver ID or Customer ID and amount are required' });
     }
 
-    const driver = await Driver.findById(driverId);
-    if (!driver) return res.status(404).json({ message: 'Driver not found' });
+    let user;
+    let description;
+    let invoiceReceiverData = {};
+
+    if (driverId) {
+        user = await Driver.findById(driverId);
+        if (!user) return res.status(404).json({ message: 'Driver not found' });
+        description = `Данс цэнэглэлт - ${user.name}`;
+        invoiceReceiverData = {
+            name: user.name,
+            phone: user.phone,
+            email: user.email,
+            register: user.registerNumber
+        };
+    } else {
+        user = await Customer.findById(customerId);
+        if (!user) return res.status(404).json({ message: 'Customer not found' });
+        description = `Customer Wallet Topup - ${user.phone}`;
+        invoiceReceiverData = {
+            name: user.name || 'Customer',
+            phone: user.phone,
+            email: user.email || 'customer@hanmotors.mn',
+            register: '00000000'
+        };
+    }
 
     // Create Invoice in QPay
-    const invoiceData = await qpayService.createInvoice(amount, `Wallet Topup - ${driver.name}`, {
-        name: driver.name,
-        phone: driver.phone,
-        email: driver.email,
-        register: driver.registerNumber // Assuming this field exists or driver.licenseNumber
-    });
+    const invoiceData = await qpayService.createInvoice(amount, description, invoiceReceiverData);
     
-    // Save Invoice to DB to link invoice_id with driverId
+    // Save Invoice to DB
     const newInvoice = new Invoice({
       invoiceId: invoiceData.invoice_id,
-      driverId: driver._id,
+      driverId: driverId || undefined,
+      customerId: customerId || undefined,
       amount: amount,
-      description: `Wallet Topup - ${driver.name}`,
+      description: description,
       status: 'pending',
       qpayResponse: invoiceData
     });
@@ -1924,7 +1943,7 @@ router.post('/payment/qpay/create-invoice', async (req, res) => {
 
 router.post('/payment/qpay/check', async (req, res) => {
   try {
-    const { invoiceId, driverId } = req.body;
+    const { invoiceId, driverId, customerId } = req.body;
     
     if (!invoiceId) {
       return res.status(400).json({ message: 'Invoice ID is required' });
@@ -1935,8 +1954,13 @@ router.post('/payment/qpay/check', async (req, res) => {
     
     // If invoice is already marked paid in DB, return success immediately
     if (invoice && invoice.status === 'paid') {
-       const driver = await Driver.findById(invoice.driverId);
-       return res.json({ success: true, message: 'Already processed', wallet: driver ? driver.wallet : null });
+       if (invoice.driverId) {
+           const driver = await Driver.findById(invoice.driverId);
+           return res.json({ success: true, message: 'Already processed', wallet: driver ? driver.wallet : null });
+       } else if (invoice.customerId) {
+           const customer = await Customer.findById(invoice.customerId);
+           return res.json({ success: true, message: 'Already processed', wallet: customer ? { balance: customer.wallet, transactions: customer.transactions } : null });
+       }
     }
 
     // Verify with QPay API
@@ -1957,68 +1981,106 @@ router.post('/payment/qpay/check', async (req, res) => {
     }
 
     if (isPaid) {
-       // If local invoice doesn't exist (legacy?), try to use passed driverId
+       // Determine User Type
        const targetDriverId = invoice ? invoice.driverId : driverId;
-       
-       if (!targetDriverId) {
-         return res.status(400).json({ message: 'Driver ID unknown for this invoice' });
-       }
+       const targetCustomerId = invoice ? invoice.customerId : customerId;
 
-       const driver = await Driver.findById(targetDriverId);
-       if (!driver) return res.status(404).json({ message: 'Driver not found' });
+       if (targetDriverId) {
+           // --- DRIVER LOGIC ---
+           const driver = await Driver.findById(targetDriverId);
+           if (!driver) return res.status(404).json({ message: 'Driver not found' });
 
-       // Double check transaction history just in case
-       const alreadyProcessed = driver.wallet.transactions.some(t => t.description.includes(invoiceId));
-       
-       if (alreadyProcessed) {
-         // Update local invoice status if needed
-         if (invoice && invoice.status !== 'paid') {
-            invoice.status = 'paid';
-            invoice.paidAt = new Date();
-            await invoice.save();
-         }
-         return res.json({ success: true, message: 'Already processed', wallet: driver.wallet });
-       }
+           const alreadyProcessed = driver.wallet.transactions.some(t => t.description.includes(invoiceId));
+           
+           if (!alreadyProcessed) {
+               driver.wallet.balance += Number(paidAmount);
+               driver.wallet.transactions.unshift({
+                  type: 'credit',
+                  amount: Number(paidAmount),
+                  description: `QPay Topup (${invoiceId})`,
+                  date: new Date()
+               });
+               await driver.save();
+           }
 
-       // Credit Wallet
-       driver.wallet.balance += Number(paidAmount);
-       driver.wallet.transactions.unshift({
-          type: 'credit',
-          amount: Number(paidAmount),
-          description: `QPay Topup (${invoiceId})`,
-          date: new Date()
-       });
+           // Update Invoice
+           if (invoice) {
+             invoice.status = 'paid';
+             invoice.paidAt = new Date();
+             invoice.qpayResponse = checkResult;
+             await invoice.save();
+           } else {
+             await Invoice.create({
+               invoiceId,
+               driverId: driver._id,
+               amount: paidAmount,
+               status: 'paid',
+               paidAt: new Date(),
+               description: 'Restored from Check',
+               qpayResponse: checkResult
+             });
+           }
 
-       await driver.save();
-       
-       // Update Invoice Record
-       if (invoice) {
-         invoice.status = 'paid';
-         invoice.paidAt = new Date();
-         invoice.qpayResponse = checkResult;
-         await invoice.save();
+           // Notify Socket
+           const io = req.app.get('io');
+           io.to(`driver_${driver._id}`).emit('walletUpdated', {
+              driverId: driver._id,
+              balance: driver.wallet.balance,
+              transactions: driver.wallet.transactions
+           });
+
+           return res.json({ success: true, wallet: driver.wallet });
+
+       } else if (targetCustomerId) {
+           // --- CUSTOMER LOGIC ---
+           const customer = await Customer.findById(targetCustomerId);
+           if (!customer) return res.status(404).json({ message: 'Customer not found' });
+
+           // Check duplicates (assuming transactions field exists now)
+           const alreadyProcessed = customer.transactions && customer.transactions.some(t => t.description.includes(invoiceId));
+
+           if (!alreadyProcessed) {
+               customer.wallet = (customer.wallet || 0) + Number(paidAmount);
+               if (!customer.transactions) customer.transactions = [];
+               customer.transactions.unshift({
+                   type: 'credit',
+                   amount: Number(paidAmount),
+                   description: `QPay Topup (${invoiceId})`,
+                   date: new Date()
+               });
+               await customer.save();
+           }
+
+           // Update Invoice
+           if (invoice) {
+               invoice.status = 'paid';
+               invoice.paidAt = new Date();
+               invoice.qpayResponse = checkResult;
+               await invoice.save();
+           } else {
+               await Invoice.create({
+                   invoiceId,
+                   customerId: customer._id,
+                   amount: paidAmount,
+                   status: 'paid',
+                   paidAt: new Date(),
+                   description: 'Restored from Check',
+                   qpayResponse: checkResult
+               });
+           }
+
+           // Notify Socket (Customer)
+           const io = req.app.get('io');
+           io.to(`customer_${customer._id}`).emit('walletUpdated', {
+               balance: customer.wallet,
+               transactions: customer.transactions
+           });
+
+           return res.json({ success: true, wallet: { balance: customer.wallet, transactions: customer.transactions } });
        } else {
-         // Create record for legacy/direct calls if missing
-         await Invoice.create({
-           invoiceId,
-           driverId: driver._id,
-           amount: paidAmount,
-           status: 'paid',
-           paidAt: new Date(),
-           description: 'Restored from Check',
-           qpayResponse: checkResult
-         });
+           return res.status(400).json({ message: 'User ID unknown for this invoice' });
        }
-       
-       // Notify via socket
-       const io = req.app.get('io');
-       io.emit('walletUpdated', {
-          driverId: driver._id,
-          balance: driver.wallet.balance,
-          transactions: driver.wallet.transactions
-       });
 
-       return res.json({ success: true, wallet: driver.wallet });
     } else {
        return res.json({ success: false, message: 'Payment not found or not paid yet' });
     }
@@ -2060,36 +2122,69 @@ router.get('/payment/qpay/callback', async (req, res) => {
                     }
                     
                     if (isPaid) {
-                        // 3. Credit Driver
-                        const driver = await Driver.findById(invoice.driverId);
-                        if (driver) {
-                             // Check for duplicates
-                             const alreadyProcessed = driver.wallet.transactions.some(t => t.description.includes(invoiceId));
-                             if (!alreadyProcessed) {
-                                 driver.wallet.balance += Number(paidAmount);
-                                 driver.wallet.transactions.unshift({
-                                    type: 'credit',
-                                    amount: Number(paidAmount),
-                                    description: `QPay Topup (${invoiceId})`,
-                                    date: new Date()
-                                 });
-                                 await driver.save();
-                                 console.log(`Driver ${driver.name} credited ${paidAmount} via Callback.`);
+                        // 3. Credit User (Driver or Customer)
+                        if (invoice.driverId) {
+                            const driver = await Driver.findById(invoice.driverId);
+                            if (driver) {
+                                 // Check for duplicates
+                                 const alreadyProcessed = driver.wallet.transactions.some(t => t.description.includes(invoiceId));
+                                 if (!alreadyProcessed) {
+                                     driver.wallet.balance += Number(paidAmount);
+                                     driver.wallet.transactions.unshift({
+                                        type: 'credit',
+                                        amount: Number(paidAmount),
+                                        description: `QPay Topup (${invoiceId})`,
+                                        date: new Date()
+                                     });
+                                     await driver.save();
+                                     console.log(`Driver ${driver.name} credited ${paidAmount} via Callback.`);
+                                     
+                                     // Notify Socket
+                                     const io = req.app.get('io');
+                                     io.to(`driver_${driver._id}`).emit('walletUpdated', {
+                                        driverId: driver._id,
+                                        balance: driver.wallet.balance,
+                                        transactions: driver.wallet.transactions
+                                     });
+                                 }
                                  
-                                 // Notify Socket
-                                 const io = req.app.get('io');
-                                 io.emit('walletUpdated', {
-                                    driverId: driver._id,
-                                    balance: driver.wallet.balance,
-                                    transactions: driver.wallet.transactions
-                                 });
-                             }
-                             
-                             // 4. Update Invoice Status
-                             invoice.status = 'paid';
-                             invoice.paidAt = new Date();
-                             invoice.qpayResponse = checkResult;
-                             await invoice.save();
+                                 // 4. Update Invoice Status
+                                 invoice.status = 'paid';
+                                 invoice.paidAt = new Date();
+                                 invoice.qpayResponse = checkResult;
+                                 await invoice.save();
+                            }
+                        } else if (invoice.customerId) {
+                            const customer = await Customer.findById(invoice.customerId);
+                            if (customer) {
+                                 // Check for duplicates
+                                 const alreadyProcessed = customer.transactions && customer.transactions.some(t => t.description.includes(invoiceId));
+                                 if (!alreadyProcessed) {
+                                     customer.wallet = (customer.wallet || 0) + Number(paidAmount);
+                                     if (!customer.transactions) customer.transactions = [];
+                                     customer.transactions.unshift({
+                                        type: 'credit',
+                                        amount: Number(paidAmount),
+                                        description: `QPay Topup (${invoiceId})`,
+                                        date: new Date()
+                                     });
+                                     await customer.save();
+                                     console.log(`Customer ${customer.phone} credited ${paidAmount} via Callback.`);
+                                     
+                                     // Notify Socket
+                                     const io = req.app.get('io');
+                                     io.to(`customer_${customer._id}`).emit('walletUpdated', {
+                                        balance: customer.wallet,
+                                        transactions: customer.transactions
+                                     });
+                                 }
+                                 
+                                 // 4. Update Invoice Status
+                                 invoice.status = 'paid';
+                                 invoice.paidAt = new Date();
+                                 invoice.qpayResponse = checkResult;
+                                 await invoice.save();
+                            }
                         }
                     }
                 }

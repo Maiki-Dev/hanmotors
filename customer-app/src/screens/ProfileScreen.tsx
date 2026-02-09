@@ -1,11 +1,13 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Image, Alert, ActivityIndicator, ScrollView, Modal, TextInput, Dimensions } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Image, Alert, ActivityIndicator, ScrollView, Modal, TextInput, Dimensions, Linking } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { theme } from '../constants/theme';
 import { useDispatch, useSelector } from 'react-redux';
 import { logout } from '../store/slices/authSlice';
 import { RootState } from '../store';
 import { customerService } from '../services/api';
+import { API_URL } from '../config';
+import { io } from 'socket.io-client';
 import { LogOut, User, Shield, HelpCircle, Settings, Star, ChevronRight, Edit3, Wallet, X } from 'lucide-react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { BlurView } from 'expo-blur';
@@ -24,8 +26,32 @@ const ProfileScreen = () => {
   const [editName, setEditName] = useState('');
   const [editEmail, setEditEmail] = useState('');
 
+  // QPay State
+  const [qpayVisible, setQpayVisible] = useState(false);
+  const [qpayInvoice, setQpayInvoice] = useState<any>(null);
+  const [checkingPayment, setCheckingPayment] = useState(false);
+
   useEffect(() => {
     fetchProfile();
+    
+    let socket: any;
+    if (user?._id) {
+        socket = io(API_URL);
+        socket.emit('customerJoin', user._id);
+
+        // Listen for wallet updates
+        socket.on('walletUpdated', (data: any) => {
+            setProfile((prev: any) => ({
+                ...prev,
+                wallet: data.balance,
+                transactions: data.transactions
+            }));
+        });
+    }
+
+    return () => {
+        if (socket) socket.disconnect();
+    };
   }, [user]);
 
   const fetchProfile = async () => {
@@ -72,15 +98,62 @@ const ProfileScreen = () => {
       return;
     }
 
+    setLoading(true);
     try {
-      await customerService.topUpWallet(user._id, Number(topUpAmount));
-      Alert.alert('Амжилттай', 'Таны хэтэвч амжилттай цэнэглэгдлээ');
-      setModalVisible(false);
-      setTopUpAmount('');
-      fetchProfile();
+      const response = await fetch(`${API_URL}/api/payment/qpay/create-invoice`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ customerId: user._id, amount: Number(topUpAmount) })
+      });
+      
+      const data = await response.json();
+
+      if (response.ok && (data.qr_image || data.qPay_shortUrl)) {
+        setQpayInvoice(data);
+        setModalVisible(false);
+        setQpayVisible(true);
+        setTopUpAmount('');
+      } else {
+        const errorMessage = data.details 
+          ? `${data.message}\n\n${typeof data.details === 'object' ? JSON.stringify(data.details) : data.details}`
+          : (data.message || 'QPay нэхэмжлэх үүсгэхэд алдаа гарлаа.');
+        Alert.alert('Алдаа', errorMessage);
+      }
     } catch (error: any) {
-      Alert.alert('Алдаа', 'Хэтэвч цэнэглэхэд алдаа гарлаа: ' + (error.response?.data?.message || error.message));
-      console.log('TopUp Error:', error.response?.status, error.response?.data);
+      Alert.alert('Алдаа', 'Сүлжээний алдаа: ' + error.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const checkPaymentStatus = async () => {
+    if (!qpayInvoice) return;
+    
+    setCheckingPayment(true);
+    try {
+        const response = await fetch(`${API_URL}/api/payment/qpay/check`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ 
+                invoiceId: qpayInvoice.invoice_id,
+                customerId: user?._id 
+            })
+        });
+        
+        const data = await response.json();
+        
+        if (data.success) {
+            Alert.alert('Амжилттай', 'Төлбөр төлөгдлөө!');
+            setQpayVisible(false);
+            setQpayInvoice(null);
+            fetchProfile(); 
+        } else {
+            Alert.alert('Мэдээлэл', 'Төлбөр хараахан төлөгдөөгүй байна.');
+        }
+    } catch (error) {
+        Alert.alert('Алдаа', 'Төлбөр шалгахад алдаа гарлаа');
+    } finally {
+        setCheckingPayment(false);
     }
   };
 
@@ -306,6 +379,83 @@ const ProfileScreen = () => {
                 <Text style={styles.confirmButtonText}>Цэнэглэх</Text>
               </LinearGradient>
             </TouchableOpacity>
+          </BlurView>
+        </BlurView>
+      </Modal>
+      <Modal
+        animationType="fade"
+        transparent={true}
+        visible={qpayVisible}
+        onRequestClose={() => setQpayVisible(false)}
+      >
+        <BlurView intensity={20} tint="dark" style={styles.modalContainer}>
+          <BlurView intensity={90} tint="dark" style={[styles.modalContent, { padding: 0 }]}>
+             <ScrollView contentContainerStyle={{ padding: 24, alignItems: 'center', width: '100%' }}>
+                <TouchableOpacity 
+                style={[styles.closeButton, { top: 16, right: 16, zIndex: 10 }]} 
+                onPress={() => setQpayVisible(false)}
+                >
+                <X size={20} color={theme.colors.textSecondary} />
+                </TouchableOpacity>
+                
+                <Text style={styles.modalTitle}>QPay Төлбөр</Text>
+                
+                <View style={styles.qrContainer}>
+                    {qpayInvoice?.qr_image ? (
+                        <Image 
+                            source={{ uri: `data:image/png;base64,${qpayInvoice.qr_image}` }} 
+                            style={styles.qrImage}
+                        />
+                    ) : (
+                        <ActivityIndicator color={theme.colors.primary} />
+                    )}
+                </View>
+                
+                <Text style={styles.qrInstruction}>
+                    Банкны аппликейшнээр уншуулж төлнө үү.
+                </Text>
+
+                {qpayInvoice?.urls && (
+                <View style={styles.bankListContainer}>
+                    <Text style={styles.bankListTitle}>Банкны апп сонгох:</Text>
+                    <ScrollView 
+                        horizontal 
+                        showsHorizontalScrollIndicator={false} 
+                        contentContainerStyle={styles.bankList}
+                    >
+                    {qpayInvoice.urls.map((bank: any, index: number) => (
+                        <TouchableOpacity 
+                        key={index} 
+                        style={styles.bankItem}
+                        onPress={() => Linking.openURL(bank.link)}
+                        >
+                        <Image source={{ uri: bank.logo }} style={styles.bankLogo} />
+                        <Text style={styles.bankName} numberOfLines={1}>{bank.name}</Text>
+                        </TouchableOpacity>
+                    ))}
+                    </ScrollView>
+                </View>
+                )}
+
+                <TouchableOpacity 
+                style={styles.confirmButton}
+                onPress={checkPaymentStatus}
+                disabled={checkingPayment}
+                >
+                <LinearGradient
+                    colors={[theme.colors.primary, '#f5ba31']}
+                    start={{ x: 0, y: 0 }}
+                    end={{ x: 1, y: 0 }}
+                    style={styles.gradientButton}
+                >
+                    {checkingPayment ? (
+                        <ActivityIndicator color="black" />
+                    ) : (
+                        <Text style={styles.confirmButtonText}>Төлбөр шалгах</Text>
+                    )}
+                </LinearGradient>
+                </TouchableOpacity>
+            </ScrollView>
           </BlurView>
         </BlurView>
       </Modal>
@@ -548,6 +698,58 @@ const styles = StyleSheet.create({
     color: theme.colors.black,
     fontSize: 16,
     fontWeight: 'bold',
+  },
+  qrContainer: {
+    width: 200,
+    height: 200,
+    backgroundColor: 'white',
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderRadius: 10,
+    marginBottom: 20,
+    overflow: 'hidden',
+  },
+  qrImage: {
+    width: '100%',
+    height: '100%',
+    resizeMode: 'contain',
+  },
+  qrInstruction: {
+    textAlign: 'center',
+    color: theme.colors.textSecondary,
+    marginBottom: 20,
+    fontSize: 14,
+  },
+  bankListContainer: {
+    width: '100%',
+    marginBottom: 20,
+  },
+  bankListTitle: {
+    fontSize: 14,
+    color: theme.colors.textSecondary,
+    fontWeight: '600',
+    marginBottom: 10,
+  },
+  bankList: {
+    paddingBottom: 10,
+  },
+  bankItem: {
+    alignItems: 'center',
+    marginRight: 15,
+    width: 60,
+  },
+  bankLogo: {
+    width: 48,
+    height: 48,
+    borderRadius: 12,
+    marginBottom: 5,
+    resizeMode: 'contain',
+    backgroundColor: 'white',
+  },
+  bankName: {
+    fontSize: 10,
+    textAlign: 'center',
+    color: theme.colors.textSecondary,
   },
 });
 

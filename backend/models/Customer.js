@@ -9,6 +9,12 @@ const CustomerSchema = new mongoose.Schema({
   pushToken: { type: String },
   rating: { type: Number, default: 5.0 },
   wallet: { type: Number, default: 0 },
+  transactions: [{
+    type: { type: String, enum: ['credit', 'debit'] },
+    amount: Number,
+    description: String,
+    date: { type: Date, default: Date.now }
+  }],
   createdAt: { type: Date, default: Date.now }
 });
 
