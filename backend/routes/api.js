@@ -9,32 +9,29 @@ const AdditionalService = require('../models/AdditionalService');
 const Invoice = require('../models/Invoice');
 const multer = require('multer');
 const { uploadToCloudinary } = require('../utils/cloudStorage');
-const { Expo } = require('expo-server-sdk');
-const expo = new Expo();
+const axios = require('axios');
 const qpayService = require('../utils/qpay');
 
-// Helper: Send Push Notification
+// Helper: Send Push Notification (OneSignal Only)
 const sendPushNotification = async (pushToken, title, body, data) => {
-  if (!Expo.isExpoPushToken(pushToken)) {
-    console.error(`Push token ${pushToken} is not a valid Expo push token`);
-    return;
-  }
+  if (!pushToken) return;
   
-  const messages = [{
-    to: pushToken,
-    sound: 'default',
-    title: title,
-    body: body,
-    data: data,
-    priority: 'high',
-    channelId: 'default',
-  }];
-
   try {
-    const ticketChunk = await expo.sendPushNotificationsAsync(messages);
-    console.log('Push notification sent:', ticketChunk);
+      await axios.post('https://onesignal.com/api/v1/notifications', {
+          app_id: "3b1bace3-c9a5-4ce5-9046-ad6606bdfd1b",
+          include_player_ids: [pushToken],
+          headings: { en: title },
+          contents: { en: body },
+          data: data
+      }, {
+          headers: {
+              'Content-Type': 'application/json',
+              'Authorization': 'Basic os_v2_app_hmn2zy6juvgolecgvvtanpp5dp2fxqtumfaebrvbxzmemtcacdcjasm3eq26g2t3yuemucrawtvmiaip575kslcqiqvvtfevhszy2hy'
+          }
+      });
+      console.log('OneSignal notification sent');
   } catch (error) {
-    console.error('Error sending push notification:', error);
+      console.error('Error sending OneSignal notification:', error.response?.data || error.message);
   }
 };
 

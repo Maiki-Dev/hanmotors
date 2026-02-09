@@ -22,8 +22,8 @@ const NotificationManager = ({ driverId }) => {
     if (!driverId) return;
 
     // --- OneSignal Initialization ---
-    // TODO: Replace with your actual OneSignal App ID
-    OneSignal.initialize("YOUR_ONESIGNAL_APP_ID");
+    // App ID from user
+    OneSignal.initialize("3b1bace3-c9a5-4ce5-9046-ad6606bdfd1b");
     
     // Optional: Enable debug logs
     OneSignal.Debug.setLogLevel(LogLevel.VERBOSE);

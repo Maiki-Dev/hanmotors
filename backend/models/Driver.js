@@ -47,7 +47,7 @@ const DriverSchema = new mongoose.Schema({
     requestSound: { type: Boolean, default: true },
     pushNotifications: { type: Boolean, default: true }
   },
-  pushToken: { type: String }, // Expo Push Token
+  pushToken: { type: String }, // OneSignal Player ID
   rating: { type: Number, default: 5.0 },
   ratingCount: { type: Number, default: 0 },
   earnings: {
