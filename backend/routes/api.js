@@ -22,7 +22,10 @@ const sendPushNotification = async (pushToken, title, body, data) => {
           include_player_ids: [pushToken],
           headings: { en: title },
           contents: { en: body },
-          data: data
+          data: data,
+          priority: 10,
+          android_channel_id: process.env.ANDROID_CHANNEL_ID || "default", // Optional
+          android_visibility: 1, // Public visibility
       }, {
           headers: {
               'Content-Type': 'application/json',
@@ -1243,6 +1246,19 @@ router.post('/trip/:id/confirm-payment', async (req, res) => {
     // Always notify admin
     io.to('admin_room').emit('newJobRequest', trip);
     
+    res.json(trip);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Get Single Trip
+router.get('/trip/:id', async (req, res) => {
+  try {
+    const trip = await Trip.findById(req.params.id)
+      .populate('driver', 'name phone')
+      .populate('customer', 'name phone');
+    if (!trip) return res.status(404).json({ message: 'Trip not found' });
     res.json(trip);
   } catch (err) {
     res.status(500).json({ error: err.message });

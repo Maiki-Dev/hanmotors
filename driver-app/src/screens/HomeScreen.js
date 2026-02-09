@@ -201,6 +201,34 @@ export default function HomeScreen({ navigation, route }) {
 
   }, [driverId, isServiceModalVisible]);
 
+  // Handle Incoming Trip from Notification (Push)
+  useEffect(() => {
+    if (route.params?.incomingTripId) {
+      const tripId = route.params.incomingTripId;
+      console.log('Incoming trip from notification:', tripId);
+      
+      const fetchIncomingTrip = async () => {
+        try {
+            const response = await fetch(`${API_URL}/api/trip/${tripId}`);
+            if (response.ok) {
+                const trip = await response.json();
+                // If trip is pending and not assigned or assigned to me (but pending accept)
+                if (trip && trip.status === 'pending') {
+                    setIncomingRequest(trip);
+                }
+            }
+        } catch (error) {
+            console.error('Error fetching incoming trip:', error);
+        }
+      };
+      
+      fetchIncomingTrip();
+      
+      // Clear params
+      navigation.setParams({ incomingTripId: null });
+    }
+  }, [route.params?.incomingTripId]);
+
   useEffect(() => {
     isOnlineRef.current = isOnline;
   }, [isOnline]);

@@ -21,7 +21,11 @@
         "NSLocationAlwaysUsageDescription": "This app needs access to your location to track your trip and calculate fares even when the app is in the background.",
         "NSLocationUsageDescription": "This app needs access to your location to show available jobs nearby.",
         "NSPhotoLibraryUsageDescription": "This app needs access to your photo library to upload driver license, vehicle registration, and insurance documents.",
+        "ITSAppUsesNonExemptEncryption": false,
         "UIBackgroundModes": [
+          "location",
+          "fetch",
+          "remote-notification",
           "location",
           "fetch",
           "remote-notification"

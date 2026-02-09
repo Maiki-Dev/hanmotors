@@ -3,6 +3,7 @@ import { Platform, Alert } from 'react-native';
 import * as Notifications from 'expo-notifications';
 import { LogLevel, OneSignal } from 'react-native-onesignal'; 
 import { io } from 'socket.io-client';
+import { useNavigation } from '@react-navigation/native';
 import { API_URL } from '../config';
 
 // Configure local notifications (kept for Socket events)
@@ -17,6 +18,7 @@ Notifications.setNotificationHandler({
 
 const NotificationManager = ({ driverId }) => {
   const socketRef = useRef(null);
+  const navigation = useNavigation();
 
   useEffect(() => {
     if (!driverId) return;
@@ -49,7 +51,20 @@ const NotificationManager = ({ driverId }) => {
       sendTokenToBackend(currentId);
     }
     
+    // Handle Notification Click
+    const handleNotificationClick = (event) => {
+      console.log("OneSignal Notification Clicked:", event);
+      const data = event.notification.additionalData;
+      if (data && data.tripId) {
+        // Navigate to Home with incoming trip param
+        navigation.navigate('Main', { 
+          screen: 'HomeTab', 
+          params: { incomingTripId: data.tripId } 
+        });
+      }
+    };
 
+    OneSignal.Notifications.addEventListener('click', handleNotificationClick);
     
     // Login user in OneSignal (Optional, but good for tracking)
     OneSignal.login(driverId);
@@ -58,6 +73,7 @@ const NotificationManager = ({ driverId }) => {
       // Cleanup
       // Note: OneSignal listeners might not have a simple remove in some versions, 
       // but usually we can ignore or use removeEventListener if available.
+       OneSignal.Notifications.removeEventListener('click', handleNotificationClick);
     };
   }, [driverId]);
 
