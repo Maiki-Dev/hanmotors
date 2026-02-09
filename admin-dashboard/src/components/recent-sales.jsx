@@ -26,10 +26,10 @@ export function RecentSales({ data = [] }) {
 
   return (
     <div className="space-y-8">
-      {recentTransactions.map((tx) => (
-        <div className="flex items-center" key={tx.id}>
+      {recentTransactions.map((tx, index) => (
+        <div className="flex items-center" key={tx.id || tx._id || index}>
             <Avatar className="h-9 w-9">
-            <AvatarImage src={`/avatars/${(tx.driverId ? tx.driverId.charCodeAt(0) % 5 : 0) + 1}.png`} alt="Avatar" />
+            <AvatarImage src={`https://api.dicebear.com/7.x/avataaars/svg?seed=${tx.driver}`} alt="Avatar" />
             <AvatarFallback>{getInitials(tx.driver)}</AvatarFallback>
             </Avatar>
             <div className="ml-4 space-y-1">

@@ -503,11 +503,6 @@ const DriverManagement = () => {
             <DialogTitle>Жолоочийн мэдээлэл засах</DialogTitle>
           </DialogHeader>
           <div className="flex-1 overflow-y-auto pr-2">
-            {error && (
-              <div className="bg-destructive/15 text-destructive text-sm p-3 rounded-md mb-4">
-                {error}
-              </div>
-            )}
             <div className="grid gap-4 py-4">
               <div className="grid grid-cols-2 gap-4">
               <div className="grid gap-2">
@@ -689,11 +684,6 @@ const DriverManagement = () => {
               Энэ үйлдлийг буцаах боломжгүй. {selectedDriver?.name} жолоочийг системээс бүрмөсөн устгах болно.
             </DialogDescription>
           </DialogHeader>
-          {error && (
-            <div className="bg-destructive/15 text-destructive text-sm p-3 rounded-md mb-4">
-              {error}
-            </div>
-          )}
           <DialogFooter>
             <Button variant="outline" onClick={() => setIsDeleteOpen(false)}>Болих</Button>
             <Button variant="destructive" onClick={handleConfirmDelete}>Устгах</Button>
@@ -709,11 +699,6 @@ const DriverManagement = () => {
           </DialogHeader>
           
           <div className="flex-1 overflow-y-auto pr-2">
-            {error && (
-              <div className="bg-destructive/15 text-destructive text-sm p-3 rounded-md mb-4">
-                {error}
-              </div>
-            )}
 
             {selectedDriver && (
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6 py-4">
