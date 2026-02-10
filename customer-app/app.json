@@ -50,6 +50,12 @@
       }
     },
     "plugins": [
+      [
+        "onesignal-expo-plugin",
+        {
+          "mode": "development"
+        }
+      ],
       "expo-notifications",
       [
         "expo-location",

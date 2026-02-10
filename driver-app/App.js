@@ -33,6 +33,7 @@ import NotificationManager from './src/components/NotificationManager';
 
 // Ignore specific warnings
 LogBox.ignoreLogs([
+  'Failed to initialize reCAPTCHA Enterprise config',
   'expo-notifications: Android Push notifications',
   'Calling getPermissionsAsync() on Android is deprecated'
 ]);

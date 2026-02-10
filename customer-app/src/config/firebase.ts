@@ -1,5 +1,7 @@
 import { initializeApp, getApps, getApp } from "firebase/app";
-import { getAuth, PhoneAuthProvider, signInWithCredential } from "firebase/auth";
+// @ts-ignore
+import { initializeAuth, getReactNativePersistence, PhoneAuthProvider, signInWithCredential, getAuth, Auth } from "firebase/auth";
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { 
   FIREBASE_API_KEY,
   FIREBASE_AUTH_DOMAIN,
@@ -19,12 +21,16 @@ const firebaseConfig = {
 };
 
 let app;
+let auth: Auth;
+
 if (getApps().length === 0) {
   app = initializeApp(firebaseConfig);
+  auth = initializeAuth(app, {
+    persistence: getReactNativePersistence(AsyncStorage)
+  });
 } else {
   app = getApp();
+  auth = getAuth(app);
 }
-
-const auth = getAuth(app);
 
 export { auth, PhoneAuthProvider, signInWithCredential, firebaseConfig };
