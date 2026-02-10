@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { View, Text, StyleSheet, Switch, TouchableOpacity, Dimensions, Alert, Platform, Modal, Image } from 'react-native';
+import { View, Text, StyleSheet, Switch, TouchableOpacity, Dimensions, Alert, Platform, Modal, Image, AppState } from 'react-native';
 import MapView, { Marker, PROVIDER_GOOGLE } from 'react-native-maps';
 import { io } from 'socket.io-client';
 import * as Location from 'expo-location';
@@ -414,6 +414,32 @@ export default function HomeScreen({ navigation, route }) {
       }
     };
   }, []);
+
+  // Handle AppState changes to resync socket when returning to foreground
+  useEffect(() => {
+    const handleAppStateChange = (nextAppState) => {
+      if (nextAppState === 'active') {
+        // console.log('App returned to foreground!');
+        if (socketRef.current && socketRef.current.disconnected) {
+            socketRef.current.connect();
+        } else if (socketRef.current && socketRef.current.connected) {
+            // Re-sync if already connected but maybe idle
+            if (driverId) {
+                socketRef.current.emit('driverJoin', driverId);
+                if (isOnlineRef.current) {
+                    socketRef.current.emit('driverStatusUpdate', { driverId, isOnline: true });
+                }
+            }
+        }
+      }
+    };
+
+    const subscription = AppState.addEventListener('change', handleAppStateChange);
+
+    return () => {
+      subscription.remove();
+    };
+  }, [driverId]);
 
   useEffect(() => {
     socketRef.current = io(API_URL, {

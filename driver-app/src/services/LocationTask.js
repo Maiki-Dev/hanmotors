@@ -33,8 +33,28 @@ TaskManager.defineTask(LOCATION_TASK_NAME, async ({ data, error }) => {
            socket = io(API_URL, {
              transports: ['websocket'],
              forceNew: true,
+             reconnection: true,
+             reconnectionAttempts: 5,
+           });
+           
+           // Ensure we join properly upon connection
+           socket.on('connect', () => {
+               // console.log('Background socket connected');
+               socket.emit('driverJoin', driverId);
+               socket.emit('driverStatusUpdate', { driverId, isOnline: true });
            });
         }
+        
+        // If socket is already connected but we haven't joined (rare case if task persists), 
+        // we can re-emit join just in case, or trust the connect handler.
+        // Better: Always ensure we are joined/online with every heartbeat if possible, 
+        // but excessive emits are bad. 
+        // Let's just emit location, which implicitly marks online in backend memory.
+        
+        // However, to fix the "disappearing" issue caused by foreground disconnect:
+        // We should explicitly send status update occasionally or rely on location update.
+        // The backend code: driverLocationUpdated -> sets driverStatus[id] = true. 
+        // So location update is enough.
 
         const driverInfo = driverInfoStr ? JSON.parse(driverInfoStr) : {};
         const services = servicesStr ? JSON.parse(servicesStr) : {};
