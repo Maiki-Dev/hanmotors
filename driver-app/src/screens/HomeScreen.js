@@ -918,8 +918,8 @@ export default function HomeScreen({ navigation, route }) {
              
              <View style={styles.primeStatsRow}>
                 <View style={styles.primeStatItem}>
-                   <Text style={styles.primeStatLabel}>Орлого</Text>
-                   <Text style={styles.primeStatValue}>{stats.today?.earnings?.toLocaleString() || 0}₮</Text>
+                   <Text style={styles.primeStatLabel}>Нийт цэнэглэлт</Text>
+                   <Text style={styles.primeStatValue}>{stats.totalTopUp?.toLocaleString() || 0}₮</Text>
                 </View>
                 <View style={styles.primeStatItem}>
                    <Text style={styles.primeStatLabel}>Дуудлага</Text>

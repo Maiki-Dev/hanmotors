@@ -396,7 +396,8 @@ router.get('/driver/:id/stats', async (req, res) => {
     return res.json({
       today: { trips: 5, earnings: 125000 },
       month: { trips: 45, earnings: 1500000 },
-      total: { trips: 120, earnings: 3500000 }
+      total: { trips: 120, earnings: 3500000 },
+      totalTopUp: 500000
     });
   }
 
@@ -409,6 +410,15 @@ router.get('/driver/:id/stats', async (req, res) => {
     
     // Start of Month
     const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+
+    // Calculate Total Top-up (Credit transactions)
+    const driver = await Driver.findById(driverId).select('wallet');
+    let totalTopUp = 0;
+    if (driver && driver.wallet && driver.wallet.transactions) {
+      totalTopUp = driver.wallet.transactions
+        .filter(t => t.type === 'credit')
+        .reduce((sum, t) => sum + (t.amount || 0), 0);
+    }
 
     // Aggregate Stats
     const stats = await Trip.aggregate([
@@ -451,13 +461,15 @@ router.get('/driver/:id/stats', async (req, res) => {
       res.json({
         today: { trips: stats[0].todayTrips, earnings: stats[0].todayEarnings },
         month: { trips: stats[0].monthTrips, earnings: stats[0].monthEarnings },
-        total: { trips: stats[0].totalTrips, earnings: stats[0].totalEarnings }
+        total: { trips: stats[0].totalTrips, earnings: stats[0].totalEarnings },
+        totalTopUp
       });
     } else {
       res.json({
         today: { trips: 0, earnings: 0 },
         month: { trips: 0, earnings: 0 },
-        total: { trips: 0, earnings: 0 }
+        total: { trips: 0, earnings: 0 },
+        totalTopUp
       });
     }
   } catch (err) {
