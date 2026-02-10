@@ -24,6 +24,8 @@ const sendPushNotification = async (pushToken, title, body, data) => {
           contents: { en: body },
           data: data,
           priority: 10,
+          content_available: true, // Wake up iOS app in background
+          mutable_content: true, // Allow media/modifications
           android_channel_id: process.env.ANDROID_CHANNEL_ID || "default", // Optional
           android_visibility: 1, // Public visibility
           ios_sound: "default",
@@ -1174,6 +1176,7 @@ router.post('/trip/request', async (req, res) => {
 
                 if (trip.serviceType === 'Tow' || trip.serviceType === 'sos' || trip.serviceType === 'asaalt') {
                     isCompatible = (vehicleType === 'Tow' || vehicleType === 'SOS' || vehicleType === 'sos' || role === 'tow');
+                    if (!isCompatible) console.log(`Mismatch: Trip is ${trip.serviceType}, Driver is ${vehicleType}/${role}`);
                 } else if (trip.serviceType === 'delivery') {
                     isCompatible = (vehicleType === 'Cargo' || vehicleType === 'Delivery' || role === 'delivery');
                 } else {
