@@ -3,29 +3,27 @@ import {
   View,
   Text,
   StyleSheet,
-  TextInput,
   TouchableOpacity,
   Alert,
-  ActivityIndicator,
   KeyboardAvoidingView,
   Platform,
   Dimensions,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useDispatch, useSelector } from 'react-redux';
-import { verifyOtp, loginWithFirebase } from '../store/slices/authSlice';
+import { verifyOtp } from '../store/slices/authSlice';
 import { RootState, AppDispatch } from '../store';
 import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
 import { theme } from '../constants/theme';
 import { LinearGradient } from 'expo-linear-gradient';
 import { BlurView } from 'expo-blur';
 import { ArrowLeft, CheckCircle, ShieldCheck } from 'lucide-react-native';
-import { auth, PhoneAuthProvider, signInWithCredential } from '../config/firebase';
+import { CodeInput } from '../components/CodeInput';
 
 const { width, height } = Dimensions.get('window');
 
 type RootStackParamList = {
-  VerifyOtp: { phone: string; verificationId: string };
+  VerifyOtp: { phone: string };
 };
 
 type VerifyOtpScreenRouteProp = RouteProp<RootStackParamList, 'VerifyOtp'>;
@@ -35,7 +33,7 @@ const VerifyOtpScreen = () => {
   const dispatch = useDispatch<AppDispatch>();
   const navigation = useNavigation<any>();
   const route = useRoute<VerifyOtpScreenRouteProp>();
-  const { phone, verificationId } = route.params || {};
+  const { phone } = route.params || {};
   const { isLoading: loading, error, isAuthenticated } = useSelector((state: RootState) => state.auth);
 
   useEffect(() => {
@@ -45,22 +43,13 @@ const VerifyOtpScreen = () => {
   }, [isAuthenticated, navigation]);
 
   const handleVerify = async () => {
-    if (!otp || otp.length < 6) {
-      Alert.alert('Алдаа', 'Баталгаажуулах код 6 оронтой байх ёстой');
+    if (!otp || otp.length < 4) {
+      Alert.alert('Алдаа', 'Баталгаажуулах код 4 оронтой байх ёстой');
       return;
     }
     
     try {
-      // Firebase Verify
-      const credential = PhoneAuthProvider.credential(
-          verificationId,
-          otp
-      );
-      const userCredential = await signInWithCredential(auth, credential);
-      const idToken = await userCredential.user.getIdToken();
-
-      // Backend Login
-      await dispatch(loginWithFirebase({ idToken, phone })).unwrap();
+      await dispatch(verifyOtp({ phone, otp })).unwrap();
     } catch (err: any) {
       Alert.alert('Алдаа', (typeof err === 'string' ? err : err?.message) || 'Баталгаажуулалт амжилтгүй боллоо');
     }
@@ -98,61 +87,57 @@ const VerifyOtpScreen = () => {
               onPress={() => navigation.goBack()}
             >
               <BlurView intensity={30} tint="dark" style={styles.backButtonBlur}>
-                <ArrowLeft size={24} color={theme.colors.text} />
+                <ArrowLeft size={24} color="#fff" />
               </BlurView>
             </TouchableOpacity>
           </View>
 
-          <View style={styles.contentContainer}>
-            <BlurView intensity={30} tint="dark" style={styles.glassCard}>
-              <View style={styles.iconContainer}>
-                <ShieldCheck size={48} color={theme.colors.primary} />
-              </View>
-              
-              <Text style={styles.title}>Баталгаажуулах</Text>
-              <Text style={styles.subtitle}>
-                {phone} дугаар руу илгээсэн 6 оронтой кодыг оруулна уу
-              </Text>
+          <View style={styles.content}>
+            <View style={styles.iconContainer}>
+              <ShieldCheck size={48} color={theme.colors.primary} />
+            </View>
+            
+            <Text style={styles.title}>Баталгаажуулалт</Text>
+            <Text style={styles.subtitle}>
+              Таны <Text style={styles.phoneHighlight}>{phone}</Text> дугаарт илгээсэн 4 оронтой кодыг оруулна уу
+            </Text>
 
-              <View style={styles.inputContainer}>
-                <TextInput
-                  style={styles.input}
-                  placeholder="000000"
-                  placeholderTextColor={theme.colors.textSecondary}
-                  keyboardType="number-pad"
-                  maxLength={6}
-                  value={otp}
-                  onChangeText={setOtp}
-                  autoFocus
-                  selectionColor={theme.colors.primary}
-                />
-              </View>
-
-              <TouchableOpacity 
-                style={styles.verifyButton} 
-                onPress={handleVerify}
+            <View style={styles.inputContainer}>
+              <CodeInput
+                value={otp}
+                onChangeText={setOtp}
+                length={4}
                 disabled={loading}
-                activeOpacity={0.8}
-              >
-                {loading ? (
-                  <ActivityIndicator color={theme.colors.black} />
-                ) : (
-                  <LinearGradient
-                    colors={[theme.colors.primary, '#f5ba31']}
-                    start={{ x: 0, y: 0 }}
-                    end={{ x: 1, y: 0 }}
-                    style={styles.gradientButton}
-                  >
-                    <Text style={styles.verifyButtonText}>Баталгаажуулах</Text>
-                    <CheckCircle size={20} color={theme.colors.black} style={styles.buttonIcon} />
-                  </LinearGradient>
-                )}
-              </TouchableOpacity>
+              />
+            </View>
 
-              <TouchableOpacity style={styles.resendButton}>
-                <Text style={styles.resendText}>Код ирээгүй юу? Дахин илгээх</Text>
-              </TouchableOpacity>
-            </BlurView>
+            <TouchableOpacity 
+              style={styles.verifyButton}
+              onPress={handleVerify}
+              disabled={loading || otp.length < 4}
+            >
+              <LinearGradient
+                colors={loading ? ['#333', '#333'] : [theme.colors.primary, '#E5A000']}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 0 }}
+                style={styles.buttonGradient}
+              >
+                <Text style={styles.buttonText}>
+                  {loading ? 'Баталгаажуулж байна...' : 'Баталгаажуулах'}
+                </Text>
+                {!loading && <CheckCircle size={20} color="#000" style={styles.buttonIcon} />}
+              </LinearGradient>
+            </TouchableOpacity>
+
+            <TouchableOpacity 
+              style={styles.resendButton}
+              onPress={() => {
+                // Implement resend logic
+                Alert.alert('Info', 'Resend functionality to be implemented');
+              }}
+            >
+              <Text style={styles.resendText}>Код дахин илгээх</Text>
+            </TouchableOpacity>
           </View>
         </KeyboardAvoidingView>
       </SafeAreaView>
@@ -173,127 +158,107 @@ const styles = StyleSheet.create({
   },
   orb: {
     position: 'absolute',
-    borderRadius: 150,
+    borderRadius: 200,
     opacity: 0.15,
   },
   orb1: {
     width: 300,
     height: 300,
     top: -50,
-    left: -100,
+    right: -50,
   },
   orb2: {
     width: 250,
     height: 250,
-    bottom: 100,
-    right: -50,
+    bottom: -50,
+    left: -50,
   },
   header: {
-    paddingHorizontal: 20,
-    paddingTop: 20,
+    paddingHorizontal: 24,
+    paddingTop: 10,
   },
   backButton: {
-    borderRadius: 20,
+    borderRadius: 12,
     overflow: 'hidden',
-    width: 40,
-    height: 40,
+    width: 44,
+    height: 44,
   },
   backButtonBlur: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
   },
-  contentContainer: {
+  content: {
     flex: 1,
+    paddingHorizontal: 32,
     justifyContent: 'center',
-    paddingHorizontal: 20,
-  },
-  glassCard: {
-    borderRadius: 24,
-    padding: 30,
-    overflow: 'hidden',
-    borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.1)',
     alignItems: 'center',
   },
   iconContainer: {
     width: 80,
     height: 80,
     borderRadius: 40,
-    backgroundColor: 'rgba(255, 204, 0, 0.1)',
+    backgroundColor: 'rgba(255, 193, 7, 0.1)',
     justifyContent: 'center',
     alignItems: 'center',
-    marginBottom: 20,
+    marginBottom: 24,
     borderWidth: 1,
-    borderColor: 'rgba(255, 204, 0, 0.3)',
+    borderColor: 'rgba(255, 193, 7, 0.2)',
   },
   title: {
-    fontSize: 24,
+    fontSize: 28,
     fontWeight: 'bold',
-    color: theme.colors.text,
-    marginBottom: 10,
+    color: '#fff',
+    marginBottom: 12,
     textAlign: 'center',
   },
   subtitle: {
-    fontSize: 14,
+    fontSize: 16,
     color: theme.colors.textSecondary,
-    marginBottom: 30,
     textAlign: 'center',
-    lineHeight: 20,
+    lineHeight: 24,
+    marginBottom: 40,
+  },
+  phoneHighlight: {
+    color: '#fff',
+    fontWeight: '600',
   },
   inputContainer: {
     width: '100%',
-    marginBottom: 30,
-  },
-  input: {
-    width: '100%',
-    height: 60,
-    backgroundColor: 'rgba(0, 0, 0, 0.3)',
-    borderRadius: 16,
-    borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.1)',
-    color: theme.colors.text,
-    fontSize: 32,
-    fontWeight: 'bold',
-    textAlign: 'center',
-    letterSpacing: 10,
+    marginBottom: 40,
   },
   verifyButton: {
     width: '100%',
     height: 56,
     borderRadius: 16,
     overflow: 'hidden',
-    marginBottom: 20,
     shadowColor: theme.colors.primary,
-    shadowOffset: {
-      width: 0,
-      height: 4,
-    },
+    shadowOffset: { width: 0, height: 8 },
     shadowOpacity: 0.3,
-    shadowRadius: 8,
+    shadowRadius: 16,
     elevation: 8,
   },
-  gradientButton: {
+  buttonGradient: {
     flex: 1,
     flexDirection: 'row',
     justifyContent: 'center',
     alignItems: 'center',
   },
-  verifyButtonText: {
-    fontSize: 18,
+  buttonText: {
+    color: '#000',
+    fontSize: 16,
     fontWeight: 'bold',
-    color: theme.colors.black,
   },
   buttonIcon: {
-    marginLeft: 10,
+    marginLeft: 8,
   },
   resendButton: {
-    padding: 10,
+    marginTop: 24,
+    padding: 12,
   },
   resendText: {
-    color: theme.colors.primary,
+    color: theme.colors.textSecondary,
     fontSize: 14,
-    fontWeight: '600',
   },
 });
 

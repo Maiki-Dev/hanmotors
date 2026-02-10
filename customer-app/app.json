@@ -16,6 +16,7 @@
       "**/*"
     ],
     "ios": {
+      "googleServicesFile": "./GoogleService-Info.plist",
       "bundleIdentifier": "com.hanmotors.customer",
       "supportsTablet": true,
       "infoPlist": {
@@ -67,6 +68,11 @@
           "isAndroidForegroundServiceEnabled": true
         }
       ]
-    ]
+    ],
+    "extra": {
+      "eas": {
+        "projectId": "82d34329-fe87-437d-a5ac-744a6b1fd487"
+      }
+    }
   }
 }

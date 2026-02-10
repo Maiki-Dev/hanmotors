@@ -36,18 +36,6 @@ export const verifyOtp = createAsyncThunk(
   }
 );
 
-export const loginWithFirebase = createAsyncThunk(
-  'auth/firebaseLogin',
-  async ({ idToken, phone }: { idToken: string; phone: string }, { rejectWithValue }) => {
-    try {
-      const response = await authService.firebaseLogin(idToken, phone);
-      return response.data;
-    } catch (error: any) {
-      return rejectWithValue(error.response?.data?.message || 'Firebase login failed');
-    }
-  }
-);
-
 const authSlice = createSlice({
   name: 'auth',
   initialState,

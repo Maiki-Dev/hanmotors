@@ -26,7 +26,6 @@
     "expo-notifications": "^0.32.16",
     "expo-status-bar": "~3.0.9",
     "expo-task-manager": "^14.0.9",
-    "firebase": "^12.9.0",
     "lucide-react-native": "^0.563.0",
     "onesignal-expo-plugin": "^2.0.4",
     "react": "19.1.0",

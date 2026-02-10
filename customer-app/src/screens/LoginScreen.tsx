@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState } from 'react';
 import { View, Text, TextInput, TouchableOpacity, StyleSheet, Alert, ActivityIndicator, Image, Dimensions, KeyboardAvoidingView, Platform, StatusBar } from 'react-native';
 import { theme } from '../constants/theme';
 import { authService } from '../services/api';
@@ -7,14 +7,12 @@ import { StackNavigationProp } from '@react-navigation/stack';
 import { Phone, ArrowRight } from 'lucide-react-native';
 import { BlurView } from 'expo-blur';
 import { LinearGradient } from 'expo-linear-gradient';
-import { FirebaseRecaptchaVerifierModal } from 'expo-firebase-recaptcha';
-import { auth, PhoneAuthProvider, firebaseConfig } from '../config/firebase';
 
 const { width, height } = Dimensions.get('window');
 
 type RootStackParamList = {
   Login: undefined;
-  VerifyOtp: { phone: string; verificationId: string };
+  VerifyOtp: { phone: string };
 };
 
 type LoginScreenNavigationProp = StackNavigationProp<RootStackParamList, 'Login'>;
@@ -23,7 +21,6 @@ const LoginScreen = () => {
   const [phone, setPhone] = useState('');
   const [loading, setLoading] = useState(false);
   const navigation = useNavigation<LoginScreenNavigationProp>();
-  const recaptchaVerifier = useRef<any>(null);
 
   const handleLogin = async () => {
     if (!phone) {
@@ -33,17 +30,15 @@ const LoginScreen = () => {
 
     setLoading(true);
     try {
-      // Firebase Phone Auth
-      const formattedPhone = phone.startsWith('+') ? phone : `+976${phone}`;
-      const phoneProvider = new PhoneAuthProvider(auth);
-      const verificationId = await phoneProvider.verifyPhoneNumber(
-        formattedPhone,
-        recaptchaVerifier.current
-      );
+      const response = await authService.requestOtp(phone);
       
-      navigation.navigate('VerifyOtp', { phone, verificationId });
+      if (response.data.dev_otp) {
+        Alert.alert('Info', `Dev OTP: ${response.data.dev_otp}`);
+      }
+      
+      navigation.navigate('VerifyOtp', { phone });
     } catch (error: any) {
-      Alert.alert('Алдаа', error.message || 'OTP илгээж чадсангүй');
+      Alert.alert('Алдаа', error.response?.data?.message || 'OTP илгээж чадсангүй');
       console.error(error);
     } finally {
       setLoading(false);
@@ -55,13 +50,6 @@ const LoginScreen = () => {
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       style={styles.container}
     >
-      <FirebaseRecaptchaVerifierModal
-        ref={recaptchaVerifier}
-        firebaseConfig={firebaseConfig}
-        title='Баталгаажуулалт'
-        cancelLabel='Хаах'
-        attemptInvisibleVerification={true}
-      />
       <StatusBar barStyle="light-content" backgroundColor="transparent" translucent />
       
       {/* Dynamic Background */}
@@ -98,7 +86,7 @@ const LoginScreen = () => {
                 <TextInput
                   style={styles.input}
                   placeholder="Утасны дугаар"
-                  placeholderTextColor={theme.colors.textSecondary}
+                  placeholderTextColor="#666"
                   keyboardType="phone-pad"
                   value={phone}
                   onChangeText={setPhone}
@@ -108,24 +96,21 @@ const LoginScreen = () => {
             </View>
 
             <TouchableOpacity 
-              style={styles.button} 
+              style={styles.button}
               onPress={handleLogin}
               disabled={loading}
-              activeOpacity={0.8}
             >
               {loading ? (
-                <ActivityIndicator color={theme.colors.black} />
+                <ActivityIndicator color="#000" />
               ) : (
-                <View style={styles.buttonContent}>
+                <>
                   <Text style={styles.buttonText}>Үргэлжлүүлэх</Text>
-                  <ArrowRight size={20} color={theme.colors.black} style={{marginLeft: 8}} />
-                </View>
+                  <ArrowRight size={20} color="#000" />
+                </>
               )}
             </TouchableOpacity>
           </BlurView>
         </View>
-        
-        <Text style={styles.footerText}>Version 1.0.0</Text>
       </View>
     </KeyboardAvoidingView>
   );
@@ -138,130 +123,117 @@ const styles = StyleSheet.create({
   },
   orb: {
     position: 'absolute',
-    width: 400,
-    height: 400,
-    borderRadius: 200,
+    width: 300,
+    height: 300,
+    borderRadius: 150,
   },
   content: {
     flex: 1,
-    padding: theme.spacing.xl,
     justifyContent: 'center',
+    padding: 24,
   },
   logoContainer: {
     alignItems: 'center',
-    marginBottom: 60,
+    marginBottom: 50,
   },
   logoBox: {
-    width: 80,
-    height: 80,
-    borderRadius: 24,
+    width: 64,
+    height: 64,
+    backgroundColor: theme.colors.primary,
+    borderRadius: 16,
     justifyContent: 'center',
     alignItems: 'center',
-    marginBottom: 20,
-    borderWidth: 1,
-    borderColor: 'rgba(255, 215, 0, 0.3)',
-    backgroundColor: 'rgba(255, 215, 0, 0.1)',
+    marginBottom: 16,
+    shadowColor: theme.colors.primary,
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.3,
+    shadowRadius: 20,
+    elevation: 10,
   },
   logoText: {
-    fontSize: 40,
-    fontWeight: '700',
-    color: theme.colors.primary,
-    fontFamily: Platform.OS === 'ios' ? 'System' : 'Roboto',
+    fontSize: 32,
+    fontWeight: 'bold',
+    color: '#000',
   },
   appName: {
     fontSize: 28,
-    fontWeight: '800',
-    color: theme.colors.text,
-    letterSpacing: 1,
-    marginBottom: 8,
+    fontWeight: 'bold',
+    color: '#fff',
+    letterSpacing: 2,
+    marginBottom: 4,
   },
   brandSubtitle: {
     fontSize: 12,
-    fontWeight: '600',
-    letterSpacing: 4,
     color: theme.colors.textSecondary,
+    letterSpacing: 4,
     textTransform: 'uppercase',
   },
   formContainer: {
-    marginBottom: 40,
+    width: '100%',
   },
   glassCard: {
-    borderRadius: 30,
-    padding: 30,
+    padding: 24,
+    borderRadius: 24,
     overflow: 'hidden',
     borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.1)',
+    borderColor: 'rgba(255,255,255,0.1)',
   },
   title: {
     fontSize: 24,
-    fontWeight: '700',
-    color: theme.colors.text,
-    marginBottom: 10,
-    textAlign: 'center',
+    fontWeight: 'bold',
+    color: '#fff',
+    marginBottom: 8,
   },
   instructionText: {
     fontSize: 14,
     color: theme.colors.textSecondary,
-    marginBottom: 30,
-    textAlign: 'center',
-    lineHeight: 22,
+    marginBottom: 32,
   },
   inputWrapper: {
-    marginBottom: 20,
+    marginBottom: 24,
   },
   inputContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: 'rgba(0, 0, 0, 0.3)',
+    backgroundColor: 'rgba(255,255,255,0.05)',
     borderRadius: 16,
-    paddingHorizontal: 20,
-    height: 64,
     borderWidth: 1,
-    borderColor: theme.colors.border,
+    borderColor: 'rgba(255,255,255,0.1)',
+    height: 56,
+    paddingHorizontal: 16,
   },
   inputIcon: {
-    marginRight: 15,
+    marginRight: 12,
   },
   verticalDivider: {
     width: 1,
     height: 24,
-    backgroundColor: theme.colors.border,
-    marginRight: 15,
+    backgroundColor: 'rgba(255,255,255,0.1)',
+    marginRight: 12,
   },
   input: {
     flex: 1,
-    fontSize: 18,
-    color: theme.colors.text,
-    height: '100%',
-    fontWeight: '500',
+    color: '#fff',
+    fontSize: 16,
   },
   button: {
-    backgroundColor: theme.colors.primary,
-    height: 60,
-    borderRadius: 16,
+    flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
+    backgroundColor: theme.colors.primary,
+    height: 56,
+    borderRadius: 16,
     shadowColor: theme.colors.primary,
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.3,
     shadowRadius: 12,
     elevation: 8,
   },
-  buttonContent: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
   buttonText: {
-    fontSize: 18,
-    fontWeight: '700',
-    color: theme.colors.black,
-  },
-  footerText: {
-    position: 'absolute',
-    bottom: 40,
-    alignSelf: 'center',
-    color: theme.colors.textTertiary,
-    fontSize: 12,
+    color: '#000',
+    fontSize: 16,
+    fontWeight: 'bold',
+    marginRight: 8,
   },
 });
 

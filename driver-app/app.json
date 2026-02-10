@@ -14,6 +14,7 @@
       "backgroundColor": "#ffffff"
     },
     "ios": {
+      "googleServicesFile": "./GoogleService-Info.plist",
       "bundleIdentifier": "com.hanmotors.driver",
       "supportsTablet": true,
       "infoPlist": {
@@ -88,7 +89,24 @@
     },
     "extra": {
       "eas": {
-        "projectId": "1a987b8d-f029-4e20-be9e-022b3b517399"
+        "build": {
+          "experimental": {
+            "ios": {
+              "appExtensions": [
+                {
+                  "targetName": "OneSignalNotificationServiceExtension",
+                  "bundleIdentifier": "com.hanmotors.driver.OneSignalNotificationServiceExtension",
+                  "entitlements": {
+                    "com.apple.security.application-groups": [
+                      "group.com.hanmotors.driver.onesignal"
+                    ]
+                  }
+                }
+              ]
+            }
+          }
+        },
+        "projectId": "f39755aa-8191-4a7c-b9bb-aac7de4df701"
       }
     }
   }

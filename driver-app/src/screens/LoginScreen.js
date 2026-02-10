@@ -1,13 +1,10 @@
-import React, { useState, useRef } from 'react';
+import React, { useState } from 'react';
 import { View, Text, StyleSheet, KeyboardAvoidingView, Platform, Alert, TouchableOpacity, Image } from 'react-native';
 import { API_URL } from '../config';
 import { theme } from '../constants/theme';
 import { GoldButton } from '../components/GoldButton';
 import { Input } from '../components/Input';
 import { Phone, KeyRound, ArrowLeft } from 'lucide-react-native';
-import { FirebaseRecaptchaVerifierModal } from 'expo-firebase-recaptcha';
-import { auth, PhoneAuthProvider, signInWithCredential, firebaseConfig } from '../config/firebase';
-
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 export default function LoginScreen({ navigation }) {
@@ -15,8 +12,6 @@ export default function LoginScreen({ navigation }) {
   const [phone, setPhone] = useState('');
   const [otp, setOtp] = useState('');
   const [loading, setLoading] = useState(false);
-  const [verificationId, setVerificationId] = useState(null);
-  const recaptchaVerifier = useRef(null);
 
   const handleRequestOTP = async () => {
     if (!phone) {
@@ -26,18 +21,34 @@ export default function LoginScreen({ navigation }) {
 
     setLoading(true);
     try {
-      // Format phone number (assuming Mongolia +976)
-      const formattedPhone = phone.startsWith('+') ? phone : `+976${phone}`;
+      const response = await fetch(`${API_URL}/api/driver/auth/otp/request`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ phone }),
+      });
+      const data = await response.json();
       
-      const phoneProvider = new PhoneAuthProvider(auth);
-      const vId = await phoneProvider.verifyPhoneNumber(
-        formattedPhone,
-        recaptchaVerifier.current
-      );
-      
-      setVerificationId(vId);
-      setStep(2);
-      Alert.alert('Амжилттай', 'Баталгаажуулах код илгээгдлээ');
+      if (response.ok) {
+        if (data.exists === false) {
+           Alert.alert('Бүртгэлгүй', 'Таны утасны дугаар бүртгэлгүй байна. Бүртгүүлэх үү?', [
+             { text: 'Үгүй', style: 'cancel' },
+             { text: 'Тийм', onPress: () => navigation.navigate('Register', { phone }) }
+           ]);
+        } else {
+           setStep(2);
+           Alert.alert('Амжилттай', 'Баталгаажуулах код илгээгдлээ');
+        }
+      } else {
+        // Check if user doesn't exist (some backends return 404/200 with flag)
+        if (data.exists === false || data.message === 'Driver not found') {
+            Alert.alert('Бүртгэлгүй', 'Таны утасны дугаар бүртгэлгүй байна. Бүртгүүлэх үү?', [
+                { text: 'Үгүй', style: 'cancel' },
+                { text: 'Тийм', onPress: () => navigation.navigate('Register', { phone }) }
+              ]);
+        } else {
+            Alert.alert('Алдаа', data.message || 'OTP илгээхэд алдаа гарлаа');
+        }
+      }
     } catch (error) {
       console.error(error);
       Alert.alert('Алдаа', `OTP илгээхэд алдаа гарлаа: ${error.message}`);
@@ -54,19 +65,10 @@ export default function LoginScreen({ navigation }) {
 
     setLoading(true);
     try {
-      const credential = PhoneAuthProvider.credential(
-        verificationId,
-        otp
-      );
-      
-      const userCredential = await signInWithCredential(auth, credential);
-      const idToken = await userCredential.user.getIdToken();
-
-      // Send token to backend
-      const response = await fetch(`${API_URL}/api/driver/auth/firebase-login`, {
+      const response = await fetch(`${API_URL}/api/driver/auth/otp/verify`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ idToken, phone }),
+        body: JSON.stringify({ phone, otp }),
       });
 
       const data = await response.json();
@@ -76,15 +78,7 @@ export default function LoginScreen({ navigation }) {
         await AsyncStorage.setItem('driver_data', JSON.stringify(data));
         navigation.replace('Main', { driverId: data._id, driverName: data.name });
       } else {
-        if (data.exists === false) {
-           // Handle registration redirection if needed
-           Alert.alert('Бүртгэлгүй', 'Та бүртгүүлэх үү?', [
-             { text: 'Үгүй', style: 'cancel' },
-             { text: 'Тийм', onPress: () => navigation.navigate('Register', { phone }) }
-           ]);
-        } else {
-           Alert.alert('Алдаа', data.message || 'Нэвтрэхэд алдаа гарлаа');
-        }
+        Alert.alert('Алдаа', data.message || 'Нэвтрэхэд алдаа гарлаа');
       }
     } catch (error) {
       Alert.alert('Алдаа', `Баталгаажуулалт амжилтгүй: ${error.message}`);
@@ -99,13 +93,6 @@ export default function LoginScreen({ navigation }) {
       behavior={Platform.OS === "ios" ? "padding" : "height"}
       style={styles.container}
     >
-      <FirebaseRecaptchaVerifierModal
-        ref={recaptchaVerifier}
-        firebaseConfig={firebaseConfig}
-        title="Баталгаажуулалт"
-        cancelLabel="Хаах"
-        attemptInvisibleVerification={true}
-      />
       <View style={styles.content}>
         <View style={styles.logoContainer}>
           <Image source={require('../../assets/icon.png')} style={styles.logoImage} resizeMode="contain" />
@@ -140,13 +127,13 @@ export default function LoginScreen({ navigation }) {
               
               <Text style={styles.label}>Илгээсэн кодыг оруулна уу: {phone}</Text>
               <Input
-                placeholder="000000"
+                placeholder="0000"
                 value={otp}
                 onChangeText={setOtp}
                 keyboardType="number-pad"
                 autoCapitalize="none"
                 icon={<KeyRound size={20} color={theme.colors.textSecondary} />}
-                maxLength={6}
+                maxLength={4}
               />
               <View style={styles.spacer} />
               <GoldButton 
@@ -171,18 +158,21 @@ const styles = StyleSheet.create({
   content: {
     padding: theme.spacing.l,
   },
-  header: {
-    alignItems: 'center',
-    marginBottom: theme.spacing.xxl,
-  },
   logoContainer: {
     alignItems: 'center',
-    marginBottom: 60, // Increased to move logo up
+    marginBottom: 60,
   },
   logoImage: {
-    width: 180, // Smaller size
+    width: 180,
     height: 150,
     marginBottom: 0,
+  },
+  brandSubtitle: {
+    ...theme.typography.caption,
+    color: theme.colors.textSecondary,
+    letterSpacing: 4,
+    marginTop: theme.spacing.s,
+    textAlign: 'center',
   },
   form: {
     width: '100%',
@@ -200,26 +190,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginBottom: theme.spacing.l,
   },
-  brandSubtitle: {
-    ...theme.typography.caption,
-    letterSpacing: 1,
-    color: theme.colors.textSecondary,
-  },
   backText: {
     ...theme.typography.body,
     color: theme.colors.textSecondary,
     marginLeft: theme.spacing.xs,
   },
-  registerLink: {
-    marginTop: theme.spacing.l,
-    alignItems: 'center',
-  },
-  registerText: {
-    ...theme.typography.body,
-    color: theme.colors.textSecondary,
-  },
-  registerHighlight: {
-    color: theme.colors.primary,
-    fontWeight: 'bold',
-  }
 });
