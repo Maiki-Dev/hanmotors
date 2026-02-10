@@ -26,6 +26,9 @@ const sendPushNotification = async (pushToken, title, body, data) => {
           priority: 10,
           android_channel_id: process.env.ANDROID_CHANNEL_ID || "default", // Optional
           android_visibility: 1, // Public visibility
+          ios_sound: "default",
+          ios_badgeType: "Increase",
+          ios_badgeCount: 1,
       }, {
           headers: {
               'Content-Type': 'application/json',

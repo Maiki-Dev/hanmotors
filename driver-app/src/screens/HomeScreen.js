@@ -285,6 +285,9 @@ export default function HomeScreen({ navigation, route }) {
           importance: Notifications.AndroidImportance.MAX,
           vibrationPattern: [0, 250, 250, 250],
           lightColor: '#FF231F7C',
+          sound: 'default', // Ensure sound is on
+          lockscreenVisibility: Notifications.AndroidNotificationVisibility.PUBLIC, // Show on lockscreen
+          bypassDnd: true, // Optional: Bypass Do Not Disturb if possible
         });
       }
 
@@ -786,6 +789,8 @@ export default function HomeScreen({ navigation, route }) {
                 timeInterval: 2000, // Update every 2 seconds in background
                 distanceInterval: 5, // Update every 5 meters
                 showsBackgroundLocationIndicator: true,
+                activityType: Location.ActivityType.AutomotiveNavigation,
+                pausesLocationUpdatesAutomatically: false,
                 foregroundService: {
                     notificationTitle: "HanMotors Driver",
                     notificationBody: "Таны байршлыг илгээж байна...",
