@@ -200,23 +200,16 @@ io.on('connection', (socket) => {
 
       // Only mark offline if NO sockets remain for this driver
       if (!driverSockets[driverId] || driverSockets[driverId].size === 0) {
-          console.log(`Driver ${driverId} fully disconnected (No active sockets)`);
+          console.log(`Driver ${driverId} fully disconnected (No active sockets). Keeping online status for background.`);
           
-          // Remove from location store
-          delete driverLocations[driverId];
-          delete driverStatus[driverId]; // Clean up status
+          // DO NOT Remove from location store immediately
+          // delete driverLocations[driverId]; 
+          // delete driverStatus[driverId];
+          
           delete driverSockets[driverId]; // Cleanup empty set
           
-          // Broadcast location removal
-          io.to('admin_room').to('drivers_room').emit('driverLocationUpdated', {
-            driverId: driverId,
-            location: null
-          });
-          
-          // Update isOnline status in DB to false
-          const Driver = require('./models/Driver');
-          Driver.findByIdAndUpdate(driverId, { isOnline: false }).catch(err => console.error(err));
-          io.emit('driverStatusUpdated', { driverId, isOnline: false });
+          // We do NOT set isOnline: false here anymore.
+          // Driver must explicitly go offline.
       } else {
           console.log(`Driver ${driverId} still active on other sockets. Keeping online.`);
       }

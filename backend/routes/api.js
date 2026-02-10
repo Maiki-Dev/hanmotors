@@ -347,6 +347,32 @@ router.post('/driver/:id/status', async (req, res) => {
   }
 });
 
+// Update Driver Location (HTTP Fallback for Background Tasks)
+router.post('/driver/:id/location', async (req, res) => {
+  try {
+    const { location } = req.body;
+    const driverId = req.params.id;
+    
+    if (!location) return res.status(400).json({ message: 'Location required' });
+
+    // Update In-Memory Store
+    const io = req.app.get('io');
+    const driverLocations = req.app.driverLocations || {};
+    
+    driverLocations[driverId] = location;
+    
+    // Also broadcast via socket for Admin Dashboard
+    io.emit('driverLocationUpdated', {
+      driverId,
+      location
+    });
+    
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 router.get('/driver/:id', async (req, res) => {
   if (isOffline()) {
     const driver = mockDrivers.find(d => d._id === req.params.id);
