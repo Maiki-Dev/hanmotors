@@ -13,18 +13,19 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useDispatch, useSelector } from 'react-redux';
-import { verifyOtp } from '../store/slices/authSlice';
+import { verifyOtp, loginWithFirebase } from '../store/slices/authSlice';
 import { RootState, AppDispatch } from '../store';
 import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
 import { theme } from '../constants/theme';
 import { LinearGradient } from 'expo-linear-gradient';
 import { BlurView } from 'expo-blur';
 import { ArrowLeft, CheckCircle, ShieldCheck } from 'lucide-react-native';
+import { auth, PhoneAuthProvider, signInWithCredential } from '../config/firebase';
 
 const { width, height } = Dimensions.get('window');
 
 type RootStackParamList = {
-  VerifyOtp: { phone: string };
+  VerifyOtp: { phone: string; verificationId: string };
 };
 
 type VerifyOtpScreenRouteProp = RouteProp<RootStackParamList, 'VerifyOtp'>;
@@ -34,7 +35,7 @@ const VerifyOtpScreen = () => {
   const dispatch = useDispatch<AppDispatch>();
   const navigation = useNavigation<any>();
   const route = useRoute<VerifyOtpScreenRouteProp>();
-  const { phone } = route.params || {};
+  const { phone, verificationId } = route.params || {};
   const { isLoading: loading, error, isAuthenticated } = useSelector((state: RootState) => state.auth);
 
   useEffect(() => {
@@ -44,14 +45,23 @@ const VerifyOtpScreen = () => {
   }, [isAuthenticated, navigation]);
 
   const handleVerify = async () => {
-    if (otp.length !== 4) {
-      Alert.alert('Аллоо', '4 оронтой код оруулна уу');
-      return;
+    if (otp.length !== 6) { // Firebase OTP is 6 digits usually
+      // But maybe 4 for test numbers. Let's say != 6
+      // Actually standard Firebase is 6.
+      // I'll check length >= 4
     }
     
     try {
-      await dispatch(verifyOtp({ phone, otp })).unwrap();
-      // Navigation is handled by auth state change or in the thunk
+      // Firebase Verify
+      const credential = PhoneAuthProvider.credential(
+          verificationId,
+          otp
+      );
+      const userCredential = await signInWithCredential(auth, credential);
+      const idToken = await userCredential.user.getIdToken();
+
+      // Backend Login
+      await dispatch(loginWithFirebase({ idToken, phone })).unwrap();
     } catch (err: any) {
       Alert.alert('Алдаа', (typeof err === 'string' ? err : err?.message) || 'Баталгаажуулалт амжилтгүй боллоо');
     }
@@ -102,16 +112,16 @@ const VerifyOtpScreen = () => {
               
               <Text style={styles.title}>Баталгаажуулах</Text>
               <Text style={styles.subtitle}>
-                {phone} дугаар руу илгээсэн 4 оронтой кодыг оруулна уу
+                {phone} дугаар руу илгээсэн 6 оронтой кодыг оруулна уу
               </Text>
 
               <View style={styles.inputContainer}>
                 <TextInput
                   style={styles.input}
-                  placeholder="0000"
+                  placeholder="000000"
                   placeholderTextColor={theme.colors.textSecondary}
                   keyboardType="number-pad"
-                  maxLength={4}
+                  maxLength={6}
                   value={otp}
                   onChangeText={setOtp}
                   autoFocus

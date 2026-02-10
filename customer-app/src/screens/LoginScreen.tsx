@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import { View, Text, TextInput, TouchableOpacity, StyleSheet, Alert, ActivityIndicator, Image, Dimensions, KeyboardAvoidingView, Platform, StatusBar } from 'react-native';
 import { theme } from '../constants/theme';
 import { authService } from '../services/api';
@@ -7,12 +7,14 @@ import { StackNavigationProp } from '@react-navigation/stack';
 import { Phone, ArrowRight } from 'lucide-react-native';
 import { BlurView } from 'expo-blur';
 import { LinearGradient } from 'expo-linear-gradient';
+import { FirebaseRecaptchaVerifierModal } from 'expo-firebase-recaptcha';
+import { auth, PhoneAuthProvider, firebaseConfig } from '../config/firebase';
 
 const { width, height } = Dimensions.get('window');
 
 type RootStackParamList = {
   Login: undefined;
-  VerifyOtp: { phone: string };
+  VerifyOtp: { phone: string; verificationId: string };
 };
 
 type LoginScreenNavigationProp = StackNavigationProp<RootStackParamList, 'Login'>;
@@ -21,6 +23,7 @@ const LoginScreen = () => {
   const [phone, setPhone] = useState('');
   const [loading, setLoading] = useState(false);
   const navigation = useNavigation<LoginScreenNavigationProp>();
+  const recaptchaVerifier = useRef<any>(null);
 
   const handleLogin = async () => {
     if (!phone) {
@@ -30,13 +33,18 @@ const LoginScreen = () => {
 
     setLoading(true);
     try {
-      const response = await authService.login(phone);
-      if (response.data.dev_otp) {
-        Alert.alert('Код илгээгдлээ', `Таны код: ${response.data.dev_otp}`);
-      }
-      navigation.navigate('VerifyOtp', { phone });
+      // Firebase Phone Auth
+      const formattedPhone = phone.startsWith('+') ? phone : `+976${phone}`;
+      const phoneProvider = new PhoneAuthProvider(auth);
+      const verificationId = await phoneProvider.verifyPhoneNumber(
+        formattedPhone,
+        recaptchaVerifier.current
+      );
+      
+      navigation.navigate('VerifyOtp', { phone, verificationId });
     } catch (error: any) {
-      Alert.alert('Алдаа', error.response?.data?.message || 'Алдаа гарлаа');
+      Alert.alert('Алдаа', error.message || 'OTP илгээж чадсангүй');
+      console.error(error);
     } finally {
       setLoading(false);
     }
@@ -47,6 +55,12 @@ const LoginScreen = () => {
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       style={styles.container}
     >
+      <FirebaseRecaptchaVerifierModal
+        ref={recaptchaVerifier}
+        firebaseConfig={firebaseConfig}
+        title='Баталгаажуулалт'
+        cancelLabel='Хаах'
+      />
       <StatusBar barStyle="light-content" backgroundColor="transparent" translucent />
       
       {/* Dynamic Background */}

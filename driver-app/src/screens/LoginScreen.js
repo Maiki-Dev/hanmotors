@@ -1,10 +1,12 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import { View, Text, StyleSheet, KeyboardAvoidingView, Platform, Alert, TouchableOpacity, Image } from 'react-native';
 import { API_URL } from '../config';
 import { theme } from '../constants/theme';
 import { GoldButton } from '../components/GoldButton';
 import { Input } from '../components/Input';
 import { Phone, KeyRound, ArrowLeft } from 'lucide-react-native';
+import { FirebaseRecaptchaVerifierModal } from 'expo-firebase-recaptcha';
+import { auth, PhoneAuthProvider, signInWithCredential, firebaseConfig } from '../config/firebase';
 
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
@@ -13,6 +15,8 @@ export default function LoginScreen({ navigation }) {
   const [phone, setPhone] = useState('');
   const [otp, setOtp] = useState('');
   const [loading, setLoading] = useState(false);
+  const [verificationId, setVerificationId] = useState(null);
+  const recaptchaVerifier = useRef(null);
 
   const handleRequestOTP = async () => {
     if (!phone) {
@@ -22,41 +26,21 @@ export default function LoginScreen({ navigation }) {
 
     setLoading(true);
     try {
-      const response = await fetch(`${API_URL}/api/driver/auth/otp/request`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ phone }),
-      });
-
-      const data = await response.json();
-
-      if (data.exists === false) {
-        Alert.alert(
-          'Бүртгэлгүй дугаар',
-          'Энэ дугаар бүртгэлгүй байна. Бүртгүүлэх хэсэг рүү шилжих үү?',
-          [
-            {
-              text: 'Үгүй',
-              style: 'cancel',
-            },
-            {
-              text: 'Тийм',
-              onPress: () => navigation.navigate('Register', { phone }),
-            },
-          ]
-        );
-        return;
-      }
-
-      if (response.ok) {
-        Alert.alert('OTP илгээгдлээ', `Таны код: ${data.dev_otp}`); // Show dev OTP
-        setStep(2);
-      } else {
-        Alert.alert('Алдаа', data.message || 'OTP илгээж чадсангүй.');
-      }
+      // Format phone number (assuming Mongolia +976)
+      const formattedPhone = phone.startsWith('+') ? phone : `+976${phone}`;
+      
+      const phoneProvider = new PhoneAuthProvider(auth);
+      const vId = await phoneProvider.verifyPhoneNumber(
+        formattedPhone,
+        recaptchaVerifier.current
+      );
+      
+      setVerificationId(vId);
+      setStep(2);
+      Alert.alert('Амжилттай', 'Баталгаажуулах код илгээгдлээ');
     } catch (error) {
-      Alert.alert('Алдаа', 'Сүлжээний алдаа. Дахин оролдоно уу.');
       console.error(error);
+      Alert.alert('Алдаа', `OTP илгээхэд алдаа гарлаа: ${error.message}`);
     } finally {
       setLoading(false);
     }
@@ -70,10 +54,19 @@ export default function LoginScreen({ navigation }) {
 
     setLoading(true);
     try {
-      const response = await fetch(`${API_URL}/api/driver/auth/otp/verify`, {
+      const credential = PhoneAuthProvider.credential(
+        verificationId,
+        otp
+      );
+      
+      const userCredential = await signInWithCredential(auth, credential);
+      const idToken = await userCredential.user.getIdToken();
+
+      // Send token to backend
+      const response = await fetch(`${API_URL}/api/driver/auth/firebase-login`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ phone, otp }),
+        body: JSON.stringify({ idToken, phone }),
       });
 
       const data = await response.json();
@@ -83,10 +76,18 @@ export default function LoginScreen({ navigation }) {
         await AsyncStorage.setItem('driver_data', JSON.stringify(data));
         navigation.replace('Main', { driverId: data._id, driverName: data.name });
       } else {
-        Alert.alert('Алдаа', data.message || 'OTP буруу байна');
+        if (data.exists === false) {
+           // Handle registration redirection if needed
+           Alert.alert('Бүртгэлгүй', 'Та бүртгүүлэх үү?', [
+             { text: 'Үгүй', style: 'cancel' },
+             { text: 'Тийм', onPress: () => navigation.navigate('Register', { phone }) }
+           ]);
+        } else {
+           Alert.alert('Алдаа', data.message || 'Нэвтрэхэд алдаа гарлаа');
+        }
       }
     } catch (error) {
-      Alert.alert('Алдаа', 'Сүлжээний алдаа. Дахин оролдоно уу.');
+      Alert.alert('Алдаа', `Баталгаажуулалт амжилтгүй: ${error.message}`);
       console.error(error);
     } finally {
       setLoading(false);
@@ -98,6 +99,12 @@ export default function LoginScreen({ navigation }) {
       behavior={Platform.OS === "ios" ? "padding" : "height"}
       style={styles.container}
     >
+      <FirebaseRecaptchaVerifierModal
+        ref={recaptchaVerifier}
+        firebaseConfig={firebaseConfig}
+        title='Баталгаажуулалт'
+        cancelLabel='Хаах'
+      />
       <View style={styles.content}>
         <View style={styles.logoContainer}>
           <Image source={require('../../assets/icon.png')} style={styles.logoImage} resizeMode="contain" />
@@ -132,13 +139,13 @@ export default function LoginScreen({ navigation }) {
               
               <Text style={styles.label}>Илгээсэн кодыг оруулна уу: {phone}</Text>
               <Input
-                placeholder="0000"
+                placeholder="000000"
                 value={otp}
                 onChangeText={setOtp}
                 keyboardType="number-pad"
                 autoCapitalize="none"
                 icon={<KeyRound size={20} color={theme.colors.textSecondary} />}
-                maxLength={4}
+                maxLength={6}
               />
               <View style={styles.spacer} />
               <GoldButton 

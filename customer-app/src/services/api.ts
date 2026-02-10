@@ -11,6 +11,7 @@ const api = axios.create({
 export const authService = {
   login: (phone: string) => api.post('/auth/login', { phone }),
   verifyOtp: (phone: string, otp: string) => api.post('/auth/verify-otp', { phone, otp }),
+  firebaseLogin: (idToken: string, phone: string) => api.post('/auth/firebase-login', { idToken, phone }),
 };
 
 export const customerService = {

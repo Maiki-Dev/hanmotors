@@ -36,6 +36,18 @@ export const verifyOtp = createAsyncThunk(
   }
 );
 
+export const loginWithFirebase = createAsyncThunk(
+  'auth/firebaseLogin',
+  async ({ idToken, phone }: { idToken: string; phone: string }, { rejectWithValue }) => {
+    try {
+      const response = await authService.firebaseLogin(idToken, phone);
+      return response.data;
+    } catch (error: any) {
+      return rejectWithValue(error.response?.data?.message || 'Firebase login failed');
+    }
+  }
+);
+
 const authSlice = createSlice({
   name: 'auth',
   initialState,
@@ -73,6 +85,20 @@ const authSlice = createSlice({
         state.token = action.payload.token;
       })
       .addCase(verifyOtp.rejected, (state, action) => {
+        state.isLoading = false;
+        state.error = action.payload as string;
+      })
+      .addCase(loginWithFirebase.pending, (state) => {
+        state.isLoading = true;
+        state.error = null;
+      })
+      .addCase(loginWithFirebase.fulfilled, (state, action) => {
+        state.isLoading = false;
+        state.isAuthenticated = true;
+        state.user = action.payload.user || action.payload.customer;
+        state.token = action.payload.token;
+      })
+      .addCase(loginWithFirebase.rejected, (state, action) => {
         state.isLoading = false;
         state.error = action.payload as string;
       });

@@ -11,6 +11,7 @@ const multer = require('multer');
 const { uploadToCloudinary } = require('../utils/cloudStorage');
 const axios = require('axios');
 const qpayService = require('../utils/qpay');
+const admin = require('../config/firebaseAdmin');
 
 // Helper: Send Push Notification (OneSignal Only)
 const sendPushNotification = async (pushToken, title, body, data) => {
@@ -261,6 +262,50 @@ router.post('/driver/auth/otp/verify', async (req, res) => {
     res.json(driver);
   } catch (err) {
     res.status(500).json({ error: err.message });
+  }
+});
+
+// Firebase Auth Login for Driver
+router.post('/driver/auth/firebase-login', async (req, res) => {
+  const { idToken, phone: fallbackPhone } = req.body;
+  
+  try {
+    let phone;
+    // Check if Firebase Admin is initialized (has apps)
+    if (admin.apps.length > 0) {
+        const decodedToken = await admin.auth().verifyIdToken(idToken);
+        phone = decodedToken.phone_number;
+    } else {
+        // Fallback for dev/mock if service account missing
+        console.warn('⚠️ Firebase Admin not active. Using fallback phone.');
+        phone = fallbackPhone;
+    }
+
+    if (!phone) return res.status(400).json({ message: 'Phone number required' });
+
+    // Normalize: Remove +976 or + prefix if DB stores local numbers
+    const localPhone = phone.replace(/^\+976/, '').replace(/^\+/, '');
+
+    const driver = await Driver.findOne({ phone: localPhone });
+    
+    if (!driver) {
+      // Return specific code so frontend can redirect to Register
+      return res.json({ exists: false, message: 'Driver not found', phone: localPhone });
+    }
+    
+    if (driver.status === 'pending') {
+      return res.status(403).json({ message: 'Таны бүртгэл хүлээгдэж байна. Админ баталгаажуулсны дараа нэвтрэх боломжтой.' });
+    }
+    
+    if (driver.status === 'blocked' || driver.status === 'inactive') {
+      return res.status(403).json({ message: 'Таны эрх хаагдсан байна.' });
+    }
+
+    res.json(driver);
+
+  } catch (error) {
+    console.error('Firebase Auth Error:', error);
+    res.status(401).json({ message: 'Invalid Token or Auth Failed' });
   }
 });
 
@@ -2632,6 +2677,42 @@ router.post('/auth/verify-otp', async (req, res) => {
     });
   } catch (err) {
     res.status(500).json({ error: err.message });
+  }
+});
+
+// Firebase Auth Login for Customer
+router.post('/auth/firebase-login', async (req, res) => {
+  const { idToken, phone: fallbackPhone } = req.body;
+  
+  try {
+    let phone;
+    if (admin.apps.length > 0) {
+        const decodedToken = await admin.auth().verifyIdToken(idToken);
+        phone = decodedToken.phone_number;
+    } else {
+        console.warn('⚠️ Firebase Admin not active. Using fallback phone.');
+        phone = fallbackPhone;
+    }
+
+    if (!phone) return res.status(400).json({ message: 'Phone number required' });
+
+    // Normalize: Remove +976 or + prefix
+    const localPhone = phone.replace(/^\+976/, '').replace(/^\+/, '');
+
+    let customer = await Customer.findOne({ phone: localPhone });
+    if (!customer) {
+      // Auto-register customer if not found
+      customer = new Customer({ phone: localPhone, name: localPhone });
+      await customer.save();
+    }
+
+    res.json({ 
+      token: 'mock_jwt_token_' + customer._id, 
+      customer 
+    });
+  } catch (error) {
+    console.error('Firebase Auth Error:', error);
+    res.status(401).json({ message: 'Invalid Token or Auth Failed' });
   }
 });
 
