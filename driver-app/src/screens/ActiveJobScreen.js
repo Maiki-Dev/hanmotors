@@ -269,7 +269,7 @@ export default function ActiveJobScreen({ route, navigation }) {
       });
     }
     return () => {
-      unsubscribe && unsubscribe();
+      // unsubscribe && unsubscribe();
       backSub && backSub.remove();
       unsubTab && unsubTab();
     };
