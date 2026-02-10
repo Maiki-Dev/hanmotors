@@ -60,6 +60,7 @@ const LoginScreen = () => {
         firebaseConfig={firebaseConfig}
         title='Баталгаажуулалт'
         cancelLabel='Хаах'
+        attemptInvisibleVerification={true}
       />
       <StatusBar barStyle="light-content" backgroundColor="transparent" translucent />
       

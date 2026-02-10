@@ -2,6 +2,7 @@
   "expo": {
     "name": "Khan Motors",
     "slug": "khan-motors",
+    "scheme": "khanmotorscustomer",
     "version": "1.0.1",
     "orientation": "portrait",
     "icon": "./assets/icon.png",

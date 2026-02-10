@@ -102,8 +102,9 @@ export default function LoginScreen({ navigation }) {
       <FirebaseRecaptchaVerifierModal
         ref={recaptchaVerifier}
         firebaseConfig={firebaseConfig}
-        title='Баталгаажуулалт'
-        cancelLabel='Хаах'
+        title="Баталгаажуулалт"
+        cancelLabel="Хаах"
+        attemptInvisibleVerification={true}
       />
       <View style={styles.content}>
         <View style={styles.logoContainer}>
