@@ -324,6 +324,24 @@ const TripManagement = () => {
         return service ? { name: service.name, price: service.price } : null;
       }).filter(Boolean);
 
+      // Validate Locations
+      if (!newTrip.pickupLocation.address || newTrip.pickupLocation.address === 'undefined' || !newTrip.pickupLocation.lat) {
+        toast({
+            title: "Анхаар",
+            description: "Авах хаягийг заавал оруулна уу. (Газрын зураг дээрээс сонгох эсвэл бичнэ үү)",
+            status: "warning"
+        });
+        return;
+      }
+      if (!newTrip.dropoffLocation.address || newTrip.dropoffLocation.address === 'undefined' || !newTrip.dropoffLocation.lat) {
+        toast({
+            title: "Анхаар",
+            description: "Хүргэх хаягийг заавал оруулна уу. (Газрын зураг дээрээс сонгох эсвэл бичнэ үү)",
+            status: "warning"
+        });
+        return;
+      }
+
       const payload = {
         pickupLocation: newTrip.pickupLocation,
         dropoffLocation: newTrip.dropoffLocation,

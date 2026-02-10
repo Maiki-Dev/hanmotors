@@ -250,17 +250,14 @@ export default function ActiveJobScreen({ route, navigation }) {
 
   useEffect(() => {
     navigation.setOptions({ gestureEnabled: false });
-    const unsubscribe = navigation.addListener('beforeRemove', (e) => {
-      if (statusRef.current === 'pickup' || statusRef.current === 'in_progress') {
-        e.preventDefault();
-        Alert.alert('Анхаар', 'Ажил идэвхтэй байна. Дэлгэцийг солих боломжгүй.');
-      }
-    });
+    
     const backSub = BackHandler.addEventListener('hardwareBackPress', () => {
+      // Allow back press if job is completed or user really wants to exit
       if (statusRef.current === 'pickup' || statusRef.current === 'in_progress') {
-        return true;
+         // Optionally block back button during active job
+         // return true; 
       }
-      return false;
+      return false; // Allow back button
     });
     const parent = navigation.getParent && navigation.getParent();
     let unsubTab;
@@ -525,6 +522,7 @@ export default function ActiveJobScreen({ route, navigation }) {
 
   const handleAction = async () => {
     if (!job?._id) return;
+    if (status === 'completed') return; // Prevent double submission
     setLoading(true);
     try {
       if (status === 'pickup') {
