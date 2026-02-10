@@ -16,7 +16,6 @@
       "**/*"
     ],
     "ios": {
-      "googleServicesFile": "./GoogleService-Info.plist",
       "bundleIdentifier": "com.hanmotors.customer",
       "supportsTablet": true,
       "infoPlist": {

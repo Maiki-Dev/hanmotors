@@ -218,6 +218,7 @@ router.post('/driver/auth/otp/request', async (req, res) => {
     await driver.save();
 
     // In production, send SMS here
+    // TODO: Integrate SMS Provider
     console.log(`OTP for ${phone}: ${otp}`);
 
     res.json({ message: 'OTP sent successfully', dev_otp: otp });

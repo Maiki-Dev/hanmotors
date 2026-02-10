@@ -1,6 +1,6 @@
 export type RootStackParamList = {
   Login: undefined;
-  VerifyOtp: { phone: string; verificationId: string };
+  VerifyOtp: { phone: string };
   HomeScreen: undefined;
   Home: undefined; // Alias if needed
   RideRequest: { 

@@ -36,7 +36,11 @@ export default function LoginScreen({ navigation }) {
            ]);
         } else {
            setStep(2);
-           Alert.alert('Амжилттай', 'Баталгаажуулах код илгээгдлээ');
+           if (data.dev_otp) {
+             Alert.alert('Амжилттай', `Баталгаажуулах код: ${data.dev_otp}`);
+           } else {
+             Alert.alert('Амжилттай', 'Баталгаажуулах код илгээгдлээ');
+           }
         }
       } else {
         // Check if user doesn't exist (some backends return 404/200 with flag)

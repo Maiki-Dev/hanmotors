@@ -14,7 +14,6 @@
       "backgroundColor": "#ffffff"
     },
     "ios": {
-      "googleServicesFile": "./GoogleService-Info.plist",
       "bundleIdentifier": "com.hanmotors.driver",
       "supportsTablet": true,
       "infoPlist": {

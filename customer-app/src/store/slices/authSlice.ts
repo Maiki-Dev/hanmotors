@@ -68,25 +68,12 @@ const authSlice = createSlice({
       .addCase(verifyOtp.fulfilled, (state, action) => {
         state.isLoading = false;
         state.isAuthenticated = true;
-        // Backend returns { customer: ... }, handle both user/customer keys
-        state.user = action.payload.user || action.payload.customer;
-        state.token = action.payload.token;
+        // Backend returns the customer object directly
+        state.user = action.payload;
+        // For now we don't use a token, but we can set a dummy one or null
+        state.token = action.payload.token || 'session_token'; 
       })
       .addCase(verifyOtp.rejected, (state, action) => {
-        state.isLoading = false;
-        state.error = action.payload as string;
-      })
-      .addCase(loginWithFirebase.pending, (state) => {
-        state.isLoading = true;
-        state.error = null;
-      })
-      .addCase(loginWithFirebase.fulfilled, (state, action) => {
-        state.isLoading = false;
-        state.isAuthenticated = true;
-        state.user = action.payload.user || action.payload.customer;
-        state.token = action.payload.token;
-      })
-      .addCase(loginWithFirebase.rejected, (state, action) => {
         state.isLoading = false;
         state.error = action.payload as string;
       });
