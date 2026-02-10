@@ -828,7 +828,8 @@ router.get('/admin/stats', async (req, res) => {
             activeDrivers: 12,
             onlineDrivers: 5,
             todayRequests: 25,
-            totalRevenue: 1500000
+            totalRevenue: 1500000,
+            totalTopUp: 500000
         });
     }
     try {
@@ -855,11 +856,23 @@ router.get('/admin/stats', async (req, res) => {
         ]);
         const totalRevenue = revenueAgg.length > 0 ? revenueAgg[0].total : 0;
 
+        // Total Top-Up (from driver wallet credit transactions)
+        const topUpAgg = await Driver.aggregate([
+            { $unwind: "$wallet.transactions" },
+            { $match: { 
+                "wallet.transactions.type": "credit",
+                "wallet.transactions.date": { $gte: start, $lte: end } 
+            }},
+            { $group: { _id: null, total: { $sum: "$wallet.transactions.amount" } } }
+        ]);
+        const totalTopUp = topUpAgg.length > 0 ? topUpAgg[0].total : 0;
+
         res.json({
             activeDrivers,
             onlineDrivers,
             todayRequests,
-            totalRevenue
+            totalRevenue,
+            totalTopUp
         });
     } catch (err) {
         res.status(500).json({ error: err.message });

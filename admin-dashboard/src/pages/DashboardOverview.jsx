@@ -26,7 +26,8 @@ const DashboardOverview = () => {
     activeDrivers: 0,
     onlineDrivers: 0,
     todayRequests: 0,
-    totalRevenue: 0
+    totalRevenue: 0,
+    totalTopUp: 0
   });
   const [revenueData, setRevenueData] = useState([]);
   const [transactions, setTransactions] = useState([]);
@@ -130,9 +131,9 @@ const DashboardOverview = () => {
 
   const stats = [
     {
-      title: "Нийт орлого",
-      value: formatCurrency(data.totalRevenue),
-      description: "Сонгосон хугацааны орлого",
+      title: "Нийт цэнэглэлт",
+      value: formatCurrency(data.totalTopUp),
+      description: "Сонгосон хугацааны нийт цэнэглэлт",
       icon: CreditCard,
     },
     {

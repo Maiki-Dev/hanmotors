@@ -892,7 +892,7 @@ export default function HomeScreen({ navigation, route }) {
               key={id}
               coordinate={{ latitude: loc.lat, longitude: loc.lng }}
               heading={loc.heading || 0}
-              vehicleType={loc.isTowing ? 'Tow' : 'Ride'}
+              vehicleType="Ride" // Force yellow car icon for all drivers
               status="idle" // Default to idle for others for now
               duration={2000} // Smooth interpolation duration matching socket update interval
             />
@@ -918,8 +918,8 @@ export default function HomeScreen({ navigation, route }) {
              
              <View style={styles.primeStatsRow}>
                 <View style={styles.primeStatItem}>
-                   <Text style={styles.primeStatLabel}>Нийт цэнэглэлт</Text>
-                   <Text style={styles.primeStatValue}>{stats.totalTopUp?.toLocaleString() || 0}₮</Text>
+                   <Text style={styles.primeStatLabel}>Орлого</Text>
+                   <Text style={styles.primeStatValue}>{stats.today?.earnings?.toLocaleString() || 0}₮</Text>
                 </View>
                 <View style={styles.primeStatItem}>
                    <Text style={styles.primeStatLabel}>Дуудлага</Text>
