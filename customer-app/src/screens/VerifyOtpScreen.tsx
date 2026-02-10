@@ -45,10 +45,9 @@ const VerifyOtpScreen = () => {
   }, [isAuthenticated, navigation]);
 
   const handleVerify = async () => {
-    if (otp.length !== 6) { // Firebase OTP is 6 digits usually
-      // But maybe 4 for test numbers. Let's say != 6
-      // Actually standard Firebase is 6.
-      // I'll check length >= 4
+    if (!otp || otp.length < 6) {
+      Alert.alert('Алдаа', 'Баталгаажуулах код 6 оронтой байх ёстой');
+      return;
     }
     
     try {
