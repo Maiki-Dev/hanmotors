@@ -1,7 +1,7 @@
 {
   "expo": {
     "name": "Khan Motors Driver",
-    "slug": "khan-motors-driver",
+    "slug": "khanmotors",
     "scheme": "khanmotorsdriver",
     "version": "1.0.1",
     "orientation": "portrait",
@@ -100,13 +100,32 @@
                       "group.com.hanmotors.driver.onesignal"
                     ]
                   }
+                },
+                {
+                  "targetName": "OneSignalNotificationServiceExtension",
+                  "bundleIdentifier": "com.hanmotors.driver.OneSignalNotificationServiceExtension",
+                  "entitlements": {
+                    "com.apple.security.application-groups": [
+                      "group.com.hanmotors.driver.onesignal"
+                    ]
+                  }
+                },
+                {
+                  "targetName": "OneSignalNotificationServiceExtension",
+                  "bundleIdentifier": "com.hanmotors.driver.OneSignalNotificationServiceExtension",
+                  "entitlements": {
+                    "com.apple.security.application-groups": [
+                      "group.com.hanmotors.driver.onesignal"
+                    ]
+                  }
                 }
               ]
             }
           }
         },
-        "projectId": "f39755aa-8191-4a7c-b9bb-aac7de4df701"
+        "projectId": "b35b346f-06f9-4089-bea6-11025d6ba435"
       }
-    }
+    },
+    "owner": "khan-motorss-organization"
   }
 }
